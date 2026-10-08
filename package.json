@@ -1,0 +1,29 @@
+{
+  "name": "igdb-kit-monorepo",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "bun run --filter '*' build",
+    "codegen": "bun run --filter igdb-kit codegen",
+    "typecheck": "bun run --filter '*' typecheck",
+    "test": "bun run --filter '*' test",
+    "test:types": "bun run --filter '*' test:types",
+    "bench:types": "bun run --filter igdb-kit bench:types",
+    "lint": "biome check .",
+    "format": "biome format --write .",
+    "changeset": "changeset"
+  },
+  "devDependencies": {
+    "@arethetypeswrong/cli": "0.18.5",
+    "@biomejs/biome": "2.5.15",
+    "@changesets/cli": "3.0.3",
+    "@types/bun": "1.4.2",
+    "publint": "0.3.25",
+    "typescript": "7.0.2",
+    "typescript-5.9": "npm:typescript@5.9.3",
+    "typescript-6.0": "npm:typescript@6.0.3"
+  }
+}
