@@ -1,0 +1,29 @@
+name: Schema update
+
+# Weekly: downloads the latest igdbapi.proto, regenerates the types and opens a PR if anything changed.
+on:
+  schedule:
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  regenerate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.2
+      - run: bun install --frozen-lockfile
+      - run: bun run --filter igdb-kit codegen -- --fetch
+      - run: bun run typecheck && bun run test:types
+      - uses: peter-evans/create-pull-request@v7
+        with:
+          branch: chore/schema-update
+          title: Update IGDB schema
+          commit-message: Update IGDB schema from igdbapi.proto
+          body: Regenerated from the latest `igdbapi.proto`. Check the diff of `src/generated/schema.ts` for new or deprecated fields.

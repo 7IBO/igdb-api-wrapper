@@ -1,8 +1,13 @@
 {
   "name": "igdb-kit",
   "version": "0.0.0",
-  "description": "Fully typed IGDB API client for Node.js and Bun: exact result types, shared rate limit, automatic multiquery batching.",
+  "description": "Fully typed IGDB API client for Node.js and Bun: result types inferred from selected fields, typed filters, shared rate limit and automatic token renewal.",
   "license": "MIT",
+  "author": "7IBO",
+  "homepage": "https://github.com/7IBO/igdb-api-wrapper/tree/main/packages/igdb-kit#readme",
+  "bugs": {
+    "url": "https://github.com/7IBO/igdb-api-wrapper/issues"
+  },
   "type": "module",
   "sideEffects": false,
   "engines": {
@@ -43,7 +48,8 @@
     "test:integration": "bun test test/integration",
     "test:types": "tsc --noEmit -p test/types",
     "bench:types": "bun scripts/bench-types.ts",
-    "lint:package": "publint && rm -rf .pack && bun pm pack --quiet --destination .pack && attw .pack/*.tgz --profile node16"
+    "lint:package": "publint && rm -rf .pack && bun pm pack --quiet --destination .pack && attw .pack/*.tgz --profile node16",
+    "prepublishOnly": "bun run build"
   },
   "devDependencies": {
     "tsdown": "0.23.0"
@@ -52,5 +58,8 @@
     "type": "git",
     "url": "git+https://github.com/7IBO/igdb-api-wrapper.git",
     "directory": "packages/igdb-kit"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }

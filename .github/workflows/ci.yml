@@ -2,8 +2,11 @@ name: CI
 
 on:
   push:
-    branches: [main, master]
+    branches: [main]
   pull_request:
+  schedule:
+    # Nightly, so a change on IGDB's side shows up even without commits.
+    - cron: "0 3 * * *"
 
 permissions:
   contents: read
@@ -75,7 +78,7 @@ jobs:
     name: Integration tests (real IGDB API)
     runs-on: ubuntu-latest
     # Needs TWITCH_CLIENT_ID / TWITCH_CLIENT_SECRET repository secrets; forks do not get them.
-    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     env:
       TWITCH_CLIENT_ID: ${{ secrets.TWITCH_CLIENT_ID }}
       TWITCH_CLIENT_SECRET: ${{ secrets.TWITCH_CLIENT_SECRET }}
