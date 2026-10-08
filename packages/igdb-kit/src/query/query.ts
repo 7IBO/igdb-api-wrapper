@@ -19,7 +19,10 @@ export interface ExecuteOptions {
   signal?: AbortSignal | undefined;
   /** `background` requests wait behind `interactive` ones. Default `interactive`. */
   priority?: Priority | undefined;
-  /** Allow this query to be grouped into a multiquery with others. Default true. */
+  /**
+   * Group this query with others sent at the same time into one multiquery. Default: the client's
+   * `autoBatch` setting (on). `false` always sends it alone.
+   */
   batch?: boolean | undefined;
 }
 
@@ -32,12 +35,18 @@ export interface QueryRequest {
   kind: "list" | "count";
   /** IGDB returns an empty multiquery when any block uses `search`, so these are sent alone. */
   hasSearch: boolean;
+  /** Selected fields, used to estimate the response size. */
+  fields: readonly string[];
+  /** Expected number of entities (the `limit`, 10 by default; 0 for a count). */
+  limit: number;
 }
 
 export interface RawResponse {
   data: unknown;
   /** The `x-count` header: total matches of the `where`, regardless of `limit`. */
   total?: number | undefined;
+  /** Size of the response body, in characters. */
+  bytes?: number | undefined;
 }
 
 /** @internal Implemented by the client. */
@@ -264,6 +273,8 @@ export class Query<N extends EndpointName, R = { id: number }> extends Executabl
       body,
       kind,
       hasSearch: search !== undefined,
+      fields,
+      limit: kind === "count" ? 0 : (limit ?? 10),
     };
   }
 

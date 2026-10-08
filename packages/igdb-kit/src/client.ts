@@ -1,9 +1,11 @@
+import { Batcher, type BatcherOptions } from "./batch/batcher";
 import { TokenProvider, type TokenStore } from "./core/auth";
 import { IGDBError } from "./core/errors";
 import { type Limiter, type LocalLimiterOptions, sharedLimiter } from "./core/limiter";
 import { Transport, type TransportHooks } from "./core/transport";
 import { type EndpointName, endpoints } from "./generated/schema";
 import {
+  type Executable,
   type ExecuteOptions,
   Query,
   type QueryRequest,
@@ -11,7 +13,7 @@ import {
   type RawResponse,
 } from "./query/query";
 
-export interface IGDBClientOptions {
+export interface IGDBClientOptions extends BatcherOptions {
   /** Twitch application client id. */
   clientId: string;
   /** Twitch application secret, used to obtain and renew app access tokens. */
@@ -36,7 +38,16 @@ export interface IGDBClientOptions {
   dangerouslyAllowBrowser?: boolean | undefined;
 }
 
+// biome-ignore lint/suspicious/noExplicitAny: any executable result type is accepted.
+type BatchInput = Record<string, Executable<any>>;
+export type BatchResult<T extends BatchInput> = { [K in keyof T]: Awaited<T[K]> };
+
 export type IGDBClient = { readonly [K in EndpointName]: Query<K> } & {
+  /**
+   * Runs several queries together, as few multiqueries as possible (10 per request), and returns
+   * each result under its key with its own type. Works even when `autoBatch` is off.
+   */
+  batch<T extends BatchInput>(queries: T, options?: Omit<ExecuteOptions, "batch">): Promise<BatchResult<T>>;
   /** Sends a raw Apicalypse body to a path (`games`, `games/count`, `multiquery`). */
   raw<T = unknown>(path: string, body: string, options?: ExecuteOptions): Promise<T>;
 };
@@ -73,12 +84,20 @@ export function createIGDB(options: IGDBClientOptions): IGDBClient {
     attemptTimeoutMs: options.attemptTimeoutMs,
     hooks: options.hooks,
   });
+  const batcher = new Batcher((path, body, sendOptions) => transport.send(path, body, sendOptions), options);
   const runner: QueryRunner = {
     run: (request: QueryRequest, runOptions?: ExecuteOptions): Promise<RawResponse> =>
-      transport.send(request.path, request.body, runOptions),
+      batcher.run(request, runOptions),
   };
 
   const client: Record<string, unknown> = {
+    batch: async (queries: BatchInput, batchOptions?: ExecuteOptions) => {
+      const keys = Object.keys(queries);
+      const results = await Promise.all(
+        keys.map((key) => (queries[key] as BatchInput[string]).execute({ ...batchOptions, batch: true })),
+      );
+      return Object.fromEntries(keys.map((key, i) => [key, results[i]]));
+    },
     raw: async (path: string, body: string, runOptions?: ExecuteOptions) =>
       (await transport.send(path, body, runOptions)).data,
   };

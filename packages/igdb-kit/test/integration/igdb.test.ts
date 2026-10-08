@@ -56,4 +56,29 @@ describe.skipIf(!clientId || !clientSecret)("real IGDB API", () => {
     await expect(igdb.raw("games", "fields nope;")).rejects.toBeInstanceOf(QueryError);
     await expect(igdb.content_safety_ratings.limit(1).execute()).rejects.toBeInstanceOf(TierError);
   });
+
+  test("batch() sends typed queries in one multiquery", async () => {
+    const { top, total, ps5 } = await igdb.batch({
+      top: igdb.games
+        .select("name")
+        .where((g) => g.rating_count.gt(500))
+        .sort("rating", "desc")
+        .limit(3),
+      total: igdb.games.count(),
+      ps5: igdb.platforms.select("name").findById(167),
+    });
+    expect(top).toHaveLength(3);
+    expect(total).toBeGreaterThan(100_000);
+    expect(ps5?.name).toBe("PlayStation 5");
+  });
+
+  test("an invalid query in a batch only fails itself", async () => {
+    const results = await Promise.allSettled([
+      igdb.games.findById(1942).execute(),
+      igdb.games.where("nope = 1").limit(1).execute(),
+      igdb.platforms.findById(6).execute(),
+    ]);
+    expect(results.map((r) => r.status)).toEqual(["fulfilled", "rejected", "fulfilled"]);
+    expect((results[1] as PromiseRejectedResult).reason).toBeInstanceOf(QueryError);
+  });
 });

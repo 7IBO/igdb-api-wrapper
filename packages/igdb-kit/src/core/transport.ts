@@ -84,7 +84,11 @@ export class Transport {
 
       if (status >= 200 && status < 300) {
         const count = headers.get("x-count");
-        return { data: JSON.parse(text), total: count === null ? undefined : Number(count) };
+        return {
+          data: JSON.parse(text),
+          total: count === null ? undefined : Number(count),
+          bytes: text.length,
+        };
       }
 
       const error = errorFromResponse(status, text, { endpoint: path, query: body });
