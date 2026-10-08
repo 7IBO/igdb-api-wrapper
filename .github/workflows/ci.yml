@@ -1,0 +1,91 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    # Nightly, so a change on IGDB's side shows up even without commits.
+    - cron: "0 3 * * *"
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: Lint, typecheck, unit tests, build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.2
+      - run: bun install --frozen-lockfile
+      - run: bun run lint
+      - name: Generated schema is up to date
+        run: bun run codegen && git diff --exit-code packages/igdb-kit/src/generated
+      - run: bun run typecheck
+      - run: bun run test
+      - run: bun run build
+      - run: bun run --filter igdb-kit lint:package
+
+  types:
+    name: Type tests on TypeScript ${{ matrix.ts }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        ts: ["5.9", "6.0", "7.0"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.2
+      - run: bun install --frozen-lockfile
+      - name: tsc ${{ matrix.ts }}
+        working-directory: packages/igdb-kit
+        run: |
+          case "${{ matrix.ts }}" in
+            7.0) TSC=../../node_modules/typescript/bin/tsc ;;
+            *) TSC=../../node_modules/typescript-${{ matrix.ts }}/bin/tsc ;;
+          esac
+          $TSC --noEmit -p test/types
+
+  node:
+    name: Built package on Node ${{ matrix.node }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [20, 22, 24]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+      - run: bun install --frozen-lockfile
+      - run: bun run build
+      - name: Smoke test ESM and CJS
+        working-directory: packages/igdb-kit
+        run: |
+          node --input-type=module -e "import { createIGDB } from './dist/index.js'; const q = createIGDB({ clientId: 'a', clientSecret: 'b' }).games.select('name').where((g) => g.rating.gt(1)); if (q.toApicalypse() !== 'fields name; where rating > 1;') process.exit(1)"
+          node -e "const { createIGDB } = require('./dist/index.cjs'); createIGDB({ clientId: 'a', clientSecret: 'b' }).games.limit(1).toApicalypse()"
+
+  integration:
+    name: Integration tests (real IGDB API)
+    runs-on: ubuntu-latest
+    # Needs TWITCH_CLIENT_ID / TWITCH_CLIENT_SECRET repository secrets; forks do not get them.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    env:
+      TWITCH_CLIENT_ID: ${{ secrets.TWITCH_CLIENT_ID }}
+      TWITCH_CLIENT_SECRET: ${{ secrets.TWITCH_CLIENT_SECRET }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.2
+      - run: bun install --frozen-lockfile
+      - run: bun run --filter igdb-kit test:integration

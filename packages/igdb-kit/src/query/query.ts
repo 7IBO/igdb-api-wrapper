@@ -1,0 +1,339 @@
+import { QueryError } from "../core/errors";
+import type { Priority } from "../core/limiter";
+import {
+  type EndpointName,
+  type Endpoints,
+  endpoints,
+  entities,
+  type SearchableEndpoint,
+} from "../generated/schema";
+import type { FieldPath, ScalarPath, SelectResult } from "./types";
+import { type Condition, type WhereFields, whereProxy } from "./where";
+
+/** IGDB rejects `limit` above 500 (with a 403). */
+export const MAX_LIMIT = 500;
+/** IGDB rejects request bodies above 32 KB (413). */
+export const MAX_BODY_BYTES = 32 * 1024;
+
+export interface ExecuteOptions {
+  signal?: AbortSignal | undefined;
+  /** `background` requests wait behind `interactive` ones. Default `interactive`. */
+  priority?: Priority | undefined;
+  /** Allow this query to be grouped into a multiquery with others. Default true. */
+  batch?: boolean | undefined;
+}
+
+/** What the transport needs to send a query, alone or as one block of a multiquery. */
+export interface QueryRequest {
+  endpoint: EndpointName;
+  /** `games` for a list, `games/count` for a count. */
+  path: string;
+  body: string;
+  kind: "list" | "count";
+  /** IGDB returns an empty multiquery when any block uses `search`, so these are sent alone. */
+  hasSearch: boolean;
+}
+
+export interface RawResponse {
+  data: unknown;
+  /** The `x-count` header: total matches of the `where`, regardless of `limit`. */
+  total?: number | undefined;
+}
+
+/** @internal Implemented by the client. */
+export interface QueryRunner {
+  run(request: QueryRequest, options?: ExecuteOptions): Promise<RawResponse>;
+}
+
+interface QueryState {
+  fields: readonly string[];
+  where?: string | undefined;
+  sort?: { field: string; direction: "asc" | "desc" } | undefined;
+  search?: string | undefined;
+  limit?: number | undefined;
+  offset?: number | undefined;
+}
+
+/** Base of everything that can be awaited or put in a `batch()`. */
+export abstract class Executable<T> implements PromiseLike<T> {
+  /** @internal */
+  abstract toRequest(): QueryRequest;
+  /** @internal */
+  abstract parse(response: RawResponse): T;
+  /** @internal */
+  protected abstract readonly runner: QueryRunner;
+
+  async execute(options?: ExecuteOptions): Promise<T> {
+    return this.parse(await this.runner.run(this.toRequest(), options));
+  }
+
+  // biome-ignore lint/suspicious/noThenProperty: queries are awaitable on purpose.
+  then<A = T, B = never>(
+    onfulfilled?: ((value: T) => A | PromiseLike<A>) | null,
+    onrejected?: ((reason: unknown) => B | PromiseLike<B>) | null,
+  ): Promise<A | B> {
+    return this.execute().then(onfulfilled, onrejected);
+  }
+
+  /** The Apicalypse body this query sends. */
+  toApicalypse(): string {
+    return this.toRequest().body;
+  }
+}
+
+function validatePath(entity: string, path: string, scalarOnly: boolean): void {
+  const segments = path.split(".");
+  let current = entity;
+  segments.forEach((segment, index) => {
+    const last = index === segments.length - 1;
+    if (segment === "*" && last && !scalarOnly) return;
+    const target = entities[current]?.[segment];
+    if (target === undefined) {
+      throw new QueryError(`Unknown field "${path}" on ${entity}: ${current} has no field "${segment}"`);
+    }
+    if (!last) {
+      if (target === 0) throw new QueryError(`"${segments.slice(0, index + 1).join(".")}" is not a relation`);
+      current = target;
+    } else if (scalarOnly && target !== 0) {
+      throw new QueryError(`Cannot sort on relation "${path}", pick one of its fields`);
+    }
+  });
+}
+
+/**
+ * An immutable, typed query on one endpoint. `R` is the shape of each result, derived from `select`.
+ * Await it directly to run it, or pass it to `batch()`.
+ */
+export class Query<N extends EndpointName, R = { id: number }> extends Executable<R[]> {
+  /** @internal */
+  constructor(
+    protected readonly runner: QueryRunner,
+    readonly endpoint: N,
+    private readonly state: QueryState = { fields: [] },
+  ) {
+    super();
+  }
+
+  private get entity(): string {
+    return endpointEntity(this.endpoint);
+  }
+
+  private with(patch: Partial<QueryState>): this {
+    return new Query(this.runner, this.endpoint, { ...this.state, ...patch }) as this;
+  }
+
+  /**
+   * Fields to return, as paths: `"name"`, `"cover.image_id"`, `"platforms.*"`, `"*"`. Selecting a
+   * sub-field of a relation expands it; otherwise a relation comes back as an id. Replaces any
+   * previous selection.
+   */
+  select<P extends string>(...fields: FieldPath<Endpoints[N], P>[]): Query<N, SelectResult<Endpoints[N], P>> {
+    for (const field of fields) validatePath(this.entity, field, false);
+    return this.with({ fields: [...new Set(fields as string[])] }) as never;
+  }
+
+  /** Filters with a typed builder (`g => g.rating.gte(80)`) or a raw Apicalypse condition. */
+  where(condition: string | ((fields: WhereFields<Endpoints[N]>) => Condition)): this {
+    const text =
+      typeof condition === "string"
+        ? condition
+        : condition(whereProxy(this.entity) as WhereFields<Endpoints[N]>).text;
+    const where = this.state.where ? `(${this.state.where}) & (${text})` : text;
+    return this.with({ where });
+  }
+
+  /** Sorts on one scalar field. IGDB supports a single sort field and silently ignores unknown ones. */
+  sort<P extends string>(field: ScalarPath<Endpoints[N], P>, direction: "asc" | "desc" = "asc"): this {
+    validatePath(this.entity, field, true);
+    if (this.state.search)
+      throw new QueryError("IGDB does not allow sort with search (results are by relevance)");
+    return this.with({ sort: { field, direction } });
+  }
+
+  /** Full-text search, sorted by relevance. Only on searchable endpoints, and never with `sort`. */
+  search(
+    ...[term]: N extends SearchableEndpoint
+      ? [term: string]
+      : [notSearchable: "This endpoint does not support search"]
+  ): this {
+    if (!endpoints[this.endpoint].searchable)
+      throw new QueryError(`${this.endpoint} does not support search`);
+    if (this.state.sort)
+      throw new QueryError("IGDB does not allow sort with search (results are by relevance)");
+    return this.with({ search: term });
+  }
+
+  /** Number of results, 0 to 500. IGDB defaults to 10. */
+  limit(count: number): this {
+    if (!Number.isInteger(count) || count < 0 || count > MAX_LIMIT) {
+      throw new QueryError(`limit must be an integer between 0 and ${MAX_LIMIT}, got ${count}`);
+    }
+    return this.with({ limit: count });
+  }
+
+  offset(count: number): this {
+    if (!Number.isInteger(count) || count < 0) throw new QueryError(`offset must be a positive integer`);
+    return this.with({ offset: count });
+  }
+
+  /** The first result, or null. */
+  first(): Single<R> {
+    return new Single(this.runner, this.limit(1).toRequest());
+  }
+
+  /** The entity with this id, or null. */
+  findById(id: number): Single<R> {
+    return this.where(`id = ${toId(id)}`).first();
+  }
+
+  /**
+   * The entities with these ids, in the order given (missing ids are skipped). Splits into chunks of
+   * 500, which `batch` and automatic batching send together.
+   */
+  async findByIds(ids: readonly number[], options?: ExecuteOptions): Promise<R[]> {
+    const unique = [...new Set(ids.map(toId))];
+    const chunks: number[][] = [];
+    for (let i = 0; i < unique.length; i += MAX_LIMIT) chunks.push(unique.slice(i, i + MAX_LIMIT));
+    const pages = await Promise.all(
+      chunks.map((chunk) =>
+        this.where(`id = (${chunk.join(",")})`)
+          .limit(chunk.length)
+          .execute(options),
+      ),
+    );
+    const byId = new Map<number, R>();
+    for (const page of pages) for (const item of page) byId.set((item as { id: number }).id, item);
+    return ids.flatMap((id) => (byId.has(id) ? [byId.get(id) as R] : []));
+  }
+
+  /** Number of entities matching the `where` (and `search`). */
+  count(): Count {
+    return new Count(this.runner, this.toRequest("count"));
+  }
+
+  /**
+   * The page and the total number of matches in one call (from the `x-count` header). The total is
+   * approximate with `search`. Not batchable.
+   */
+  withCount(): WithCount<R> {
+    return new WithCount(this.runner, this.toRequest());
+  }
+
+  /**
+   * Iterates over every match with an id cursor (`where id > last; sort id asc`), `pageSize` at a
+   * time. Stable even if entities are added meanwhile, and fast at any depth unlike `offset`.
+   */
+  async *iterate(options: ExecuteOptions & { pageSize?: number } = {}): AsyncGenerator<R, void, undefined> {
+    if (this.state.search) throw new QueryError("iterate() cannot be combined with search");
+    const pageSize = options.pageSize ?? MAX_LIMIT;
+    const fields =
+      this.state.fields.length && !this.state.fields.includes("id") && !this.state.fields.includes("*")
+        ? [...this.state.fields, "id"]
+        : this.state.fields;
+    let last = -1;
+    for (;;) {
+      const page = await this.with({ fields, sort: { field: "id", direction: "asc" }, offset: undefined })
+        .where(`id > ${last}`)
+        .limit(pageSize)
+        .execute(options);
+      yield* page;
+      if (page.length < pageSize) return;
+      last = (page[page.length - 1] as { id: number }).id;
+    }
+  }
+
+  /** @internal */
+  toRequest(kind: "list" | "count" = "list"): QueryRequest {
+    const { fields, where, sort, search, limit, offset } = this.state;
+    const lines: string[] = [];
+    if (kind === "list" && fields.length) lines.push(`fields ${fields.join(",")};`);
+    if (search !== undefined) lines.push(`search ${JSON.stringify(search)};`);
+    if (where) lines.push(`where ${where};`);
+    if (kind === "list") {
+      if (sort) lines.push(`sort ${sort.field} ${sort.direction};`);
+      if (limit !== undefined) lines.push(`limit ${limit};`);
+      if (offset !== undefined) lines.push(`offset ${offset};`);
+    }
+    const body = lines.join(" ");
+    if (new TextEncoder().encode(body).length > MAX_BODY_BYTES) {
+      throw new QueryError(`Query body exceeds IGDB's 32 KB limit; split long id lists (findByIds does it)`);
+    }
+    return {
+      endpoint: this.endpoint,
+      path: kind === "count" ? `${this.endpoint}/count` : this.endpoint,
+      body,
+      kind,
+      hasSearch: search !== undefined,
+    };
+  }
+
+  /** @internal */
+  parse(response: RawResponse): R[] {
+    return response.data as R[];
+  }
+}
+
+/** Result of `first()` / `findById()`. */
+export class Single<R> extends Executable<R | null> {
+  /** @internal */
+  constructor(
+    protected readonly runner: QueryRunner,
+    private readonly request: QueryRequest,
+  ) {
+    super();
+  }
+  toRequest(): QueryRequest {
+    return this.request;
+  }
+  parse(response: RawResponse): R | null {
+    return ((response.data as R[])[0] ?? null) as R | null;
+  }
+}
+
+/** Result of `count()`. */
+export class Count extends Executable<number> {
+  /** @internal */
+  constructor(
+    protected readonly runner: QueryRunner,
+    private readonly request: QueryRequest,
+  ) {
+    super();
+  }
+  toRequest(): QueryRequest {
+    return this.request;
+  }
+  parse(response: RawResponse): number {
+    return (response.data as { count: number }).count;
+  }
+}
+
+/** Result of `withCount()`. */
+export class WithCount<R> extends Executable<{ data: R[]; total: number }> {
+  /** @internal */
+  constructor(
+    protected readonly runner: QueryRunner,
+    private readonly request: QueryRequest,
+  ) {
+    super();
+  }
+  toRequest(): QueryRequest {
+    return this.request;
+  }
+  override async execute(options?: ExecuteOptions): Promise<{ data: R[]; total: number }> {
+    // The total comes from a response header that multiquery does not carry: never batch.
+    return this.parse(await this.runner.run(this.request, { ...options, batch: false }));
+  }
+  parse(response: RawResponse): { data: R[]; total: number } {
+    const data = response.data as R[];
+    return { data, total: response.total ?? data.length };
+  }
+}
+
+function toId(id: number): number {
+  if (!Number.isSafeInteger(id) || id < 0) throw new QueryError(`Invalid id: ${id}`);
+  return id;
+}
+
+function endpointEntity(endpoint: EndpointName): string {
+  return endpoints[endpoint].entity;
+}

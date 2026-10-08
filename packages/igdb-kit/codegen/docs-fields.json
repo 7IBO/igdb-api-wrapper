@@ -1,0 +1,3608 @@
+[
+ {
+  "name": "Age Rating",
+  "path": "age_ratings",
+  "fields": [
+   {
+    "name": "category",
+    "type": "Category Enum",
+    "desc": "DEPRECATED! Use organization instead"
+   },
+   {
+    "name": "checksum",
+    "type": "uuid",
+    "desc": "Hash of the object"
+   },
+   {
+    "name": "content_descriptions",
+    "type": "Array of Age Rating Content Description IDs",
+    "desc": "DEPRECATED! Use rating_content_descriptions instead"
+   },
+   {
+    "name": "organization",
+    "type": "Reference ID for Age Rating Organization",
+    "desc": "The organization that has issued a specific rating"
+   },
+   {
+    "name": "rating",
+    "type": "Rating Enum",
+    "desc": "DEPRECATED! Use rating_category instead"
+   },
+   {
+    "name": "rating_category",
+    "type": "Reference ID for Age Rating Category",
+    "desc": "The category of a rating"
+   },
+   {
+    "name": "rating_content_descriptions",
+    "type": "Array of Age Rating Content Description V2 IDs",
+    "desc": "The rating content descriptions"
+   },
+   {
+    "name": "rating_cover_url",
+    "type": "String",
+    "desc": "The url for the image of a age rating"
+   },
+   {
+    "name": "synopsis",
+    "type": "String",
+    "desc": "A free text motivating a rating"
+   }
+  ]
+ },
+ {
+  "name": "Age Rating Category",
+  "path": "age_rating_categories",
+  "fields": [
+   {
+    "name": "checksum",
+    "type": "uuid",
+    "desc": "Hash of the object"
+   },
+   {
+    "name": "created_at",
+    "type": "datetime",
+    "desc": "Date this was initially added to the IGDB database"
+   },
+   {
+    "name": "organization",
+    "type": "Reference ID for Age Rating Organization",
+    "desc": "The rating organization"
+   },
+   {
+    "name": "rating",
+    "type": "String",
+    "desc": "The rating name"
+   },
+   {
+    "name": "updated_at",
+    "type": "datetime",
+    "desc": "The last date this entry was updated in the IGDB database"
+   }
+  ]
+ },
+ {
+  "name": "Age Rating Content Description",
+  "path": "age_rating_content_descriptions",
+  "fields": [
+   {
+    "name": "category",
+    "type": "Category Enum",
+    "desc": "DEPRECATED!"
+   },
+   {
+    "name": "checksum",
+    "type": "uuid",
+    "desc": "Hash of the object"
+   },
+   {
+    "name": "description",
+    "type": "String",
+    "desc": ""
+   }
+  ]
+ },
+ {
+  "name": "Age Rating Content Description Type",
+  "path": "age_rating_content_description_types",
+  "fields": [
+   {
+    "name": "checksum",
+    "type": "uuid",
+    "desc": "Hash of the object"
+   },
+   {
+    "name": "created_at",
+    "type": "datetime",
+    "desc": "Date this was initially added to the IGDB database"
+   },
+   {
+    "name": "name",
+    "type": "String",
+    "desc": ""
+   },
+   {
+    "name": "slug",
+    "type": "String",
+    "desc": "A url-safe, unique, lower-case version of the name"
+   },
+   {
+    "name": "updated_at",
+    "type": "datetime",
+    "desc": "The last date this entry was updated in the IGDB database"
+   }
+  ]
+ },
+ {
+  "name": "Age Rating Content Description V2",
+  "path": "age_rating_content_descriptions_v2",
+  "fields": [
+   {
+    "name": "checksum",
+    "type": "uuid",
+    "desc": "Hash of the object"
+   },
+   {
+    "name": "created_at",
+    "type": "datetime",
+    "desc": "Date this was initially added to the IGDB database"
+   },
+   {
+    "name": "description",
+    "type": "String",
+    "desc": ""
+   },
+   {
+    "name": "description_type",
+    "type": "Reference ID for Age Rating Content Description Type",
+    "desc": "The age rating content description type"
+   },
+   {
+    "name": "organization",
+    "type": "Reference ID for Age Rating Organization",
+    "desc": "The rating organization"
+   },
+   {
+    "name": "updated_at",
+    "type": "datetime",
+    "desc": "The last date this entry was updated in the IGDB database"
+   }
+  ]
+ },
+ {
+  "name": "Age Rating Organization",
+  "path": "age_rating_organizations",
+  "fields": [
+   {
+    "name": "checksum",
+    "type": "uuid",
+    "desc": "Hash of the object"
+   },
+   {
+    "name": "created_at",
+    "type": "datetime",
+    "desc": "Date this was initially added to the IGDB database"
+   },
+   {
+    "name": "name",
+    "type": "String",
+    "desc": "The title of an age rating organization"
+   },
+   {
+    "name": "updated_at",
+    "type": "datetime",
+    "desc": "The last date this entry was updated in the IGDB database"
+   }
+  ]
+ },
+ {
+  "name": "Alternative Name",
+  "path": "alternative_names",
+  "fields": [
+   {
+    "name": "checksum",
+    "type": "uuid",
+    "desc": "Hash of the object"
+   },
+   {
+    "name": "comment",
+    "type": "String",
+    "desc": "A description of what kind of alternative name it is (Acronym, Working title, Japanese title etc)"
+   },
+   {
+    "name": "game",
+    "type": "Reference ID for Game",
+    "desc": "The game this alternative name is associated with"
+   },
+   {
+    "name": "name",
+    "type": "String",
+    "desc": "An alternative name"
+   }
+  ]
+ },
+ {
+  "name": "Artwork",
+  "path": "artworks",
+  "fields": [
+   {
+    "name": "alpha_channel",
+    "type": "boolean",
+    "desc": ""
+   },
+   {
+    "name": "animated",
+    "type": "boolean",
+    "desc": ""
+   },
+   {
+    "name": "artwork_type",
+    "type": "Reference ID for Artwork Type",
+    "desc": "The artwork type. Deprecated: use image_type instead"
+   },
+   {
+    "name": "checksum",
+    "type": "uuid",
+    "desc": "Hash of the object"
+   },
+   {
+    "name": "game",
+    "type": "Reference ID for Game",
+    "desc": "The game this artwork is associated with"
+   },
+   {
+    "name": "height",
+    "type": "Integer",
+    "desc": "The height of the image in pixels"
+   },
+   {
+    "name": "image_id",
+    "type": "String",
+    "desc": "The ID of the image used to construct an IGDB image link"
+   },
+   {
+    "name": "image_type",
+    "type": "Reference ID for Image Type",
+    "desc": "The image type categorizing this artwork"
+   },
+   {
+    "name": "url",
+    "type": "String",
+    "desc": "The website address (URL) of the item"
+   },
+   {
+    "name": "width",
+    "type": "Integer",
+    "desc": "The width of the image in pixels"
+   }
+  ]
+ },
+ {
+  "name": "Artwork Type",
+  "path": "artwork_types",
+  "fields": [
+   {
+    "name": "checksum",
+    "type": "uuid",
+    "desc": "Hash of the object"
+   },
+   {
+    "name": "created_at",
+    "type": "datetime",
+    "desc": "Date this was initially added to the IGDB database"
+   },
+   {
+    "name": "name",
+    "type": "String",
+    "desc": ""
+   },
+   {
+    "name": "slug",
+    "type": "String",
+    "desc": "A url-safe, unique, lower-case version of the name"
+   },
+   {
+    "name": "updated_at",
+    "type": "datetime",
+    "desc": "The last date this entry was updated in the IGDB database"
+   }
+  ]
+ },
+ {
+  "name": "Character",
+  "path": "characters",
+  "fields": [
+   {
+    "name": "akas",
+    "type": "Array of Strings",
+    "desc": "Alternative names for a character"
+   },
+   {
+    "name": "character_gender",
+    "type": "Reference ID for Character Gender",
+    "desc": ""
+   },
+   {
+    "name": "character_species",
+    "type": "Reference ID for Character Specie",
+    "desc": ""
+   },
+   {
+    "name": "checksum",
+    "type": "uuid",
+    "desc": "Hash of the object"
+   },
+   {
+    "name": "country_name",
+    "type": "String",
+    "desc": "A characters country of origin"
+   },
+   {
+    "name": "created_at",
+    "type": "datetime",
+    "desc": "Date this was initially added to the IGDB database"
+   },
+   {
+    "name": "description",
+    "type": "String",
+    "desc": "A text describing a character"
+   },
+   {
+    "name": "games",
+    "type": "Array of Game IDs",
+    "desc": ""
+   },
+   {
+    "name": "gender",
+    "type": "Gender Enum",
+    "desc": "DEPRECATED! Use character_gender instead"
+   },
+   {
+    "name": "mug_shot",
+    "type": "Reference ID for Character Mug Shot",
+    "desc": "An image depicting a character"
+   },
+   {
+    "name": "name",
+    "type": "String",
+    "desc": ""
+   },
+   {
+    "name": "slug",
+    "type": "String",
+    "desc": "A url-safe, unique, lower-case version of the name"
+   },
+   {
+    "name": "species",
+    "type": "Species Enum",
+    "desc": "DEPRECATED! Use character_species instead"
+   },
+   {
+    "name": "updated_at",
+    "type": "datetime",
+    "desc": "The last date this entry was updated in the IGDB database"
+   },
+   {
+    "name": "url",
+    "type": "String",
+    "desc": "The website address (URL) of the item"
+   }
+  ]
+ },
+ {
+  "name": "Character Gender",
+  "path": "character_genders",
+  "fields": [
+   {
+    "name": "checksum",
+    "type": "uuid",
+    "desc": "Hash of the object"
+   },
+   {
+    "name": "created_at",
+    "type": "datetime",
+    "desc": "Date this was initially added to the IGDB database"
+   },
+   {
+    "name": "name",
+    "type": "String",
+    "desc": ""
+   },
+   {
+    "name": "updated_at",
+    "type": "datetime",
+    "desc": "The last date this entry was updated in the IGDB database"
+   }
+  ]
+ },
+ {
+  "name": "Character Mug Shot",
+  "path": "character_mug_shots",
+  "fields": [
+   {
+    "name": "alpha_channel",
+    "type": "boolean",
+    "desc": ""
+   },
+   {
+    "name": "animated",
+    "type": "boolean",
+    "desc": ""
+   },
+   {
+    "name": "checksum",
+    "type": "uuid",
+    "desc": "Hash of the object"
+   },
+   {
+    "name": "height",
+    "type": "Integer",
+    "desc": "The height of the image in pixels"
+   },
+   {
+    "name": "image_id",
+    "type": "String",
+    "desc": "The ID of the image used to construct an IGDB image link"
+   },
+   {
+    "name": "url",
+    "type": "String",
+    "desc": "The website address (URL) of the item"
+   },
+   {
+    "name": "width",
+    "type": "Integer",
+    "desc": "The width of the image in pixels"
+   }
+  ]
+ },
+ {
+  "name": "Character Specie",
+  "path": "character_species",
+  "fields": [
+   {
+    "name": "checksum",
+    "type": "uuid",
+    "desc": "Hash of the object"
+   },
+   {
+    "name": "created_at",
+    "type": "datetime",
+    "desc": "Date this was initially added to the IGDB database"
+   },
+   {
+    "name": "name",
+    "type": "String",
+    "desc": ""
+   },
+   {
+    "name": "updated_at",
+    "type": "datetime",
+    "desc": "The last date this entry was updated in the IGDB database"
+   }
+  ]
+ },
+ {
+  "name": "Collection",
+  "path": "collections",
+  "fields": [
+   {
+    "name": "as_child_relations",
+    "type": "Array of Collection Relation IDs",
+    "desc": ""
+   },
+   {
+    "name": "as_parent_relations",
+    "type": "Array of Collection Relation IDs",
+    "desc": ""
+   },
+   {
+    "name": "checksum",
+    "type": "uuid",
+    "desc": "Hash of the object"
+   },
+   {
+    "name": "created_at",
+    "type": "datetime",
+    "desc": "Date this was initially added to the IGDB database"
+   },
+   {
+    "name": "games",
+    "type": "Array of Game IDs",
+    "desc": "The games that are associated with this collection"
+   },
+   {
+    "name": "name",
+    "type": "String",
+    "desc": "Umbrella term for a collection of games"
+   },
+   {
+    "name": "slug",
+    "type": "String",
+    "desc": "A url-safe, unique, lower-case version of the name"
+   },
+   {
+    "name": "type",
+    "type": "Reference ID for Collection Type",
+    "desc": "The type of collection"
+   },
+   {
+    "name": "updated_at",
+    "type": "datetime",
+    "desc": "The last date this entry was updated in the IGDB database"
+   },
+   {
+    "name": "url",
+    "type": "String",
+    "desc": "The website address (URL) of the item"
+   }
+  ]
+ },
+ {
+  "name": "Collection Membership",
+  "path": "collection_memberships",
+  "fields": [
+   {
+    "name": "checksum",
+    "type": "uuid",
+    "desc": "Hash of the object"
+   },
+   {
+    "name": "collection",
+    "type": "Reference ID for Collection",
+    "desc": "The collection that is associated with this membership"
+   },
+   {
+    "name": "created_at",
+    "type": "datetime",
+    "desc": "Date this was initially added to the IGDB database"
+   },
+   {
+    "name": "game",
+    "type": "Reference ID for Game",
+    "desc": "The game that is associated with this membership"
+   },
+   {
+    "name": "type",
+    "type": "Reference ID for Collection Membership Type",
+    "desc": "The Collection Membership Type"
+   },
+   {
+    "name": "updated_at",
+    "type": "datetime",
+    "desc": "The last date this entry was updated in the IGDB database"
+   }
+  ]
+ },
+ {
+  "name": "Collection Membership Type",
+  "path": "collection_membership_types",
+  "fields": [
+   {
+    "name": "allowed_collection_type",
+    "type": "Reference ID for Collection Type",
+    "desc": "The allowed collection type"
+   },
+   {
+    "name": "checksum",
+    "type": "uuid",
+    "desc": "Hash of the object"
+   },
+   {
+    "name": "created_at",
+    "type": "datetime",
+    "desc": "Date this was initially added to the IGDB database"
+   },
+   {
+    "name": "description",
+    "type": "String",
+    "desc": "Description of the membership type."
+   },
+   {
+    "name": "name",
+    "type": "String",
+    "desc": "The membership type name"
+   },
+   {
+    "name": "updated_at",
+    "type": "datetime",
+    "desc": "The last date this entry was updated in the IGDB database"
+   }
+  ]
+ },
+ {
+  "name": "Collection Relation",
+  "path": "collection_relations",
+  "fields": [
+   {
+    "name": "checksum",
+    "type": "uuid",
+    "desc": "Hash of the object"
+   },
+   {
+    "name": "child_collection",
+    "type": "Reference ID for Collection",
+    "desc": "The child collection of this collection."
+   },
+   {
+    "name": "created_at",
+    "type": "datetime",
+    "desc": "Date this was initially added to the IGDB database"
+   },
+   {
+    "name": "parent_collection",
+    "type": "Reference ID for Collection",
+    "desc": "The parent collection of this collection."
+   },
+   {
+    "name": "type",
+    "type": "Reference ID for Collection Relation Type",
+    "desc": "The collection relationship type"
+   },
+   {
+    "name": "updated_at",
+    "type": "datetime",
+    "desc": "The last date this entry was updated in the IGDB database"
+   }
+  ]
+ },
+ {
+  "name": "Collection Relation Type",
+  "path": "collection_relation_types",
+  "fields": [
+   {
+    "name": "allowed_child_type",
+    "type": "Reference ID for Collection Type",
+    "desc": "The allowed child collection type"
+   },
+   {
+    "name": "allowed_parent_type",
+    "type": "Reference ID for Collection Type",
+    "desc": "The allowed child collection type"
+   },
+   {
+    "name": "checksum",
+    "type": "uuid",
+    "desc": "Hash of the object"
+   },
+   {
+    "name": "created_at",
+    "type": "datetime",
+    "desc": "Date this was initially added to the IGDB database"
+   },
+   {
+    "name": "description",
+    "type": "String",
+    "desc": "The relationship type description"
+   },
+   {
+    "name": "name",
+    "type": "String",
+    "desc": "The relationship type name"
+   },
+   {
+    "name": "updated_at",
+    "type": "datetime",
+    "desc": "The last date this entry was updated in the IGDB database"
+   }
+  ]
+ },
+ {
+  "name": "Collection Type",
+  "path": "collection_types",
+  "fields": [
+   {
+    "name": "checksum",
+    "type": "uuid",
+    "desc": "Hash of the object"
+   },
+   {
+    "name": "created_at",
+    "type": "datetime",
+    "desc": "Date this was initially added to the IGDB database"
+   },
+   {
+    "name": "description",
+    "type": "String",
+    "desc": "Description of the collection type."
+   },
+   {
+    "name": "name",
+    "type": "String",
+    "desc": "The name of the collection type"
+   },
+   {
+    "name": "updated_at",
+    "type": "datetime",
+    "desc": "The last date this entry was updated in the IGDB database"
+   }
+  ]
+ },
+ {
+  "name": "Company",
+  "path": "companies",
+  "fields": [
+   {
+    "name": "change_date",
+    "type": "Unix Time Stamp",
+    "desc": "The data when a company got a new ID"
+   },
+   {
+    "name": "change_date_category",
+    "type": "Change Date Category Enum",
+    "desc": "DEPRECATED! Use change_date_format instead"
+   },
+   {
+    "name": "change_date_format",
+    "type": "Reference ID for Date Format",
+    "desc": "The format of the change date"
+   },
+   {
+    "name": "changed_company_id",
+    "type": "Reference ID for Company",
+    "desc": "The new ID for a company that has gone through a merger or restructuring"
+   },
+   {
+    "name": "checksum",
+    "type": "uuid",
+    "desc": "Hash of the object"
+   },
+   {
+    "name": "company_size",
+    "type": "Reference ID for Company Size",
+    "desc": "The size of the company"
+   },
+   {
+    "name": "company_type_histories",
+    "type": "Array of Company Type History IDs",
+    "desc": "The history of company types"
+   },
+   {
+    "name": "country",
+    "type": "Integer",
+    "desc": "ISO 3166-1 country code"
+   },
+   {
+    "name": "created_at",
+    "type": "datetime",
+    "desc": "Date this was initially added to the IGDB database"
+   },
+   {
+    "name": "description",
+    "type": "String",
+    "desc": "A free text description of a company"
+   },
+   {
+    "name": "developed",
+    "type": "Array of Game IDs",
+    "desc": "An array of games that a company has developed"
+   },
+   {
+    "name": "logo",
+    "type": "Reference ID for Company Logo",
+    "desc": "The company\u2019s logo"
+   },
+   {
+    "name": "name",
+    "type": "String",
+    "desc": ""
+   },
+   {
+    "name": "parent",
+    "type": "Reference ID for Company",
+    "desc": "A company with a controlling interest in a specific company"
+   },
+   {
+    "name": "published",
+    "type": "Array of Game IDs",
+    "desc": "An array of games that a company has published"
+   },
+   {
+    "name": "slug",
+    "type": "String",
+    "desc": "A url-safe, unique, lower-case version of the name"
+   },
+   {
+    "name": "start_date",
+    "type": "Unix Time Stamp",
+    "desc": "The date a company was founded"
+   },
+   {
+    "name": "start_date_category",
+    "type": "Start Date Category Enum",
+    "desc": "DEPRECATED! Use start_date_format instead"
+   },
+   {
+    "name": "start_date_format",
+    "type": "Reference ID for Date Format",
+    "desc": "The format of the start date"
+   },
+   {
+    "name": "status",
+    "type": "Reference ID for Company Status",
+    "desc": "The status of the company"
+   },
+   {
+    "name": "updated_at",
+    "type": "datetime",
+    "desc": "The last date this entry was updated in the IGDB database"
+   },
+   {
+    "name": "url",
+    "type": "String",
+    "desc": "The website address (URL) of the item"
+   },
+   {
+    "name": "websites",
+    "type": "Array of Company Website IDs",
+    "desc": "The companies official websites"
+   }
+  ]
+ },
+ {
+  "name": "Company Logo",
+  "path": "company_logos",
+  "fields": [
+   {
+    "name": "alpha_channel",
+    "type": "boolean",
+    "desc": ""
+   },
+   {
+    "name": "animated",
+    "type": "boolean",
+    "desc": ""
+   },
+   {
+    "name": "checksum",
+    "type": "uuid",
+    "desc": "Hash of the object"
+   },
+   {
+    "name": "height",
+    "type": "Integer",
+    "desc": "The height of the image in pixels"
+   },
+   {
+    "name": "image_id",
+    "type": "String",
+    "desc": "The ID of the image used to construct an IGDB image link"
+   },
+   {
+    "name": "url",
+    "type": "String",
+    "desc": "The website address (URL) of the item"
+   },
+   {
+    "name": "width",
+    "type": "Integer",
+    "desc": "The width of the image in pixels"
+   }
+  ]
+ },
+ {
+  "name": "Company Size",
+  "path": "company_sizes",
+  "fields": [
+   {
+    "name": "checksum",
+    "type": "uuid",
+    "desc": "Hash of the object"
+   },
+   {
+    "name": "created_at",
+    "type": "datetime",
+    "desc": "Date this was initially added to the IGDB database"
+   },
+   {
+    "name": "name",
+    "type": "String",
+    "desc": ""
+   },
+   {
+    "name": "updated_at",
+    "type": "datetime",
+    "desc": "The last date this entry was updated in the IGDB database"
+   }
+  ]
+ },
+ {
+  "name": "Company Status",
+  "path": "company_statuses",
+  "fields": [
+   {
+    "name": "checksum",
+    "type": "uuid",
+    "desc": "Hash of the object"
+   },
+   {
+    "name": "created_at",
+    "type": "datetime",
+    "desc": "Date this was initially added to the IGDB database"
+   },
+   {
+    "name": "name",
+    "type": "String",
+    "desc": ""
+   },
+   {
+    "name": "updated_at",
+    "type": "datetime",
+    "desc": "The last date this entry was updated in the IGDB database"
+   }
+  ]
+ },
+ {
+  "name": "Company Type",
+  "path": "company_types",
+  "fields": [
+   {
+    "name": "checksum",
+    "type": "uuid",
+    "desc": "Hash of the object"
+   },
+   {
+    "name": "created_at",
+    "type": "datetime",
+    "desc": "Date this was initially added to the IGDB database"
+   },
+   {
+    "name": "name",
+    "type": "String",
+    "desc": ""
+   },
+   {
+    "name": "updated_at",
+    "type": "datetime",
+    "desc": "The last date this entry was updated in the IGDB database"
+   }
+  ]
+ },
+ {
+  "name": "Company Type History",
+  "path": "company_type_histories",
+  "fields": [
+   {
+    "name": "checksum",
+    "type": "uuid",
+    "desc": "Hash of the object"
+   },
+   {
+    "name": "company",
+    "type": "Reference ID for Company",
+    "desc": "The company"
+   },
+   {
+    "name": "company_type",
+    "type": "Reference ID for Company Type",
+    "desc": "The company type"
+   },
+   {
+    "name": "created_at",
+    "type": "datetime",
+    "desc": "Date this was initially added to the IGDB database"
+   },
+   {
+    "name": "parent_company",
+    "type": "Reference ID for Company",
+    "desc": "The parent company"
+   },
+   {
+    "name": "updated_at",
+    "type": "datetime",
+    "desc": "The last date this entry was updated in the IGDB database"
+   }
+  ]
+ },
+ {
+  "name": "Company Website",
+  "path": "company_websites",
+  "fields": [
+   {
+    "name": "category",
+    "type": "Category Enum",
+    "desc": "DEPRECATED! Use type instead"
+   },
+   {
+    "name": "checksum",
+    "type": "uuid",
+    "desc": "Hash of the object"
+   },
+   {
+    "name": "trusted",
+    "type": "boolean",
+    "desc": ""
+   },
+   {
+    "name": "type",
+    "type": "Reference ID for Website Type",
+    "desc": "The website type associated with the website"
+   },
+   {
+    "name": "url",
+    "type": "String",
+    "desc": "The website address (URL) of the item"
+   }
+  ]
+ },
+ {
+  "name": "Cover",
+  "path": "covers",
+  "fields": [
+   {
+    "name": "alpha_channel",
+    "type": "boolean",
+    "desc": ""
+   },
+   {
+    "name": "animated",
+    "type": "boolean",
+    "desc": ""
+   },
+   {
+    "name": "checksum",
+    "type": "uuid",
+    "desc": "Hash of the object"
+   },
+   {
+    "name": "game",
+    "type": "Reference ID for Game",
+    "desc": "The game this cover is associated with. If it is empty then this cover belongs to a game_localization, which can be found under game_localization field"
+   },
+   {
+    "name": "game_localization",
+    "type": "Reference ID for Game Localization",
+    "desc": "The game localization this cover might be associated with"
+   },
+   {
+    "name": "height",
+    "type": "Integer",
+    "desc": "The height of the image in pixels"
+   },
+   {
+    "name": "image_id",
+    "type": "String",
+    "desc": "The ID of the image used to construct an IGDB image link"
+   },
+   {
+    "name": "image_type",
+    "type": "Reference ID for Image Type",
+    "desc": "The image type categorizing this cover"
+   },
+   {
+    "name": "url",
+    "type": "String",
+    "desc": "The website address (URL) of the item"
+   },
+   {
+    "name": "width",
+    "type": "Integer",
+    "desc": "The width of the image in pixels"
+   }
+  ]
+ },
+ {
+  "name": "Date Format",
+  "path": "date_formats",
+  "fields": [
+   {
+    "name": "checksum",
+    "type": "uuid",
+    "desc": "Hash of the object"
+   },
+   {
+    "name": "created_at",
+    "type": "datetime",
+    "desc": "Date this was initially added to the IGDB database"
+   },
+   {
+    "name": "format",
+    "type": "String",
+    "desc": ""
+   },
+   {
+    "name": "updated_at",
+    "type": "datetime",
+    "desc": "The last date this entry was updated in the IGDB database"
+   }
+  ]
+ },
+ {
+  "name": "Entity Type",
+  "path": "entity_types",
+  "fields": [
+   {
+    "name": "checksum",
+    "type": "uuid",
+    "desc": "Hash of the object"
+   },
+   {
+    "name": "created_at",
+    "type": "datetime",
+    "desc": "Date this was initially added to the IGDB database"
+   },
+   {
+    "name": "description",
+    "type": "String",
+    "desc": ""
+   },
+   {
+    "name": "name",
+    "type": "String",
+    "desc": ""
+   },
+   {
+    "name": "updated_at",
+    "type": "datetime",
+    "desc": "The last date this entry was updated in the IGDB database"
+   }
+  ]
+ },
+ {
+  "name": "Event",
+  "path": "events",
+  "fields": [
+   {
+    "name": "checksum",
+    "type": "uuid",
+    "desc": "Hash of the object"
+   },
+   {
+    "name": "created_at",
+    "type": "datetime",
+    "desc": "Date this was initially added to the IGDB database"
+   },
+   {
+    "name": "description",
+    "type": "String",
+    "desc": "The description of the event"
+   },
+   {
+    "name": "end_time",
+    "type": "datetime",
+    "desc": "End time of the event in UTC"
+   },
+   {
+    "name": "event_logo",
+    "type": "Reference ID for Event Logo",
+    "desc": "Logo of the event."
+   },
+   {
+    "name": "event_networks",
+    "type": "Array of Event Network IDs",
+    "desc": "Urls associated with the event"
+   },
+   {
+    "name": "games",
+    "type": "Array of Game IDs",
+    "desc": "Games featured in the event"
+   },
+   {
+    "name": "live_stream_url",
+    "type": "String",
+    "desc": "URL to the livestream of the event."
+   },
+   {
+    "name": "name",
+    "type": "String",
+    "desc": "The name of the event"
+   },
+   {
+    "name": "slug",
+    "type": "String",
+    "desc": "A url-safe, unique, lower-case version of the name"
+   },
+   {
+    "name": "start_time",
+    "type": "datetime",
+    "desc": "Start time of the event in UTC"
+   },
+   {
+    "name": "time_zone",
+    "type": "String",
+    "desc": "Timezone the event is in."
+   },
+   {
+    "name": "updated_at",
+    "type": "datetime",
+    "desc": "The last date this entry was updated in the IGDB database"
+   },
+   {
+    "name": "videos",
+    "type": "Array of Game Video IDs",
+    "desc": "Trailers featured in the event"
+   }
+  ]
+ },
+ {
+  "name": "Event Logo",
+  "path": "event_logos",
+  "fields": [
+   {
+    "name": "alpha_channel",
+    "type": "boolean",
+    "desc": ""
+   },
+   {
+    "name": "animated",
+    "type": "boolean",
+    "desc": ""
+   },
+   {
+    "name": "checksum",
+    "type": "uuid",
+    "desc": "Hash of the object"
+   },
+   {
+    "name": "created_at",
+    "type": "datetime",
+    "desc": "Date this was initially added to the IGDB database"
+   },
+   {
+    "name": "event",
+    "type": "Reference ID for Event",
+    "desc": "The event associated with this logo."
+   },
+   {
+    "name": "height",
+    "type": "Integer",
+    "desc": "The height of the image in pixels"
+   },
+   {
+    "name": "image_id",
+    "type": "String",
+    "desc": "The ID of the image used to construct an IGDB image link"
+   },
+   {
+    "name": "updated_at",
+    "type": "datetime",
+    "desc": "The last date this entry was updated in the IGDB database"
+   },
+   {
+    "name": "url",
+    "type": "String",
+    "desc": "The website address (URL) of the item"
+   },
+   {
+    "name": "width",
+    "type": "Integer",
+    "desc": "The width of the image in pixels"
+   }
+  ]
+ },
+ {
+  "name": "Event Network",
+  "path": "event_networks",
+  "fields": [
+   {
+    "name": "checksum",
+    "type": "uuid",
+    "desc": "Hash of the object"
+   },
+   {
+    "name": "created_at",
+    "type": "datetime",
+    "desc": "Date this was initially added to the IGDB database"
+   },
+   {
+    "name": "event",
+    "type": "Reference ID for Event",
+    "desc": "The event associated with this URL."
+   },
+   {
+    "name": "network_type",
+    "type": "Reference ID for Network Type",
+    "desc": "Network type"
+   },
+   {
+    "name": "updated_at",
+    "type": "datetime",
+    "desc": "The last date this entry was updated in the IGDB database"
+   },
+   {
+    "name": "url",
+    "type": "String",
+    "desc": "The website address (URL) of the item"
+   }
+  ]
+ },
+ {
+  "name": "Executable",
+  "path": "executables",
+  "fields": [
+   {
+    "name": "checksum",
+    "type": "uuid",
+    "desc": "Hash of the object"
+   },
+   {
+    "name": "file_path",
+    "type": "String",
+    "desc": "The file path of the executable"
+   },
+   {
+    "name": "game",
+    "type": "Reference ID for Game",
+    "desc": "The game this executable belongs to"
+   },
+   {
+    "name": "name",
+    "type": "String",
+    "desc": "The name of the executable file"
+   },
+   {
+    "name": "platform",
+    "type": "Reference ID for Platform",
+    "desc": "The platform this executable runs on"
+   },
+   {
+    "name": "store",
+    "type": "String",
+    "desc": "The store this executable is distributed through"
+   }
+  ]
+ },
+ {
+  "name": "External Game",
+  "path": "external_games",
+  "fields": [
+   {
+    "name": "category",
+    "type": "Category Enum",
+    "desc": "DEPRECATED! Use external_game_source instead"
+   },
+   {
+    "name": "checksum",
+    "type": "uuid",
+    "desc": "Hash of the object"
+   },
+   {
+    "name": "countries",
+    "type": "Array of Integers",
+    "desc": "The ISO country code of the external game product."
+   },
+   {
+    "name": "created_at",
+    "type": "datetime",
+    "desc": "Date this was initially added to the IGDB database"
+   },
+   {
+    "name": "external_game_source",
+    "type": "Reference ID for External Game Source",
+    "desc": "The source of the external game."
+   },
+   {
+    "name": "game",
+    "type": "Reference ID for Game",
+    "desc": "The IGDB ID of the game"
+   },
+   {
+    "name": "game_release_format",
+    "type": "Reference ID for Game Release Format",
+    "desc": "The release format of the external game."
+   },
+   {
+    "name": "media",
+    "type": "Media Enum",
+    "desc": "DEPRECATED! Use game_release_format instead"
+   },
+   {
+    "name": "name",
+    "type": "String",
+    "desc": "The name of the game according to the other service"
+   },
+   {
+    "name": "platform",
+    "type": "Reference ID for Platform",
+    "desc": "The platform of the external game product."
+   },
+   {
+    "name": "uid",
+    "type": "String",
+    "desc": "The other services ID for this game"
+   },
+   {
+    "name": "updated_at",
+    "type": "datetime",
+    "desc": "The last date this entry was updated in the IGDB database"
+   },
+   {
+    "name": "url",
+    "type": "String",
+    "desc": "The website address (URL) of the item"
+   },
+   {
+    "name": "year",
+    "type": "Integer",
+    "desc": "The year in full (2018)"
+   }
+  ]
+ },
+ {
+  "name": "External Game Source",
+  "path": "external_game_sources",
+  "fields": [
+   {
+    "name": "checksum",
+    "type": "uuid",
+    "desc": "Hash of the object"
+   },
+   {
+    "name": "created_at",
+    "type": "datetime",
+    "desc": "Date this was initially added to the IGDB database"
+   },
+   {
+    "name": "name",
+    "type": "String",
+    "desc": ""
+   },
+   {
+    "name": "updated_at",
+    "type": "datetime",
+    "desc": "The last date this entry was updated in the IGDB database"
+   }
+  ]
+ },
+ {
+  "name": "Franchise",
+  "path": "franchises",
+  "fields": [
+   {
+    "name": "checksum",
+    "type": "uuid",
+    "desc": "Hash of the object"
+   },
+   {
+    "name": "created_at",
+    "type": "datetime",
+    "desc": "Date this was initially added to the IGDB database"
+   },
+   {
+    "name": "games",
+    "type": "Array of Game IDs",
+    "desc": "The games that are associated with this franchise"
+   },
+   {
+    "name": "name",
+    "type": "String",
+    "desc": "The name of the franchise"
+   },
+   {
+    "name": "slug",
+    "type": "String",
+    "desc": "A url-safe, unique, lower-case version of the name"
+   },
+   {
+    "name": "updated_at",
+    "type": "datetime",
+    "desc": "The last date this entry was updated in the IGDB database"
+   },
+   {
+    "name": "url",
+    "type": "String",
+    "desc": "The website address (URL) of the item"
+   }
+  ]
+ },
+ {
+  "name": "Game",
+  "path": "games",
+  "fields": [
+   {
+    "name": "age_ratings",
+    "type": "Array of Age Rating IDs",
+    "desc": "The PEGI rating"
+   },
+   {
+    "name": "aggregated_rating",
+    "type": "Double",
+    "desc": "Rating based on external critic scores"
+   },
+   {
+    "name": "aggregated_rating_count",
+    "type": "Integer",
+    "desc": "Number of external critic scores"
+   },
+   {
+    "name": "alternative_names",
+    "type": "Array of Alternative Name IDs",
+    "desc": "Alternative names for this game"
+   },
+   {
+    "name": "artworks",
+    "type": "Array of Artwork IDs",
+    "desc": "Artworks of this game"
+   },
+   {
+    "name": "bundles",
+    "type": "Array of Game IDs",
+    "desc": "The bundles this game is a part of"
+   },
+   {
+    "name": "category",
+    "type": "Category Enum",
+    "desc": "DEPRECATED! Use game_type instead"
+   },
+   {
+    "name": "checksum",
+    "type": "uuid",
+    "desc": "Hash of the object"
+   },
+   {
+    "name": "collection",
+    "type": "Reference ID for Collection",
+    "desc": "DEPRECATED! Use collections instead"
+   },
+   {
+    "name": "collections",
+    "type": "Array of Collection IDs",
+    "desc": "The collections that this game is in."
+   },
+   {
+    "name": "cover",
+    "type": "Reference ID for Cover",
+    "desc": "The cover of this game"
+   },
+   {
+    "name": "created_at",
+    "type": "datetime",
+    "desc": "Date this was initially added to the IGDB database"
+   },
+   {
+    "name": "dlcs",
+    "type": "Array of Game IDs",
+    "desc": "DLCs for this game"
+   },
+   {
+    "name": "executables",
+    "type": "Array of Executable IDs",
+    "desc": "The executables (e.g. game.exe) associated with this game"
+   },
+   {
+    "name": "expanded_games",
+    "type": "Array of Game IDs",
+    "desc": "Expanded games of this game"
+   },
+   {
+    "name": "expansions",
+    "type": "Array of Game IDs",
+    "desc": "Expansions of this game"
+   },
+   {
+    "name": "external_games",
+    "type": "Array of External Game IDs",
+    "desc": "External IDs this game has on other services"
+   },
+   {
+    "name": "first_release_date",
+    "type": "Unix Time Stamp",
+    "desc": "The first release date for this game"
+   },
+   {
+    "name": "follows",
+    "type": "Integer",
+    "desc": "DEPRECATED! - To be removed"
+   },
+   {
+    "name": "forks",
+    "type": "Array of Game IDs",
+    "desc": "Forks of this game"
+   },
+   {
+    "name": "franchise",
+    "type": "Reference ID for Franchise",
+    "desc": "The main franchise"
+   },
+   {
+    "name": "franchises",
+    "type": "Array of Franchise IDs",
+    "desc": "Other franchises the game belongs to"
+   },
+   {
+    "name": "game_engines",
+    "type": "Array of Game Engine IDs",
+    "desc": "The game engine used in this game"
+   },
+   {
+    "name": "game_localizations",
+    "type": "Array of Game Localization IDs",
+    "desc": "Supported game localizations for this game. A region can have at most one game localization for a given game"
+   },
+   {
+    "name": "game_modes",
+    "type": "Array of Game Mode IDs",
+    "desc": "Modes of gameplay"
+   },
+   {
+    "name": "game_status",
+    "type": "Reference ID for Game Status",
+    "desc": "The status of the games release"
+   },
+   {
+    "name": "game_type",
+    "type": "Reference ID for Game Type",
+    "desc": "The type of game"
+   },
+   {
+    "name": "genres",
+    "type": "Array of Genre IDs",
+    "desc": "Genres of the game"
+   },
+   {
+    "name": "hypes",
+    "type": "Integer",
+    "desc": "Number of follows a game gets before release"
+   },
+   {
+    "name": "involved_companies",
+    "type": "Array of Involved Company IDs",
+    "desc": "Companies who developed this game"
+   },
+   {
+    "name": "keywords",
+    "type": "Array of Keyword IDs",
+    "desc": "Associated keywords"
+   },
+   {
+    "name": "language_supports",
+    "type": "Array of Language Support IDs",
+    "desc": "Supported Languages for this game"
+   },
+   {
+    "name": "multiplayer_modes",
+    "type": "Array of Multiplayer Mode IDs",
+    "desc": "Multiplayer modes for this game"
+   },
+   {
+    "name": "name",
+    "type": "String",
+    "desc": ""
+   },
+   {
+    "name": "parent_game",
+    "type": "Reference ID for Game",
+    "desc": "If a DLC, expansion or part of a bundle, this is the main game or bundle"
+   },
+   {
+    "name": "platforms",
+    "type": "Array of Platform IDs",
+    "desc": "Platforms this game was released on"
+   },
+   {
+    "name": "player_perspectives",
+    "type": "Array of Player Perspective IDs",
+    "desc": "The main perspective of the player"
+   },
+   {
+    "name": "ports",
+    "type": "Array of Game IDs",
+    "desc": "Ports of this game"
+   },
+   {
+    "name": "rating",
+    "type": "Double",
+    "desc": "Average IGDB user rating"
+   },
+   {
+    "name": "rating_count",
+    "type": "Integer",
+    "desc": "Total number of IGDB user ratings"
+   },
+   {
+    "name": "release_dates",
+    "type": "Array of Release Date IDs",
+    "desc": "Release dates of this game"
+   },
+   {
+    "name": "remakes",
+    "type": "Array of Game IDs",
+    "desc": "Remakes of this game"
+   },
+   {
+    "name": "remasters",
+    "type": "Array of Game IDs",
+    "desc": "Remasters of this game"
+   },
+   {
+    "name": "screenshots",
+    "type": "Array of Screenshot IDs",
+    "desc": "Screenshots of this game"
+   },
+   {
+    "name": "similar_games",
+    "type": "Array of Game IDs",
+    "desc": "Similar games"
+   },
+   {
+    "name": "slug",
+    "type": "String",
+    "desc": "A url-safe, unique, lower-case version of the name"
+   },
+   {
+    "name": "standalone_expansions",
+    "type": "Array of Game IDs",
+    "desc": "Standalone expansions of this game"
+   },
+   {
+    "name": "status",
+    "type": "Status Enum",
+    "desc": "DEPRECATED! Use game_status instead"
+   },
+   {
+    "name": "storyline",
+    "type": "String",
+    "desc": "A short description of a games story"
+   },
+   {
+    "name": "summary",
+    "type": "String",
+    "desc": "A description of the game"
+   },
+   {
+    "name": "tags",
+    "type": "Array of Tag Numbers",
+    "desc": "Related entities in the IGDB API"
+   },
+   {
+    "name": "themes",
+    "type": "Array of Theme IDs",
+    "desc": "Themes of the game"
+   },
+   {
+    "name": "total_rating",
+    "type": "Double",
+    "desc": "Average rating based on both IGDB user and external critic scores"
+   },
+   {
+    "name": "total_rating_count",
+    "type": "Integer",
+    "desc": "Total number of user and external critic scores"
+   },
+   {
+    "name": "updated_at",
+    "type": "datetime",
+    "desc": "The last date this entry was updated in the IGDB database"
+   },
+   {
+    "name": "url",
+    "type": "String",
+    "desc": "The website address (URL) of the item"
+   },
+   {
+    "name": "version_parent",
+    "type": "Reference ID for Game",
+    "desc": "If a version, this is the main game"
+   },
+   {
+    "name": "version_title",
+    "type": "String",
+    "desc": "Title of this version (i.e Gold edition)"
+   },
+   {
+    "name": "videos",
+    "type": "Array of Game Video IDs",
+    "desc": "Videos of this game"
+   },
+   {
+    "name": "websites",
+    "type": "Array of Website IDs",
+    "desc": "Websites associated with this game"
+   }
+  ]
+ },
+ {
+  "name": "Game Engine",
+  "path": "game_engines",
+  "fields": [
+   {
+    "name": "checksum",
+    "type": "uuid",
+    "desc": "Hash of the object"
+   },
+   {
+    "name": "companies",
+    "type": "Array of Company IDs",
+    "desc": "Companies who used this game engine"
+   },
+   {
+    "name": "created_at",
+    "type": "datetime",
+    "desc": "Date this was initially added to the IGDB database"
+   },
+   {
+    "name": "description",
+    "type": "String",
+    "desc": "Description of the game engine"
+   },
+   {
+    "name": "logo",
+    "type": "Reference ID for Game Engine Logo",
+    "desc": "Logo of the game engine"
+   },
+   {
+    "name": "name",
+    "type": "String",
+    "desc": "Name of the game engine"
+   },
+   {
+    "name": "platforms",
+    "type": "Array of Platform IDs",
+    "desc": "Platforms this game engine was deployed on"
+   },
+   {
+    "name": "slug",
+    "type": "String",
+    "desc": "A url-safe, unique, lower-case version of the name"
+   },
+   {
+    "name": "updated_at",
+    "type": "datetime",
+    "desc": "The last date this entry was updated in the IGDB database"
+   },
+   {
+    "name": "url",
+    "type": "String",
+    "desc": "The website address (URL) of the item"
+   }
+  ]
+ },
+ {
+  "name": "Game Engine Logo",
+  "path": "game_engine_logos",
+  "fields": [
+   {
+    "name": "alpha_channel",
+    "type": "boolean",
+    "desc": ""
+   },
+   {
+    "name": "animated",
+    "type": "boolean",
+    "desc": ""
+   },
+   {
+    "name": "checksum",
+    "type": "uuid",
+    "desc": "Hash of the object"
+   },
+   {
+    "name": "height",
+    "type": "Integer",
+    "desc": "The height of the image in pixels"
+   },
+   {
+    "name": "image_id",
+    "type": "String",
+    "desc": "The ID of the image used to construct an IGDB image link"
+   },
+   {
+    "name": "url",
+    "type": "String",
+    "desc": "The website address (URL) of the item"
+   },
+   {
+    "name": "width",
+    "type": "Integer",
+    "desc": "The width of the image in pixels"
+   }
+  ]
+ },
+ {
+  "name": "Game Localization",
+  "path": "game_localizations",
+  "fields": [
+   {
+    "name": "checksum",
+    "type": "uuid",
+    "desc": "Hash of the object"
+   },
+   {
+    "name": "cover",
+    "type": "Reference ID for Cover",
+    "desc": "The cover of this game localization"
+   },
+   {
+    "name": "created_at",
+    "type": "datetime",
+    "desc": "Date this was initially added to the IGDB database"
+   },
+   {
+    "name": "game",
+    "type": "Reference ID for Game",
+    "desc": "The Game the localization belongs to"
+   },
+   {
+    "name": "name",
+    "type": "String",
+    "desc": ""
+   },
+   {
+    "name": "region",
+    "type": "Reference ID for Region",
+    "desc": "The Region of the localization"
+   },
+   {
+    "name": "updated_at",
+    "type": "datetime",
+    "desc": "The last date this entry was updated in the IGDB database"
+   }
+  ]
+ },
+ {
+  "name": "Game Mode",
+  "path": "game_modes",
+  "fields": [
+   {
+    "name": "checksum",
+    "type": "uuid",
+    "desc": "Hash of the object"
+   },
+   {
+    "name": "created_at",
+    "type": "datetime",
+    "desc": "Date this was initially added to the IGDB database"
+   },
+   {
+    "name": "name",
+    "type": "String",
+    "desc": "The name of the game mode"
+   },
+   {
+    "name": "slug",
+    "type": "String",
+    "desc": "A url-safe, unique, lower-case version of the name"
+   },
+   {
+    "name": "updated_at",
+    "type": "datetime",
+    "desc": "The last date this entry was updated in the IGDB database"
+   },
+   {
+    "name": "url",
+    "type": "String",
+    "desc": "The website address (URL) of the item"
+   }
+  ]
+ },
+ {
+  "name": "Game Release Format",
+  "path": "game_release_formats",
+  "fields": [
+   {
+    "name": "checksum",
+    "type": "uuid",
+    "desc": "Hash of the object"
+   },
+   {
+    "name": "created_at",
+    "type": "datetime",
+    "desc": "Date this was initially added to the IGDB database"
+   },
+   {
+    "name": "format",
+    "type": "String",
+    "desc": ""
+   },
+   {
+    "name": "updated_at",
+    "type": "datetime",
+    "desc": "The last date this entry was updated in the IGDB database"
+   }
+  ]
+ },
+ {
+  "name": "Game Status",
+  "path": "game_statuses",
+  "fields": [
+   {
+    "name": "checksum",
+    "type": "uuid",
+    "desc": "Hash of the object"
+   },
+   {
+    "name": "created_at",
+    "type": "datetime",
+    "desc": "Date this was initially added to the IGDB database"
+   },
+   {
+    "name": "status",
+    "type": "String",
+    "desc": ""
+   },
+   {
+    "name": "updated_at",
+    "type": "datetime",
+    "desc": "The last date this entry was updated in the IGDB database"
+   }
+  ]
+ },
+ {
+  "name": "Game Time To Beat",
+  "path": "game_time_to_beats",
+  "fields": [
+   {
+    "name": "checksum",
+    "type": "uuid",
+    "desc": "Hash of the object"
+   },
+   {
+    "name": "completely",
+    "type": "Integer",
+    "desc": "Average time (in seconds) to finish the game to 100% completion."
+   },
+   {
+    "name": "count",
+    "type": "Integer",
+    "desc": "Total number of time to beat submissions for this game"
+   },
+   {
+    "name": "created_at",
+    "type": "datetime",
+    "desc": "Date this was initially added to the IGDB database"
+   },
+   {
+    "name": "game_id",
+    "type": "Integer",
+    "desc": "The ID of the game associated with the time to beat data"
+   },
+   {
+    "name": "hastily",
+    "type": "Integer",
+    "desc": "Average time (in seconds) to finish the game to its credits without spending notable time on extras such as side quests."
+   },
+   {
+    "name": "normally",
+    "type": "Integer",
+    "desc": "Average time (in seconds) to finish the game while mixing in some extras such as side quests without being overly thorough."
+   },
+   {
+    "name": "updated_at",
+    "type": "datetime",
+    "desc": "The last date this entry was updated in the IGDB database"
+   }
+  ]
+ },
+ {
+  "name": "Game Type",
+  "path": "game_types",
+  "fields": [
+   {
+    "name": "checksum",
+    "type": "uuid",
+    "desc": "Hash of the object"
+   },
+   {
+    "name": "created_at",
+    "type": "datetime",
+    "desc": "Date this was initially added to the IGDB database"
+   },
+   {
+    "name": "type",
+    "type": "String",
+    "desc": ""
+   },
+   {
+    "name": "updated_at",
+    "type": "datetime",
+    "desc": "The last date this entry was updated in the IGDB database"
+   }
+  ]
+ },
+ {
+  "name": "Game Version",
+  "path": "game_versions",
+  "fields": [
+   {
+    "name": "checksum",
+    "type": "uuid",
+    "desc": "Hash of the object"
+   },
+   {
+    "name": "created_at",
+    "type": "datetime",
+    "desc": "Date this was initially added to the IGDB database"
+   },
+   {
+    "name": "features",
+    "type": "Array of Game Version Feature IDs",
+    "desc": "Features and descriptions of what makes each version/edition different from the main game"
+   },
+   {
+    "name": "game",
+    "type": "Reference ID for Game",
+    "desc": "The game these versions/editions are of"
+   },
+   {
+    "name": "games",
+    "type": "Array of Game IDs",
+    "desc": "Game Versions and Editions"
+   },
+   {
+    "name": "updated_at",
+    "type": "datetime",
+    "desc": "The last date this entry was updated in the IGDB database"
+   },
+   {
+    "name": "url",
+    "type": "String",
+    "desc": "The website address (URL) of the item"
+   }
+  ]
+ },
+ {
+  "name": "Game Version Feature",
+  "path": "game_version_features",
+  "fields": [
+   {
+    "name": "category",
+    "type": "Category Enum",
+    "desc": "The category of the feature description"
+   },
+   {
+    "name": "checksum",
+    "type": "uuid",
+    "desc": "Hash of the object"
+   },
+   {
+    "name": "description",
+    "type": "String",
+    "desc": "The description of the feature"
+   },
+   {
+    "name": "position",
+    "type": "Integer",
+    "desc": "Position of this feature in the list of features"
+   },
+   {
+    "name": "title",
+    "type": "String",
+    "desc": "The title of the feature"
+   },
+   {
+    "name": "values",
+    "type": "Array of Game Version Feature Value IDs",
+    "desc": "The bool/text value of the feature"
+   }
+  ]
+ },
+ {
+  "name": "Game Version Feature Value",
+  "path": "game_version_feature_values",
+  "fields": [
+   {
+    "name": "checksum",
+    "type": "uuid",
+    "desc": "Hash of the object"
+   },
+   {
+    "name": "game",
+    "type": "Reference ID for Game",
+    "desc": "The version/edition this value refers to"
+   },
+   {
+    "name": "game_feature",
+    "type": "Reference ID for Game Version Feature",
+    "desc": "The id of the game feature"
+   },
+   {
+    "name": "included_feature",
+    "type": "Included Feature Enum",
+    "desc": "The boole value of this feature"
+   },
+   {
+    "name": "note",
+    "type": "String",
+    "desc": "The text value of this feature"
+   }
+  ]
+ },
+ {
+  "name": "Game Video",
+  "path": "game_videos",
+  "fields": [
+   {
+    "name": "checksum",
+    "type": "uuid",
+    "desc": "Hash of the object"
+   },
+   {
+    "name": "game",
+    "type": "Reference ID for Game",
+    "desc": "The game this video is associated with"
+   },
+   {
+    "name": "name",
+    "type": "String",
+    "desc": "The name of the video"
+   },
+   {
+    "name": "video_id",
+    "type": "String",
+    "desc": "The external ID of the video (YouTube Links)"
+   }
+  ]
+ },
+ {
+  "name": "Genre",
+  "path": "genres",
+  "fields": [
+   {
+    "name": "checksum",
+    "type": "uuid",
+    "desc": "Hash of the object"
+   },
+   {
+    "name": "created_at",
+    "type": "datetime",
+    "desc": "Date this was initially added to the IGDB database"
+   },
+   {
+    "name": "name",
+    "type": "String",
+    "desc": ""
+   },
+   {
+    "name": "slug",
+    "type": "String",
+    "desc": "A url-safe, unique, lower-case version of the name"
+   },
+   {
+    "name": "updated_at",
+    "type": "datetime",
+    "desc": "The last date this entry was updated in the IGDB database"
+   },
+   {
+    "name": "url",
+    "type": "String",
+    "desc": "The website address (URL) of the item"
+   }
+  ]
+ },
+ {
+  "name": "Image Type",
+  "path": "image_types",
+  "fields": [
+   {
+    "name": "checksum",
+    "type": "uuid",
+    "desc": "Hash of the object"
+   },
+   {
+    "name": "created_at",
+    "type": "datetime",
+    "desc": "Date this was initially added to the IGDB database"
+   },
+   {
+    "name": "name",
+    "type": "String",
+    "desc": ""
+   },
+   {
+    "name": "updated_at",
+    "type": "datetime",
+    "desc": "The last date this entry was updated in the IGDB database"
+   }
+  ]
+ },
+ {
+  "name": "Keyword",
+  "path": "keywords",
+  "fields": [
+   {
+    "name": "checksum",
+    "type": "uuid",
+    "desc": "Hash of the object"
+   },
+   {
+    "name": "created_at",
+    "type": "datetime",
+    "desc": "Date this was initially added to the IGDB database"
+   },
+   {
+    "name": "name",
+    "type": "String",
+    "desc": ""
+   },
+   {
+    "name": "slug",
+    "type": "String",
+    "desc": "A url-safe, unique, lower-case version of the name"
+   },
+   {
+    "name": "updated_at",
+    "type": "datetime",
+    "desc": "The last date this entry was updated in the IGDB database"
+   },
+   {
+    "name": "url",
+    "type": "String",
+    "desc": "The website address (URL) of the item"
+   }
+  ]
+ },
+ {
+  "name": "Involved Company",
+  "path": "involved_companies",
+  "fields": [
+   {
+    "name": "checksum",
+    "type": "uuid",
+    "desc": "Hash of the object"
+   },
+   {
+    "name": "company",
+    "type": "Reference ID for Company",
+    "desc": ""
+   },
+   {
+    "name": "created_at",
+    "type": "datetime",
+    "desc": "Date this was initially added to the IGDB database"
+   },
+   {
+    "name": "developer",
+    "type": "boolean",
+    "desc": ""
+   },
+   {
+    "name": "game",
+    "type": "Reference ID for Game",
+    "desc": ""
+   },
+   {
+    "name": "porting",
+    "type": "boolean",
+    "desc": ""
+   },
+   {
+    "name": "publisher",
+    "type": "boolean",
+    "desc": ""
+   },
+   {
+    "name": "supporting",
+    "type": "boolean",
+    "desc": ""
+   },
+   {
+    "name": "updated_at",
+    "type": "datetime",
+    "desc": "The last date this entry was updated in the IGDB database"
+   }
+  ]
+ },
+ {
+  "name": "Language",
+  "path": "languages",
+  "fields": [
+   {
+    "name": "checksum",
+    "type": "uuid",
+    "desc": "Hash of the object"
+   },
+   {
+    "name": "created_at",
+    "type": "datetime",
+    "desc": "Date this was initially added to the IGDB database"
+   },
+   {
+    "name": "locale",
+    "type": "String",
+    "desc": "The combination of Language code and Country code"
+   },
+   {
+    "name": "name",
+    "type": "String",
+    "desc": "The English name of the Language"
+   },
+   {
+    "name": "native_name",
+    "type": "String",
+    "desc": "The Native Name of the Language"
+   },
+   {
+    "name": "updated_at",
+    "type": "datetime",
+    "desc": "The last date this entry was updated in the IGDB database"
+   }
+  ]
+ },
+ {
+  "name": "Language Support",
+  "path": "language_supports",
+  "fields": [
+   {
+    "name": "checksum",
+    "type": "uuid",
+    "desc": "Hash of the object"
+   },
+   {
+    "name": "created_at",
+    "type": "datetime",
+    "desc": "Date this was initially added to the IGDB database"
+   },
+   {
+    "name": "game",
+    "type": "Reference ID for Game",
+    "desc": ""
+   },
+   {
+    "name": "language",
+    "type": "Reference ID for Language",
+    "desc": ""
+   },
+   {
+    "name": "language_support_type",
+    "type": "Reference ID for Language Support Type",
+    "desc": ""
+   },
+   {
+    "name": "updated_at",
+    "type": "datetime",
+    "desc": "The last date this entry was updated in the IGDB database"
+   }
+  ]
+ },
+ {
+  "name": "Language Support Type",
+  "path": "language_support_types",
+  "fields": [
+   {
+    "name": "checksum",
+    "type": "uuid",
+    "desc": "Hash of the object"
+   },
+   {
+    "name": "created_at",
+    "type": "datetime",
+    "desc": "Date this was initially added to the IGDB database"
+   },
+   {
+    "name": "name",
+    "type": "String",
+    "desc": ""
+   },
+   {
+    "name": "updated_at",
+    "type": "datetime",
+    "desc": "The last date this entry was updated in the IGDB database"
+   }
+  ]
+ },
+ {
+  "name": "Logo",
+  "path": "logos",
+  "fields": [
+   {
+    "name": "alpha_channel",
+    "type": "boolean",
+    "desc": ""
+   },
+   {
+    "name": "animated",
+    "type": "boolean",
+    "desc": ""
+   },
+   {
+    "name": "checksum",
+    "type": "uuid",
+    "desc": "Hash of the object"
+   },
+   {
+    "name": "game",
+    "type": "Reference ID for Game",
+    "desc": "The game this logo is associated with"
+   },
+   {
+    "name": "height",
+    "type": "Integer",
+    "desc": "The height of the image in pixels"
+   },
+   {
+    "name": "image_id",
+    "type": "String",
+    "desc": "The ID of the image used to construct an IGDB image link"
+   },
+   {
+    "name": "image_type",
+    "type": "Reference ID for Image Type",
+    "desc": "The image type categorizing this logo"
+   },
+   {
+    "name": "url",
+    "type": "String",
+    "desc": "The website address (URL) of the item"
+   },
+   {
+    "name": "width",
+    "type": "Integer",
+    "desc": "The width of the image in pixels"
+   }
+  ]
+ },
+ {
+  "name": "Multiplayer Mode",
+  "path": "multiplayer_modes",
+  "fields": [
+   {
+    "name": "campaigncoop",
+    "type": "boolean",
+    "desc": "True if the game supports campaign coop"
+   },
+   {
+    "name": "checksum",
+    "type": "uuid",
+    "desc": "Hash of the object"
+   },
+   {
+    "name": "dropin",
+    "type": "boolean",
+    "desc": "True if the game supports drop in/out multiplayer"
+   },
+   {
+    "name": "game",
+    "type": "Reference ID for Game",
+    "desc": "The game this multiplayer mode is associated with"
+   },
+   {
+    "name": "lancoop",
+    "type": "boolean",
+    "desc": "True if the game supports LAN coop"
+   },
+   {
+    "name": "offlinecoop",
+    "type": "boolean",
+    "desc": "True if the game supports offline coop"
+   },
+   {
+    "name": "offlinecoopmax",
+    "type": "Integer",
+    "desc": "Maximum number of offline players in offline coop"
+   },
+   {
+    "name": "offlinemax",
+    "type": "Integer",
+    "desc": "Maximum number of players in offline multiplayer"
+   },
+   {
+    "name": "onlinecoop",
+    "type": "boolean",
+    "desc": "True if the game supports online coop"
+   },
+   {
+    "name": "onlinecoopmax",
+    "type": "Integer",
+    "desc": "Maximum number of online players in online coop"
+   },
+   {
+    "name": "onlinemax",
+    "type": "Integer",
+    "desc": "Maximum number of players in online multiplayer"
+   },
+   {
+    "name": "platform",
+    "type": "Reference ID for Platform",
+    "desc": "The platform this multiplayer mode refers to"
+   },
+   {
+    "name": "splitscreen",
+    "type": "boolean",
+    "desc": "True if the game supports split screen, offline multiplayer"
+   },
+   {
+    "name": "splitscreenonline",
+    "type": "boolean",
+    "desc": "True if the game supports split screen, online multiplayer"
+   }
+  ]
+ },
+ {
+  "name": "Network Type",
+  "path": "network_types",
+  "fields": [
+   {
+    "name": "checksum",
+    "type": "uuid",
+    "desc": "Hash of the object"
+   },
+   {
+    "name": "created_at",
+    "type": "datetime",
+    "desc": "Date this was initially added to the IGDB database"
+   },
+   {
+    "name": "event_networks",
+    "type": "Array of Event Network IDs",
+    "desc": "Urls associated with the event type"
+   },
+   {
+    "name": "name",
+    "type": "String",
+    "desc": ""
+   },
+   {
+    "name": "updated_at",
+    "type": "datetime",
+    "desc": "The last date this entry was updated in the IGDB database"
+   }
+  ]
+ },
+ {
+  "name": "Platform",
+  "path": "platforms",
+  "fields": [
+   {
+    "name": "abbreviation",
+    "type": "String",
+    "desc": "An abbreviation of the platform name"
+   },
+   {
+    "name": "alternative_name",
+    "type": "String",
+    "desc": "An alternative name for the platform"
+   },
+   {
+    "name": "category",
+    "type": "Category Enum",
+    "desc": "DEPRECATED! Use platform_type instead"
+   },
+   {
+    "name": "checksum",
+    "type": "uuid",
+    "desc": "Hash of the object"
+   },
+   {
+    "name": "created_at",
+    "type": "datetime",
+    "desc": "Date this was initially added to the IGDB database"
+   },
+   {
+    "name": "generation",
+    "type": "Integer",
+    "desc": "The generation of the platform"
+   },
+   {
+    "name": "name",
+    "type": "String",
+    "desc": "The name of the platform"
+   },
+   {
+    "name": "platform_family",
+    "type": "Reference ID for Platform Family",
+    "desc": "The family of platforms this one belongs to"
+   },
+   {
+    "name": "platform_logo",
+    "type": "Reference ID for Platform Logo",
+    "desc": "The logo of the first Version of this platform"
+   },
+   {
+    "name": "platform_type",
+    "type": "Reference ID for Platform Type",
+    "desc": "The type of the platform"
+   },
+   {
+    "name": "slug",
+    "type": "String",
+    "desc": "A url-safe, unique, lower-case version of the name"
+   },
+   {
+    "name": "summary",
+    "type": "String",
+    "desc": "The summary of the first Version of this platform"
+   },
+   {
+    "name": "updated_at",
+    "type": "datetime",
+    "desc": "The last date this entry was updated in the IGDB database"
+   },
+   {
+    "name": "url",
+    "type": "String",
+    "desc": "The website address (URL) of the item"
+   },
+   {
+    "name": "versions",
+    "type": "Array of Platform Version IDs",
+    "desc": "Associated versions of this platform"
+   },
+   {
+    "name": "websites",
+    "type": "Array of Platform Website IDs",
+    "desc": "The main website"
+   }
+  ]
+ },
+ {
+  "name": "Platform Family",
+  "path": "platform_families",
+  "fields": [
+   {
+    "name": "checksum",
+    "type": "uuid",
+    "desc": "Hash of the object"
+   },
+   {
+    "name": "name",
+    "type": "String",
+    "desc": "The name of the platform family"
+   },
+   {
+    "name": "slug",
+    "type": "String",
+    "desc": "A url-safe, unique, lower-case version of the name"
+   }
+  ]
+ },
+ {
+  "name": "Platform Logo",
+  "path": "platform_logos",
+  "fields": [
+   {
+    "name": "alpha_channel",
+    "type": "boolean",
+    "desc": ""
+   },
+   {
+    "name": "animated",
+    "type": "boolean",
+    "desc": ""
+   },
+   {
+    "name": "checksum",
+    "type": "uuid",
+    "desc": "Hash of the object"
+   },
+   {
+    "name": "height",
+    "type": "Integer",
+    "desc": "The height of the image in pixels"
+   },
+   {
+    "name": "image_id",
+    "type": "String",
+    "desc": "The ID of the image used to construct an IGDB image link"
+   },
+   {
+    "name": "url",
+    "type": "String",
+    "desc": "The website address (URL) of the item"
+   },
+   {
+    "name": "width",
+    "type": "Integer",
+    "desc": "The width of the image in pixels"
+   }
+  ]
+ },
+ {
+  "name": "Platform Type",
+  "path": "platform_types",
+  "fields": [
+   {
+    "name": "checksum",
+    "type": "uuid",
+    "desc": "Hash of the object"
+   },
+   {
+    "name": "created_at",
+    "type": "datetime",
+    "desc": "Date this was initially added to the IGDB database"
+   },
+   {
+    "name": "name",
+    "type": "String",
+    "desc": ""
+   },
+   {
+    "name": "updated_at",
+    "type": "datetime",
+    "desc": "The last date this entry was updated in the IGDB database"
+   }
+  ]
+ },
+ {
+  "name": "Platform Version",
+  "path": "platform_versions",
+  "fields": [
+   {
+    "name": "checksum",
+    "type": "uuid",
+    "desc": "Hash of the object"
+   },
+   {
+    "name": "companies",
+    "type": "Array of Platform Version Company IDs",
+    "desc": "Who developed this platform version"
+   },
+   {
+    "name": "connectivity",
+    "type": "String",
+    "desc": "The network capabilities"
+   },
+   {
+    "name": "cpu",
+    "type": "String",
+    "desc": "The integrated control processing unit"
+   },
+   {
+    "name": "graphics",
+    "type": "String",
+    "desc": "The graphics chipset"
+   },
+   {
+    "name": "main_manufacturer",
+    "type": "Reference ID for Platform Version Company",
+    "desc": "Who manufactured this version of the platform"
+   },
+   {
+    "name": "media",
+    "type": "String",
+    "desc": "The type of media this version accepted"
+   },
+   {
+    "name": "memory",
+    "type": "String",
+    "desc": "How much memory there is"
+   },
+   {
+    "name": "name",
+    "type": "String",
+    "desc": "The name of the platform version"
+   },
+   {
+    "name": "os",
+    "type": "String",
+    "desc": "The operating system installed on the platform version"
+   },
+   {
+    "name": "output",
+    "type": "String",
+    "desc": "The output video rate"
+   },
+   {
+    "name": "platform_logo",
+    "type": "Reference ID for Platform Logo",
+    "desc": "The logo of this platform version"
+   },
+   {
+    "name": "platform_version_release_dates",
+    "type": "Array of Platform Version Release Date IDs",
+    "desc": "When this platform was released"
+   },
+   {
+    "name": "resolutions",
+    "type": "String",
+    "desc": "The maximum resolution"
+   },
+   {
+    "name": "slug",
+    "type": "String",
+    "desc": "A url-safe, unique, lower-case version of the name"
+   },
+   {
+    "name": "sound",
+    "type": "String",
+    "desc": "The sound chipset"
+   },
+   {
+    "name": "storage",
+    "type": "String",
+    "desc": "How much storage there is"
+   },
+   {
+    "name": "summary",
+    "type": "String",
+    "desc": "A short summary"
+   },
+   {
+    "name": "url",
+    "type": "String",
+    "desc": "The website address (URL) of the item"
+   }
+  ]
+ },
+ {
+  "name": "Platform Version Company",
+  "path": "platform_version_companies",
+  "fields": [
+   {
+    "name": "checksum",
+    "type": "uuid",
+    "desc": "Hash of the object"
+   },
+   {
+    "name": "comment",
+    "type": "String",
+    "desc": "Any notable comments about the developer"
+   },
+   {
+    "name": "company",
+    "type": "Reference ID for Company",
+    "desc": "The company responsible for developing this platform version"
+   },
+   {
+    "name": "developer",
+    "type": "boolean",
+    "desc": ""
+   },
+   {
+    "name": "manufacturer",
+    "type": "boolean",
+    "desc": ""
+   }
+  ]
+ },
+ {
+  "name": "Platform Version Release Date",
+  "path": "platform_version_release_dates",
+  "fields": [
+   {
+    "name": "category",
+    "type": "Category Enum",
+    "desc": "DEPRECATED! Use date_format instead"
+   },
+   {
+    "name": "checksum",
+    "type": "uuid",
+    "desc": "Hash of the object"
+   },
+   {
+    "name": "created_at",
+    "type": "datetime",
+    "desc": "Date this was initially added to the IGDB database"
+   },
+   {
+    "name": "date",
+    "type": "Unix Time Stamp",
+    "desc": "The release date"
+   },
+   {
+    "name": "date_format",
+    "type": "Reference ID for Date Format",
+    "desc": "The format of the change date"
+   },
+   {
+    "name": "human",
+    "type": "String",
+    "desc": "A human readable version of the release date"
+   },
+   {
+    "name": "m",
+    "type": "Integer",
+    "desc": "The month as an integer starting at 1 (January)"
+   },
+   {
+    "name": "platform_version",
+    "type": "Reference ID for Platform Version",
+    "desc": "The platform this release date is for"
+   },
+   {
+    "name": "region",
+    "type": "Region Enum",
+    "desc": "DEPRECATED! Use release_region instead"
+   },
+   {
+    "name": "release_region",
+    "type": "Reference ID for Release Date Region",
+    "desc": "The region of the release"
+   },
+   {
+    "name": "updated_at",
+    "type": "datetime",
+    "desc": "The last date this entry was updated in the IGDB database"
+   },
+   {
+    "name": "y",
+    "type": "Integer",
+    "desc": "The year in full (2018)"
+   }
+  ]
+ },
+ {
+  "name": "Platform Website",
+  "path": "platform_websites",
+  "fields": [
+   {
+    "name": "category",
+    "type": "Category Enum",
+    "desc": "DEPRECATED! Use type instead"
+   },
+   {
+    "name": "checksum",
+    "type": "uuid",
+    "desc": "Hash of the object"
+   },
+   {
+    "name": "trusted",
+    "type": "boolean",
+    "desc": ""
+   },
+   {
+    "name": "type",
+    "type": "Reference ID for Website Type",
+    "desc": "The website type associated with the website"
+   },
+   {
+    "name": "url",
+    "type": "String",
+    "desc": "The website address (URL) of the item"
+   }
+  ]
+ },
+ {
+  "name": "Player Perspective",
+  "path": "player_perspectives",
+  "fields": [
+   {
+    "name": "checksum",
+    "type": "uuid",
+    "desc": "Hash of the object"
+   },
+   {
+    "name": "created_at",
+    "type": "datetime",
+    "desc": "Date this was initially added to the IGDB database"
+   },
+   {
+    "name": "name",
+    "type": "String",
+    "desc": ""
+   },
+   {
+    "name": "slug",
+    "type": "String",
+    "desc": "A url-safe, unique, lower-case version of the name"
+   },
+   {
+    "name": "updated_at",
+    "type": "datetime",
+    "desc": "The last date this entry was updated in the IGDB database"
+   },
+   {
+    "name": "url",
+    "type": "String",
+    "desc": "The website address (URL) of the item"
+   }
+  ]
+ },
+ {
+  "name": "Popularity Primitive",
+  "path": "popularity_primitives",
+  "fields": [
+   {
+    "name": "calculated_at",
+    "type": "datetime",
+    "desc": ""
+   },
+   {
+    "name": "checksum",
+    "type": "uuid",
+    "desc": "Hash of the object"
+   },
+   {
+    "name": "created_at",
+    "type": "datetime",
+    "desc": "Date this was initially added to the IGDB database"
+   },
+   {
+    "name": "external_popularity_source",
+    "type": "Reference ID for External Game Source",
+    "desc": ""
+   },
+   {
+    "name": "game_id",
+    "type": "Integer",
+    "desc": ""
+   },
+   {
+    "name": "popularity_source",
+    "type": "Popularity Source Enum",
+    "desc": "DEPRECATED! Use external_popularity_source instead"
+   },
+   {
+    "name": "popularity_type",
+    "type": "Reference ID for Popularity Type",
+    "desc": ""
+   },
+   {
+    "name": "updated_at",
+    "type": "datetime",
+    "desc": "The last date this entry was updated in the IGDB database"
+   },
+   {
+    "name": "value",
+    "type": "bigdecimal",
+    "desc": ""
+   }
+  ]
+ },
+ {
+  "name": "Popularity Type",
+  "path": "popularity_types",
+  "fields": [
+   {
+    "name": "checksum",
+    "type": "uuid",
+    "desc": "Hash of the object"
+   },
+   {
+    "name": "created_at",
+    "type": "datetime",
+    "desc": "Date this was initially added to the IGDB database"
+   },
+   {
+    "name": "external_popularity_source",
+    "type": "Reference ID for External Game Source",
+    "desc": ""
+   },
+   {
+    "name": "name",
+    "type": "String",
+    "desc": ""
+   },
+   {
+    "name": "popularity_source",
+    "type": "Popularity Source Enum",
+    "desc": "DEPRECATED! Use external_popularity_source instead"
+   },
+   {
+    "name": "updated_at",
+    "type": "datetime",
+    "desc": "The last date this entry was updated in the IGDB database"
+   }
+  ]
+ },
+ {
+  "name": "Region",
+  "path": "regions",
+  "fields": [
+   {
+    "name": "category",
+    "type": "String",
+    "desc": "This can be either \u2019locale\u2019 or \u2018continent\u2019"
+   },
+   {
+    "name": "checksum",
+    "type": "uuid",
+    "desc": "Hash of the object"
+   },
+   {
+    "name": "created_at",
+    "type": "datetime",
+    "desc": "Date this was initially added to the IGDB database"
+   },
+   {
+    "name": "identifier",
+    "type": "String",
+    "desc": "This is the identifier of each region"
+   },
+   {
+    "name": "name",
+    "type": "String",
+    "desc": ""
+   },
+   {
+    "name": "updated_at",
+    "type": "datetime",
+    "desc": "The last date this entry was updated in the IGDB database"
+   }
+  ]
+ },
+ {
+  "name": "Release Date",
+  "path": "release_dates",
+  "fields": [
+   {
+    "name": "category",
+    "type": "Category Enum",
+    "desc": "DEPRECATED! Use date_format instead"
+   },
+   {
+    "name": "checksum",
+    "type": "uuid",
+    "desc": "Hash of the object"
+   },
+   {
+    "name": "created_at",
+    "type": "datetime",
+    "desc": "Date this was initially added to the IGDB database"
+   },
+   {
+    "name": "d",
+    "type": "Integer",
+    "desc": "The day of the month as an integer"
+   },
+   {
+    "name": "date",
+    "type": "datetime",
+    "desc": "The date of the release"
+   },
+   {
+    "name": "date_format",
+    "type": "Reference ID for Date Format",
+    "desc": "The format of the change date"
+   },
+   {
+    "name": "game",
+    "type": "Reference ID for Game",
+    "desc": ""
+   },
+   {
+    "name": "human",
+    "type": "String",
+    "desc": "A human readable representation of the date"
+   },
+   {
+    "name": "m",
+    "type": "Integer",
+    "desc": "The month as an integer starting at 1 (January)"
+   },
+   {
+    "name": "platform",
+    "type": "Reference ID for Platform",
+    "desc": "The platform of the release"
+   },
+   {
+    "name": "region",
+    "type": "Region Enum",
+    "desc": "DEPRECATED! Use release_region instead"
+   },
+   {
+    "name": "release_region",
+    "type": "Reference ID for Release Date Region",
+    "desc": "The region of the release"
+   },
+   {
+    "name": "status",
+    "type": "Reference ID for Release Date Status",
+    "desc": "The status of the release."
+   },
+   {
+    "name": "updated_at",
+    "type": "datetime",
+    "desc": "The last date this entry was updated in the IGDB database"
+   },
+   {
+    "name": "y",
+    "type": "Integer",
+    "desc": "The year in full (2018)"
+   }
+  ]
+ },
+ {
+  "name": "Release Date Region",
+  "path": "release_date_regions",
+  "fields": [
+   {
+    "name": "checksum",
+    "type": "uuid",
+    "desc": "Hash of the object"
+   },
+   {
+    "name": "created_at",
+    "type": "datetime",
+    "desc": "Date this was initially added to the IGDB database"
+   },
+   {
+    "name": "region",
+    "type": "String",
+    "desc": ""
+   },
+   {
+    "name": "updated_at",
+    "type": "datetime",
+    "desc": "The last date this entry was updated in the IGDB database"
+   }
+  ]
+ },
+ {
+  "name": "Release Date Status",
+  "path": "release_date_statuses",
+  "fields": [
+   {
+    "name": "checksum",
+    "type": "uuid",
+    "desc": "Hash of the object"
+   },
+   {
+    "name": "created_at",
+    "type": "datetime",
+    "desc": "Date this was initially added to the IGDB database"
+   },
+   {
+    "name": "description",
+    "type": "String",
+    "desc": "The description of the release date status."
+   },
+   {
+    "name": "name",
+    "type": "String",
+    "desc": "The name of the release date status."
+   },
+   {
+    "name": "updated_at",
+    "type": "datetime",
+    "desc": "The last date this entry was updated in the IGDB database"
+   }
+  ]
+ },
+ {
+  "name": "Report",
+  "path": "reports",
+  "fields": [
+   {
+    "name": "checksum",
+    "type": "uuid",
+    "desc": "Hash of the object"
+   },
+   {
+    "name": "created_at",
+    "type": "datetime",
+    "desc": "Date this was initially added to the IGDB database"
+   },
+   {
+    "name": "entity_type",
+    "type": "Reference ID for Entity Type",
+    "desc": "The type of entity that the report refers to"
+   },
+   {
+    "name": "report_type",
+    "type": "Reference ID for Report Type",
+    "desc": "The type of the report"
+   },
+   {
+    "name": "source_item_id",
+    "type": "Integer",
+    "desc": "The entity that the report refers to"
+   },
+   {
+    "name": "target_item_id",
+    "type": "Integer",
+    "desc": "The entity that the report targets (if applicable), example: replacement game for a Duplicate violation"
+   },
+   {
+    "name": "updated_at",
+    "type": "datetime",
+    "desc": "The last date this entry was updated in the IGDB database"
+   }
+  ]
+ },
+ {
+  "name": "Report Type",
+  "path": "report_types",
+  "fields": [
+   {
+    "name": "checksum",
+    "type": "uuid",
+    "desc": "Hash of the object"
+   },
+   {
+    "name": "created_at",
+    "type": "datetime",
+    "desc": "Date this was initially added to the IGDB database"
+   },
+   {
+    "name": "name",
+    "type": "String",
+    "desc": ""
+   },
+   {
+    "name": "updated_at",
+    "type": "datetime",
+    "desc": "The last date this entry was updated in the IGDB database"
+   }
+  ]
+ },
+ {
+  "name": "Screenshot",
+  "path": "screenshots",
+  "fields": [
+   {
+    "name": "alpha_channel",
+    "type": "boolean",
+    "desc": ""
+   },
+   {
+    "name": "animated",
+    "type": "boolean",
+    "desc": ""
+   },
+   {
+    "name": "checksum",
+    "type": "uuid",
+    "desc": "Hash of the object"
+   },
+   {
+    "name": "game",
+    "type": "Reference ID for Game",
+    "desc": "The game this video is associated with"
+   },
+   {
+    "name": "height",
+    "type": "Integer",
+    "desc": "The height of the image in pixels"
+   },
+   {
+    "name": "image_id",
+    "type": "String",
+    "desc": "The ID of the image used to construct an IGDB image link"
+   },
+   {
+    "name": "url",
+    "type": "String",
+    "desc": "The website address (URL) of the item"
+   },
+   {
+    "name": "width",
+    "type": "Integer",
+    "desc": "The width of the image in pixels"
+   }
+  ]
+ },
+ {
+  "name": "Search",
+  "path": "search",
+  "fields": [
+   {
+    "name": "alternative_name",
+    "type": "String",
+    "desc": ""
+   },
+   {
+    "name": "character",
+    "type": "Reference ID for Character",
+    "desc": ""
+   },
+   {
+    "name": "checksum",
+    "type": "uuid",
+    "desc": "Hash of the object"
+   },
+   {
+    "name": "collection",
+    "type": "Reference ID for Collection",
+    "desc": ""
+   },
+   {
+    "name": "company",
+    "type": "Reference ID for Company",
+    "desc": ""
+   },
+   {
+    "name": "description",
+    "type": "String",
+    "desc": ""
+   },
+   {
+    "name": "game",
+    "type": "Reference ID for Game",
+    "desc": ""
+   },
+   {
+    "name": "name",
+    "type": "String",
+    "desc": ""
+   },
+   {
+    "name": "platform",
+    "type": "Reference ID for Platform",
+    "desc": ""
+   },
+   {
+    "name": "published_at",
+    "type": "Unix Time Stamp",
+    "desc": "The date this item was initially published by the third party"
+   },
+   {
+    "name": "test_dummy",
+    "type": "Reference ID for Test Dummy",
+    "desc": ""
+   },
+   {
+    "name": "theme",
+    "type": "Reference ID for Theme",
+    "desc": ""
+   }
+  ]
+ },
+ {
+  "name": "Theme",
+  "path": "themes",
+  "fields": [
+   {
+    "name": "checksum",
+    "type": "uuid",
+    "desc": "Hash of the object"
+   },
+   {
+    "name": "created_at",
+    "type": "datetime",
+    "desc": "Date this was initially added to the IGDB database"
+   },
+   {
+    "name": "name",
+    "type": "String",
+    "desc": ""
+   },
+   {
+    "name": "slug",
+    "type": "String",
+    "desc": "A url-safe, unique, lower-case version of the name"
+   },
+   {
+    "name": "updated_at",
+    "type": "datetime",
+    "desc": "The last date this entry was updated in the IGDB database"
+   },
+   {
+    "name": "url",
+    "type": "String",
+    "desc": "The website address (URL) of the item"
+   }
+  ]
+ },
+ {
+  "name": "Website",
+  "path": "websites",
+  "fields": [
+   {
+    "name": "category",
+    "type": "Category Enum",
+    "desc": "DEPRECATED! Use type instead"
+   },
+   {
+    "name": "checksum",
+    "type": "uuid",
+    "desc": "Hash of the object"
+   },
+   {
+    "name": "game",
+    "type": "Reference ID for Game",
+    "desc": "The game this website is associated with"
+   },
+   {
+    "name": "trusted",
+    "type": "boolean",
+    "desc": ""
+   },
+   {
+    "name": "type",
+    "type": "Reference ID for Website Type",
+    "desc": "The website type associated with the website"
+   },
+   {
+    "name": "url",
+    "type": "String",
+    "desc": "The website address (URL) of the item"
+   }
+  ]
+ },
+ {
+  "name": "Website Type",
+  "path": "website_types",
+  "fields": [
+   {
+    "name": "checksum",
+    "type": "uuid",
+    "desc": "Hash of the object"
+   },
+   {
+    "name": "created_at",
+    "type": "datetime",
+    "desc": "Date this was initially added to the IGDB database"
+   },
+   {
+    "name": "type",
+    "type": "String",
+    "desc": "The website type"
+   },
+   {
+    "name": "updated_at",
+    "type": "datetime",
+    "desc": "The last date this entry was updated in the IGDB database"
+   }
+  ]
+ }
+]
