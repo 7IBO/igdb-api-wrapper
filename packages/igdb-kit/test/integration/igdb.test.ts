@@ -6,9 +6,10 @@ import { createIGDB, QueryError, TierError } from "../../src";
 const clientId = process.env.TWITCH_CLIENT_ID;
 const clientSecret = process.env.TWITCH_CLIENT_SECRET;
 
-describe.skipIf(!clientId || !clientSecret)("real IGDB API", () => {
-  const igdb = createIGDB({ clientId: clientId ?? "", clientSecret: clientSecret ?? "" });
+// The describe body runs even when skipped, so only build the client when credentials exist.
+const igdb = clientId && clientSecret ? createIGDB({ clientId, clientSecret }) : (undefined as never);
 
+describe.skipIf(!clientId || !clientSecret)("real IGDB API", () => {
   test("select with expansions returns the inferred shape", async () => {
     const game = await igdb.games.select("name", "cover.image_id", "platforms.name", "genres").findById(1942);
     expect(game?.name).toBe("The Witcher 3: Wild Hunt");
