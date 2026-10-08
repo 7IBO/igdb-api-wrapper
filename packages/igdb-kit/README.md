@@ -6,9 +6,10 @@ A fully typed IGDB API client for Node.js and Bun.
 - **Generated from the official schema.** Entities come from IGDB's `igdbapi.proto`, merged with the API docs for descriptions and `@deprecated` notices. All 81 documented endpoints are included, `executables` and `logos` among them.
 - **Field paths checked twice.** TypeScript checks them as you type, and they are checked again at runtime before the request leaves. IGDB rejects a whole multiquery for one bad field and silently ignores an unknown `sort` field.
 - **Rate limit done right.** One limiter per client id, shared by every client in the process (4 requests per second, 8 in flight). After a 429 the whole queue pauses and slows down, because IGDB sends no `Retry-After`.
+- **Automatic multiquery.** Queries started at the same time are grouped into `/multiquery` requests of up to 10 blocks, so 30 `findById` calls cost 3 HTTP requests. Batches are sized by estimated response size to stay under IGDB's 10 MB cap. An invalid query or an oversized response is isolated by splitting the batch, so only the faulty query fails. Identical queries in flight are sent once.
 - **Auth that recovers.** Tokens are fetched once for all concurrent requests, renewed before they expire, and renewed then replayed once after a 401. A token store can be shared across processes, since Twitch keeps only 25 active tokens per app.
 
-> Status: early development, not published yet. Automatic multiquery batching, the Redis adapters and webhooks come next.
+> Status: early development, not published yet. Redis adapters, webhooks and a sync helper come next.
 
 ## Usage
 
@@ -80,6 +81,30 @@ for await (const game of igdb.games.select("name").iterate()) {
 await igdb.games.select("name").search("zelda").limit(5); // searchable endpoints only, no sort
 ```
 
+### Batching
+
+Nothing to do: queries started within the same couple of milliseconds are sent together.
+
+```ts
+// 1 HTTP request
+const [witcher, gta, zelda] = await Promise.all([1942, 1020, 7346].map((id) => igdb.games.select("name").findById(id)));
+```
+
+`batch()` makes it explicit and keeps each result's type under its key:
+
+```ts
+const { top, total, ps5 } = await igdb.batch({
+  top: igdb.games.select("name", "cover.image_id").sort("rating", "desc").limit(5),
+  total: igdb.games.where((g) => g.rating.gte(80)).count(),
+  ps5: igdb.platforms.select("name").findById(167),
+});
+// top: { id: number; name?: string; cover?: { id: number; image_id?: string } }[]
+// total: number
+// ps5: { id: number; name?: string } | null
+```
+
+Some queries are always sent alone: `search` queries (IGDB returns an empty multiquery when one block searches), `withCount()` (the total comes from a header multiquery does not have), and any query run with `execute({ batch: false })`. Set `autoBatch: false` to turn automatic grouping off; `batch()` still groups.
+
 ### Errors
 
 All errors extend `IGDBError` and carry `status`, `details` (IGDB's own error entries) and the `query` that failed.
@@ -106,6 +131,9 @@ createIGDB({
   limiter,                    // LocalLimiterOptions or your own Limiter; default shared per clientId
   retryTimeoutMs: 30_000,
   attemptTimeoutMs: 30_000,
+  autoBatch: true,            // group concurrent queries into multiqueries
+  batchWindowMs: 2,           // how long to wait for more queries before sending
+  maxBatchBytes: 4_000_000,   // target size of one multiquery response
   hooks: { onRetry, onRateLimited, onTokenRefresh },
 });
 ```

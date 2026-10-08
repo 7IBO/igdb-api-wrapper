@@ -126,3 +126,20 @@ igdb.games.where((g) => g.nope.eq(1));
 igdb.executables.select("*");
 igdb.logos.select("*");
 igdb.popularity_primitives.select("value", "popularity_type.name");
+
+// batch() keeps each result's type under its key.
+const batched = await igdb.batch({
+  top: igdb.games.select("name", "cover.image_id").limit(5),
+  total: igdb.games.count(),
+  ps5: igdb.platforms.select("name").findById(167),
+});
+expectType<
+  Equal<
+    typeof batched,
+    {
+      top: { id: number; name?: string; cover?: { id: number; image_id?: string } }[];
+      total: number;
+      ps5: { id: number; name?: string } | null;
+    }
+  >
+>();

@@ -1,7 +1,7 @@
 {
   "name": "igdb-kit",
   "version": "0.0.0",
-  "description": "Fully typed IGDB API client for Node.js and Bun: result types inferred from selected fields, typed filters, shared rate limit and automatic token renewal.",
+  "description": "Fully typed IGDB API client for Node.js and Bun: result types inferred from selected fields, typed filters, automatic multiquery batching, shared rate limit and token renewal.",
   "license": "MIT",
   "author": "7IBO",
   "homepage": "https://github.com/7IBO/igdb-api-wrapper/tree/main/packages/igdb-kit#readme",

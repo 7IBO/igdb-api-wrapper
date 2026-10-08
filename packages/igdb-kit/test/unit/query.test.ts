@@ -141,7 +141,14 @@ describe("terminals", () => {
     const ids = Array.from({ length: 1200 }, (_, i) => 1200 - i);
     const found = await client.games.findByIds(ids);
     expect(found.map((g) => g.id)).toEqual(ids.filter((id) => id !== 3));
-    expect(mock.calls.slice(3).map((c) => c.body.match(/limit (\d+)/)?.[1])).toEqual(["500", "500", "200"]);
+    // Three chunks of at most 500 ids, sent together as one multiquery.
+    expect(mock.calls).toHaveLength(4);
+    expect(mock.calls[3]?.url).toEndWith("/multiquery");
+    expect([...(mock.calls[3]?.body.matchAll(/limit (\d+)/g) ?? [])].map((m) => m[1]).sort()).toEqual([
+      "200",
+      "500",
+      "500",
+    ]);
   });
 
   test("iterate pages with an id cursor", async () => {
