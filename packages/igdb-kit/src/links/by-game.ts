@@ -26,6 +26,43 @@ export type GameLinkedEndpoint = Exclude<
 >;
 
 /**
+ * Fields of `E` that point to other rows, which `findBy()` can group by: a relation (`game`,
+ * `parent_game`, `version_parent`, `bundles`, `company`, `parent`...) or an `..._id` number
+ * (`game_id`).
+ */
+export type LinkField<E> = {
+  [K in keyof E]-?: Unarray<NonNullable<E[K]>> extends { id: number }
+    ? K
+    : K extends `${string}_id`
+      ? NonNullable<E[K]> extends number
+        ? K
+        : never
+      : never;
+}[keyof E] &
+  string;
+
+/**
+ * Fields of `E` that point to games, which `linkedBy()` can link a view by: any relation to games
+ * (`game`, `games`, and on `games` itself `version_parent`, `parent_game`, `bundles`...) or `game_id`.
+ */
+export type GameLinkField<E> = {
+  [K in keyof E]-?: Unarray<NonNullable<E[K]>> extends Game ? K : K extends "game_id" ? K : never;
+}[keyof E] &
+  string;
+
+/** Whether `field` of the endpoint is a relation or an `..._id` number, as `LinkField` reads it. */
+export function isLinkField(endpoint: EndpointName, field: string): boolean {
+  const type = entities[endpointEntity(endpoint)]?.[field];
+  return typeof type === "string" || (type === 0 && field.endsWith("_id"));
+}
+
+/** Whether `field` of the endpoint points to games, as `GameLinkField` reads it. */
+export function isGameLinkField(endpoint: EndpointName, field: string): boolean {
+  const type = entities[endpointEntity(endpoint)]?.[field];
+  return type === "Game" || (type === 0 && field === "game_id");
+}
+
+/**
  * The field linking an endpoint's rows to games, read from the schema: `game` first (`game_versions`
  * also has `games`, its editions), then `game_id`, then `games`. Undefined when there is none.
  */
@@ -41,10 +78,29 @@ export function gameLink(endpoint: EndpointName): string | undefined {
 type Row = Record<string, unknown> & { id: number };
 
 /**
- * Rows of `query` linked to each of `gameIds`, with the query's fields and `where`. Every requested
- * id is in the map, with an empty array when nothing points to it. A row linked to several of the
- * games (a character in two games) is the same object under each. The query's `sort` and `limit`
- * apply to each game's rows; without `sort`, rows are in id order.
+ * Rows of `query` linked to each of `gameIds`, through the field `linkedBy()` set or the endpoint's
+ * own link to games. See {@link findByLink}.
+ */
+export async function findByGames<R>(
+  query: Query<EndpointName, R>,
+  gameIds: readonly number[],
+  options: ExecuteOptions = {},
+): Promise<Map<number, R[]>> {
+  const link = query.state.link ?? gameLink(query.endpoint);
+  if (link === undefined) {
+    throw new QueryError(
+      `findByGames() needs an endpoint linked to games, not ${query.endpoint}: name the field with linkedBy()`,
+    );
+  }
+  return findByLink(query, link, gameIds, options, "findByGames()");
+}
+
+/**
+ * Rows of `query` whose field `link` points to each of `ids`, with the query's fields and `where`.
+ * Every requested id is in the map, with an empty array when nothing points to it. A row linked to
+ * several of the ids (a character in two games) is the same object under each. The query's `sort`
+ * and `limit` apply to each id's rows; without `sort`, rows are in id order. With a single id, `link`
+ * can be a nested path (`collection.games`): every row is that id's.
  *
  * Ids are sent 500 per query, and the first pages go out together so batching packs them into
  * multiqueries. Pages hold 500 rows, fewer when the selected rows are heavy. A query that fills its
@@ -52,30 +108,31 @@ type Row = Record<string, unknown> & { id: number };
  * single game with more rows than a page is read with an id cursor. A page IGDB finds too heavy is
  * split in two by its ids, or read with smaller pages for a single game.
  */
-export async function findByGames<R>(
+export async function findByLink<R>(
   query: Query<EndpointName, R>,
-  gameIds: readonly number[],
+  link: string,
+  targetIds: readonly number[],
   options: ExecuteOptions = {},
+  method = "findBy()",
 ): Promise<Map<number, R[]>> {
-  const link = gameLink(query.endpoint);
-  if (link === undefined)
-    throw new QueryError(`findByGames() needs an endpoint linked to games, not ${query.endpoint}`);
   const { fields, search, offset, sort, limit } = query.state;
-  if (search !== undefined) throw new QueryError("findByGames() cannot be combined with search");
+  if (search !== undefined) throw new QueryError(`${method} cannot be combined with search`);
   if (offset !== undefined)
-    throw new QueryError("findByGames() cannot be combined with offset: use limit, per game");
+    throw new QueryError(`${method} cannot be combined with offset: use limit, per id`);
 
-  const ids = [...new Set(gameIds.map(toId))];
+  const ids = [...new Set(targetIds.map(toId))];
   const result = new Map<number, R[]>(ids.map((id) => [id, []]));
   if (ids.length === 0) return result;
-  /** Ids per query: the filter on 500 games stays far under IGDB's body limit. */
+  const single = ids.length === 1;
+  if (!single && link.includes(".")) throw new QueryError(`${method} groups by ${link} for one id only`);
+  /** Ids per query: the filter on 500 ids stays far under IGDB's body limit. */
   const chunkSize = 500;
 
-  // The link field is needed to group rows; it is removed again unless the query selected it.
+  // The link field is needed to group rows of several ids; it is removed again unless selected.
   const selectsLink =
-    fields.length === 0 ? false : fields.some((f) => f === "*" || f === link || f.startsWith(`${link}.`));
+    fields.length > 0 && fields.some((f) => f === "*" || f === link || f.startsWith(`${link}.`));
   const base = query.with({
-    fields: selectsLink ? fields : [...new Set([...(fields.length ? fields : ["id"]), link])],
+    fields: selectsLink || single ? fields : [...new Set([...(fields.length ? fields : ["id"]), link])],
     sort: { field: "id", direction: "asc" },
     limit: undefined,
     offset: undefined,
@@ -137,7 +194,7 @@ export async function findByGames<R>(
       shown = { ...row };
       delete shown[link];
     }
-    for (const game of linkedGames(row[link])) result.get(game)?.push(shown as R);
+    for (const id of single ? ids : linkedIds(row[link])) result.get(id)?.push(shown as R);
   }
   for (const [id, group] of result) {
     if (sort) group.sort(compareBy(sort.field, sort.direction));
@@ -146,8 +203,8 @@ export async function findByGames<R>(
   return result;
 }
 
-/** The game ids in a link value: an id, an array of ids, or expanded objects (`games.name` selected). */
-function linkedGames(value: unknown): number[] {
+/** The ids in a link value: an id, an array of ids, or expanded objects (`games.name` selected). */
+function linkedIds(value: unknown): number[] {
   const values = Array.isArray(value) ? value : value === undefined || value === null ? [] : [value];
   return values.map((v) => (typeof v === "object" && v !== null ? (v as { id: number }).id : (v as number)));
 }

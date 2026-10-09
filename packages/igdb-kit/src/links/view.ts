@@ -38,8 +38,10 @@ export class View<R, W extends ViewLinks> implements PromiseLike<ViewRow<R, W>[]
       if (key in (entities.Game ?? {})) {
         throw new QueryError(`View key "${key}" is a field of games: pick another name`);
       }
-      if (gameLink(link.endpoint) === undefined) {
-        throw new QueryError(`View key "${key}": ${link.endpoint} does not point to games`);
+      if ((link.state.link ?? gameLink(link.endpoint)) === undefined) {
+        throw new QueryError(
+          `View key "${key}": ${link.endpoint} does not point to games: name the field with linkedBy()`,
+        );
       }
       if (link.state.search !== undefined || link.state.offset !== undefined) {
         throw new QueryError(`View key "${key}": a linked query cannot use search or offset`);

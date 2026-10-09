@@ -28,7 +28,7 @@ export {
   imageSrcSet,
   imageUrl,
 } from "./images";
-export { type GameLinkedEndpoint, gameLink } from "./links/by-game";
+export { type GameLinkedEndpoint, type GameLinkField, gameLink, type LinkField } from "./links/by-game";
 export { type Expanded, type IdKeys, REFERENCE_ENDPOINTS, REFERENCE_TTL_MS } from "./links/expand";
 export { defineSelection, type ResultOf, type Selection } from "./links/selection";
 export { type NoGameFields, View, type ViewLinks, type ViewRow } from "./links/view";
@@ -56,6 +56,14 @@ export {
   type SyncOptions,
   WithCount,
 } from "./query/query";
+export type {
+  CatalogGame,
+  CatalogOptions,
+  CompanyRole,
+  GameFamily,
+  SeriesGame,
+  SeriesOptions,
+} from "./query/related";
 export type {
   CalendarRelease,
   ReleaseCalendarEntry,
