@@ -15,6 +15,7 @@ import {
   imageSrcSet,
   type Language,
   MAIN_GAME_TYPES,
+  or,
   Platform,
   PopularityType,
   type Query,
@@ -245,6 +246,26 @@ igdb.games.where((g) => g.releasedIn({ statuses: ["full_release"] }));
 igdb.platforms.where((p) => p.developedBy(1));
 // @ts-expect-error not on nested relations
 igdb.games.where((g) => g.similar_games.developedBy(1));
+
+// mainGames(), playableTogether(), named() and eq() ignoring case.
+igdb.games.where((g) => and(g.mainGames({ includeUndated: false, requireCover: true }), g.rating.gt(80)));
+igdb.games.where((g) => g.playableTogether({ platform: [6, 48], players: 4, mode: "local", coop: true }));
+// @ts-expect-error not a mode
+igdb.games.where((g) => g.playableTogether({ mode: "lan" }));
+// @ts-expect-error only on games
+igdb.platforms.where((p) => p.mainGames());
+igdb.games.where((g) =>
+  or(g.platforms.named("PS5"), g.genres.named("RPG", "Shooter"), g.franchise.named("Zelda")),
+);
+igdb.games.where((g) => g.involved_companies.company.named("Nintendo"));
+igdb.release_dates.where((r) => r.platform.named("PS5"));
+// @ts-expect-error release dates have no name
+igdb.games.where((g) => g.release_dates.named("x"));
+// @ts-expect-error a name is text
+igdb.games.where((g) => g.platforms.named(167));
+igdb.games.where((g) => g.name.eq("zelda", { caseSensitive: false }));
+// @ts-expect-error caseSensitive is only on text
+igdb.games.where((g) => g.rating.eq(80, { caseSensitive: false }));
 
 // searchAll() returns hits narrowed by kind, with the fields selected per kind.
 const hits = await igdb.searchAll("zelda", {

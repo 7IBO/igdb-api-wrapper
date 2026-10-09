@@ -82,11 +82,15 @@ igdb.games.where((g) => g.platforms.all(6, 48));                       // platfo
 igdb.games.where((g) => g.themes.none(42));                            // themes != (42)
 igdb.games.where((g) => g.cover.isNull());
 igdb.games.where((g) => g.release_dates.platform.eq(6));               // filter on a relation's field
+igdb.games.where((g) => g.platforms.named("PS5", "Nintendo Switch"));   // a relation by name: platforms = (130,167)
+igdb.games.where((g) => g.name.eq("the witcher 3: wild hunt", { caseSensitive: false })); // name ~ "…"
 igdb.games.where((g) => or(and(g.rating.gte(80), g.hypes.gt(10)), g.total_rating_count.gt(100)));
 igdb.games.where("rating > 80");                                       // raw Apicalypse
 ```
 
 Each field only offers the operators that fit its type, and enum fields only accept their values.
+
+`named()` works on any relation to a table with names: platforms (also by abbreviation or alternative name: "PS5", "Switch", "PSX"), genres ("RPG" matches "Role-playing (RPG)"), themes, game modes, franchises, collections, keywords, companies... A name matches in full, ignoring case. igdb-kit looks the names up before sending the query and filters on their ids: a reference table is read whole once and cached for a day, any other table costs one cached request per name. A name that matches nothing throws a `NotFoundError` whose `suggestions` lists close names.
 
 On `games`, named filters cover the common relation lookups:
 
@@ -100,7 +104,11 @@ igdb.games.where((g) =>
   g.releasedIn({ platforms: Platform.NintendoSwitch, regions: ReleaseDateRegion.Europe, from: "2021-01-01" }),
 );
 igdb.games.where((g) => g.supportsLanguage("fr-FR", "audio"));         // a French voice-over
+igdb.games.where((g) => g.mainGames());                                // full games, as a catalog lists them
+igdb.games.where((g) => g.playableTogether({ platform: Platform.NintendoSwitch, players: 4, mode: "local" }));
 ```
+
+`mainGames()` keeps the `MAIN_GAME_TYPES` (no DLCs, mods, bundles, episodes, packs or updates) without editions, the Erotic theme, and offline, cancelled or rumored games: 312,206 games, 82% of IGDB. Its options are `includeUndated` (default true; false leaves out the 24% without a release date), `includeAdult`, `includeEditions` and `requireCover`. `playableTogether()` reads `multiplayer_modes`, every condition on one row: `players` (default 2), `mode` (`"local"` or `"online"`, default either), `coop` (co-op only) and `platform` (a row without a platform applies to all). Only 5.7% of main games have multiplayer data.
 
 A name matches a whole company name, ignoring case: "CD Projekt RED" matches, "CD Projekt" or "cd projekt red studio" do not, and "Ubisoft" is not "Ubisoft Montreal". Pass ids or names, not both in one call. igdb-kit looks the names up in `companies` before sending the query (one request, cached for a day) and filters on their ids: IGDB answers a filter on `involved_companies.company.name` in 10 to 25 seconds, and the same filter on ids in well under one. A name that matches no company throws a `NotFoundError` whose `suggestions` lists the companies that contain it, such as "Ubisoft Entertainment" and "Ubisoft Montreal" for "Ubisoft". `toApicalypse()` shows the name form, which IGDB also accepts. These filters rely on how IGDB filters arrays of relations: every condition on `involved_companies` (or `release_dates`) in a `where` must hold for the same entry. `developedBy(50)` does not match The Witcher 3, which WB Games only published, and `releasedIn` needs one release date with that platform, region and date together. `supportsLanguage` takes `Language` ids or a locale, whose IGDB languages it uses (`"en-GB"`: English (UK) or English), and optionally one kind of support, `"audio"`, `"subtitles"` or `"interface"`, matched on the same `language_supports` row: two of them in one `where` match nothing. `releasedIn` takes the options of the release calendar below: `platforms` and `regions` (one id or several), `includeWorldwide`, `statuses`, `from` and `to`. Worldwide releases count for every region (pass `includeWorldwide: false` to change that), release dates marked Cancelled or Offline are left out unless `statuses` lists them, and release dates without a status, more than half of them, count (`null` in `statuses`). The flip side: `and(g.developedBy(908), g.publishedBy(50))` asks for one company entry that is both, and matches nothing; run two queries instead. `g.platforms.any()` lists every announced platform, cancelled ones included, where `releasedIn({ platforms })` looks at actual release dates. For franchises and series, `g.franchises.any(id)` and `g.collections.any(id)` are enough: the main `franchise` is always in `franchises`, and `collections` matches `collection_memberships` (spin-offs included).
 
@@ -559,7 +567,7 @@ All errors extend `IGDBError` and carry `status`, `endpoint`, `details` (IGDB's 
 | `TierError` | Data outside your API access tier (the `content_safety_*` endpoints) |
 | `AuthError` | Bad credentials, or a token still refused after one renewal |
 | `RateLimitError` | Still 429 when the retry budget ran out |
-| `NotFoundError` | `findByIdOrThrow()` or `firstOrThrow()` found nothing, or a company name in `developedBy()` / `publishedBy()` matches no company (`suggestions` lists close names) |
+| `NotFoundError` | `findByIdOrThrow()` or `firstOrThrow()` found nothing, or a name in `named()`, `developedBy()` or `publishedBy()` matches nothing (`suggestions` lists close names) |
 | `NetworkError` | 5xx or network failure that persisted |
 | `IGDBError` | A response that is not JSON, such as a `proxyUrl` answering with an HTML page |
 

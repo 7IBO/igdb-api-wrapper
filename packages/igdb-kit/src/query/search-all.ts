@@ -1,16 +1,9 @@
 import { QueryError } from "../core/errors";
-import {
-  type Character,
-  type Collection,
-  type Game,
-  GameType,
-  type Platform,
-  type Theme,
-} from "../generated/schema";
+import type { Character, Collection, Game, Platform, Theme } from "../generated/schema";
 import { type DeprecatedExecuteOptions, MAX_LIMIT, type Query } from "./query";
 import type { Task } from "./task";
 import type { FieldPath, Prettify, SelectResult } from "./types";
-import { literal } from "./where";
+import { literal, MAIN_GAME_TYPES } from "./where";
 
 /**
  * Kinds of entity the `search` endpoint indexes. It also has rows for people, an entity the API no
@@ -28,21 +21,7 @@ interface KindEntities {
   theme: Theme;
 }
 
-/**
- * The game types of full games: main games, their remakes, remasters, ports and expanded
- * re-releases, and expansions. `searchAll()` keeps these by default, and `where` takes them as
- * `g.game_type.in(...MAIN_GAME_TYPES)`. Mods, forks, DLCs, bundles, episodes, seasons, packs and
- * updates outnumber main games in most searches (153 mods out of 381 game hits for "zelda").
- */
-export const MAIN_GAME_TYPES: readonly number[] = [
-  GameType.MainGame,
-  GameType.Expansion,
-  GameType.StandaloneExpansion,
-  GameType.Remake,
-  GameType.Remaster,
-  GameType.ExpandedGame,
-  GameType.Port,
-];
+export { MAIN_GAME_TYPES };
 
 /** @deprecated Renamed {@link MAIN_GAME_TYPES}. */
 export const SEARCH_GAME_TYPES: readonly number[] = MAIN_GAME_TYPES;

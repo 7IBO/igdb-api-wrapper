@@ -43,7 +43,7 @@ export class QueryError extends IGDBError {
  */
 export class NotFoundError extends IGDBError {
   override name = "NotFoundError";
-  /** For a company name that matches no company: the companies that contain it, most games first. */
+  /** For a name that matches nothing: the rows that contain it, those with the most games first. */
   readonly suggestions: readonly string[];
 
   constructor(

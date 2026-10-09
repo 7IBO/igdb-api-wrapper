@@ -760,6 +760,43 @@ describe.skipIf(!clientId || !clientSecret)("real IGDB API", () => {
     }
   });
 
+  test("named(), mainGames(), playableTogether() and eq() ignoring case on the real API", async () => {
+    const counts = await igdb.batch({
+      named: igdb.games.where((g) => g.platforms.named("PS5", "nintendo switch")).count(),
+      ids: igdb.games.where((g) => g.platforms.any(Platform.PlayStation5, Platform.NintendoSwitch)).count(),
+      rpgNamed: igdb.games.where((g) => g.genres.named("RPG")).count(),
+      rpg: igdb.games.where((g) => g.genres.any(12)).count(),
+      witcherNamed: igdb.games.where((g) => g.franchises.named("The Witcher")).count(),
+      witcher: igdb.games.where((g) => g.franchises.any(452)).count(),
+      main: igdb.games.where((g) => g.mainGames()).count(),
+      dated: igdb.games.where((g) => g.mainGames({ includeUndated: false })).count(),
+      together: igdb.games
+        .where((g) => g.playableTogether({ platform: Platform.NintendoSwitch, players: 4, mode: "local" }))
+        .count(),
+      rows: igdb.multiplayer_modes
+        .where("(platform = 130 | platform = null) & (offlinemax >= 4 | offlinecoopmax >= 4)")
+        .count(),
+    });
+    expect(counts.named).toBe(counts.ids);
+    expect(counts.rpgNamed).toBe(counts.rpg);
+    expect(counts.witcherNamed).toBe(counts.witcher);
+    expect(counts.main).toBeGreaterThan(280_000);
+    expect(counts.dated).toBeLessThan(counts.main * 0.85);
+    // Every condition holds on one row, so there are never more games than matching rows.
+    expect(counts.together).toBeGreaterThan(100);
+    expect(counts.together).toBeLessThanOrEqual(counts.rows);
+    const witcher3 = await igdb.games
+      .select("name")
+      .where((g) => g.name.eq("the witcher 3: wild hunt", { caseSensitive: false }))
+      .execute();
+    expect(witcher3.map((g) => g.id)).toContain(1942);
+    const missing = await igdb.games
+      .where((g) => g.platforms.named("PlayStation 9"))
+      .count()
+      .catch((e: unknown) => e);
+    expect(missing).toBeInstanceOf(NotFoundError);
+  });
+
   test("grouping helpers read real games and platforms", async () => {
     const { games, nintendoSwitch, websiteTypes } = await igdb.batch({
       games: igdb.games
