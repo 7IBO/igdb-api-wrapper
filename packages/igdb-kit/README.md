@@ -395,6 +395,29 @@ ageRating(game, [AgeRatingOrganization.PEGI, AgeRatingOrganization.ESRB]); // { 
 
 Data is often missing, and helpers keep "unknown" apart from "no": 79% of games have no age rating, 39% of main games no language data, 94% no multiplayer data. A missing value is `null`, never `undefined`, so results survive `JSON.stringify` (and Next.js props), and references are ids: statuses are `ReleaseDateStatus` ids, store link formats `GameReleaseFormat` ids.
 
+### Translated labels: igdb-kit/i18n
+
+IGDB names its genres, themes, game modes, statuses and other reference rows in English only. `igdb-kit/i18n` has them in French, German, Spanish, Brazilian Portuguese, Polish, Russian, Japanese and Simplified Chinese, and in English with IGDB's slips fixed (`Operating_system`, `Postitive Reviews`, lowercase regions). Each language is an entry point of its own, so an app ships only the languages it imports.
+
+```ts
+import { createLabels } from "igdb-kit/i18n";
+import { fr } from "igdb-kit/i18n/fr";
+import { ja } from "igdb-kit/i18n/ja";
+import { Genre, ReleaseDateStatus } from "igdb-kit";
+
+const { label, description, entries } = createLabels([fr, ja]);
+label("genres", Genre.RolePlayingRPG, "fr-FR");      // "Jeu de rôle (RPG)"
+game.genres?.map((genre) => label("genres", genre, locale)); // ids or rows
+rating.row.rating_content_descriptions?.map((d) => label("age_rating_content_descriptions_v2", d, "ja"));
+description("release_date_statuses", ReleaseDateStatus.EarlyAccess, "fr"); // for a tooltip
+entries("themes", "fr");                              // [{ id: 1, label: "Action" }, ...]: a filter's options
+```
+
+- **Tables:** 27 tables by endpoint name (`genres`, `themes`, `game_modes`, `player_perspectives`, `game_types`, `game_statuses`, `release_date_statuses`, `release_date_regions`, `website_types`, `popularity_types`, `company_sizes`, `image_types`, `artwork_types`…) and the 97 content descriptors of the ESRB, PEGI, CERO, GRAC and ClassInd, with descriptions for release statuses and collection types. Platforms, companies and games keep their names: for a game's title in the user's language, see `localizedName()`.
+- **Locales:** a locale reads the dictionaries of its language and script, the one of its country first (`fr-CA` reads `fr`, `pt-PT` reads `pt-BR`, `zh-TW` does not read `zh-CN`), then English.
+- **New rows:** a row passed as an object (`{ id, name }`) keeps its own English label when its id was added to IGDB after this version; an id alone gives `null`.
+- **Your own texts:** a `LabelDictionary` is a plain object. Pass one for another language, or before a built-in one to change some labels: an id it leaves out comes from the next dictionary.
+
 ### Batching
 
 Nothing to do: queries started within the same couple of milliseconds are sent together.

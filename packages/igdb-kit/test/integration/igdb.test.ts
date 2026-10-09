@@ -44,6 +44,7 @@ import {
   supportsLanguage,
   timeToBeat,
 } from "../../src/game";
+import { en, type LabelTable } from "../../src/i18n";
 import { igdbProxy } from "../../src/proxy";
 
 const clientId = process.env.TWITCH_CLIENT_ID;
@@ -746,6 +747,19 @@ describe.skipIf(!clientId || !clientSecret)("real IGDB API", () => {
       expect(localizedName(game, locale)?.source).toBe("localization");
       expect(localizedCover(game, locale)?.source).toBe("localization");
     }
+  });
+
+  test("igdb-kit/i18n has a label for every row of the tables it translates", async () => {
+    const tables = Object.keys(en.labels) as LabelTable[];
+    const rows = await Promise.all(
+      tables.map((table) => (igdb[table] as unknown as typeof igdb.genres).select("id").limit(500)),
+    );
+    tables.forEach((table, index) => {
+      const known = Object.keys(en.labels[table] ?? {}).map(Number);
+      expect(
+        `${table}: ${(rows[index] ?? []).map((row) => row.id).filter((id) => !known.includes(id))}`,
+      ).toBe(`${table}: `);
+    });
   });
 
   test("eventTime() knows the time zone of every recent event", async () => {

@@ -1,0 +1,5 @@
+---
+"igdb-kit": minor
+---
+
+`igdb-kit/i18n`: IGDB's reference labels in the user's language. `createLabels([fr, ja])` returns `label(table, id or row, locale)`, `description()` and `entries()` for 27 tables (genres, themes, game modes, player perspectives, game types and statuses, release statuses and regions, website and popularity types, company sizes and types, image and artwork types, collection types…) and the 97 age rating content descriptors. English is built in, with IGDB's slips fixed (`Operating_system`, `Postitive Reviews`, lowercase regions); French, German, Spanish, Brazilian Portuguese, Polish, Russian, Japanese and Simplified Chinese are entry points of their own (`igdb-kit/i18n/fr`, `igdb-kit/i18n/pt-BR`, `igdb-kit/i18n/zh-CN`…), so an app ships only the languages it imports. A locale reads the dictionaries of its language and script, its country's first, then English. A row added to IGDB after this version keeps its own English label, and a `LabelDictionary` of your own adds a language or changes some labels.
