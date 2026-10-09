@@ -32,7 +32,7 @@ describe("Apicalypse compilation", () => {
     expect(w((g) => g.platforms.any(48, 49, 6))).toBe("where platforms = (48,49,6);");
     expect(w((g) => g.platforms.all(6, 48))).toBe("where platforms = [6,48];");
     expect(w((g) => g.themes.none(42))).toBe("where themes != (42);");
-    expect(w((g) => g.themes.notAll(1, 2))).toBe("where themes = ![1,2];");
+    expect(() => w((g) => g.themes.notAll(1, 2))).toThrow(QueryError);
     expect(w((g) => g.tags.exactly(1, 2))).toBe("where tags = {1,2};");
     expect(w((g) => g.id.in(1, 2))).toBe("where id = (1,2);");
     expect(w((g) => g.release_dates.platform.eq(6))).toBe("where release_dates.platform = 6;");
@@ -141,7 +141,8 @@ describe("client-side validation", () => {
   test("sort only on scalar fields (IGDB silently ignores bad sorts)", () => {
     // @ts-expect-error relation
     expect(() => igdb.games.sort("cover")).toThrow(/relation/);
-    expect(igdb.games.sort("cover.width").toApicalypse()).toBe("sort cover.width asc;");
+    // IGDB silently ignores a sort on a relation's field.
+    expect(() => igdb.games.sort("cover.width" as "name")).toThrow(/IGDB ignores sort on "cover.width"/);
   });
 
   test("limit is bounded to 0..500", () => {

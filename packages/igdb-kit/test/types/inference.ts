@@ -103,6 +103,7 @@ igdb.games.select("name.*");
 igdb.games.sort("cover");
 // @ts-expect-error sort on an unknown field
 igdb.games.sort("popularity");
+// @ts-expect-error IGDB ignores sort on a relation's field
 igdb.games.sort("cover.width");
 
 // search exists only on searchable endpoints.
