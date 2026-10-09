@@ -224,10 +224,14 @@ export interface ReleasedInOptions {
  * instead. `or` works as expected.
  */
 export interface GameFilters {
-  /** Games one of these companies developed (`involved_companies` with `developer`). */
-  developedBy(...companies: number[]): Condition;
-  /** Games one of these companies published, regional publishers included. */
-  publishedBy(...companies: number[]): Condition;
+  /**
+   * Games one of these companies developed (`involved_companies` with `developer`). Pass company ids,
+   * or company names matched in full, ignoring case: `developedBy("CD Projekt RED")`. A name matches
+   * one company only: "Ubisoft" is not "Ubisoft Montreal". Ids and names can't be mixed in one call.
+   */
+  developedBy(...companies: number[] | string[]): Condition;
+  /** Games one of these companies published, regional publishers included. Takes ids or names. */
+  publishedBy(...companies: number[] | string[]): Condition;
   /**
    * Games with a release date matching every option at once: `releasedIn({ platform:
    * Platform.PlayStation5, region: ReleaseDateRegion.Europe, from: new Date("2026-01-01") })`.
@@ -251,11 +255,21 @@ const asArray = (value: number | readonly number[]): readonly number[] =>
   typeof value === "number" ? [value] : value;
 
 function companyRole(role: "developer" | "publisher") {
-  return (...companies: number[]) =>
-    new Condition(
-      `involved_companies.company = ${ids(companies, "company")} & involved_companies.${role} = true`,
-      true,
-    );
+  return (...companies: number[] | string[]) => {
+    if (companies.length === 0) throw new QueryError(`${role}: pass at least one company`);
+    let company: string;
+    if (companies.every((c) => typeof c === "number")) {
+      company = `involved_companies.company = ${ids(companies, "company")}`;
+    } else if (companies.every((c) => typeof c === "string")) {
+      // `~` matches the whole name, ignoring case. An or of them still applies to one company entry,
+      // where `company = 908 | company.name ~ "..."` does not: IGDB then matches the role on any entry.
+      const names = companies.map((name) => `involved_companies.company.name ~ ${literal(name)}`);
+      company = names.length === 1 ? names.join("") : `(${names.join(" | ")})`;
+    } else {
+      throw new QueryError(`${role}: pass company ids or company names, not both`);
+    }
+    return new Condition(`${company} & involved_companies.${role} = true`, true);
+  };
 }
 
 const gameFilters: Record<keyof GameFilters, (...args: never[]) => Condition> = {
