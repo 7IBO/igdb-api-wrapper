@@ -14,6 +14,7 @@ import {
   endpoints,
   GameType,
   gameLink,
+  MAIN_GAME_TYPES,
   NotFoundError,
   or,
   Platform,
@@ -23,7 +24,6 @@ import {
   Region,
   ReleaseDateRegion,
   ReleaseDateStatus,
-  SEARCH_GAME_TYPES,
   Theme,
   TierError,
   toDate,
@@ -233,11 +233,11 @@ describe.skipIf(!clientId || !clientSecret)("real IGDB API", () => {
     expect(top.map((t) => t.value)).toEqual(values.sort((a, b) => b - a).slice(0, 20));
   });
 
-  test("popularitySnapshot() without top reads every row of a type", async () => {
+  test("popularitySnapshot() without limit reads every row of a type", async () => {
     const type = PopularityType.SteamMostWishlistedUpcoming;
     const total = await igdb.popularity_primitives.where((p) => p.popularity_type.eq(type)).count();
     const pages = [];
-    for await (const rows of igdb.popularitySnapshot({ types: [type] })) pages.push(rows);
+    for await (const rows of igdb.popularitySnapshot({ types: type })) pages.push(rows);
     expect(pages).toHaveLength(1);
     expect(new Set(pages[0]?.map((r) => r.game_id)).size).toBe(total);
     expect(pages[0]?.[0]?.rank).toBe(1);
@@ -267,7 +267,7 @@ describe.skipIf(!clientId || !clientSecret)("real IGDB API", () => {
   test("popularitySnapshot() returns ranked rows with their calculation time; IGDB keeps no history", async () => {
     const types = [PopularityType.IGDBPlaying, PopularityType.Steam24hrPeakPlayers];
     const pages = [];
-    for await (const rows of igdb.popularitySnapshot({ types, top: 10 })) pages.push(rows);
+    for await (const rows of igdb.popularitySnapshot({ types, limit: 10 })) pages.push(rows);
     expect(pages.map((rows) => rows[0]?.popularity_type)).toEqual(types);
     expect(pages.map((rows) => rows[0]?.external_popularity_source)).toEqual([121, 1]);
     for (const rows of pages) {
@@ -600,7 +600,7 @@ describe.skipIf(!clientId || !clientSecret)("real IGDB API", () => {
     for (const hit of witcher) {
       expect((hit as unknown as Record<string, { id: number }>)[hit.kind]?.id).toBe(hit.id);
       if (hit.kind !== "game") continue;
-      expect(SEARCH_GAME_TYPES).toContain(hit.game.game_type as number);
+      expect(MAIN_GAME_TYPES).toContain(hit.game.game_type as number);
       expect(hit.game.version_parent).toBeUndefined();
     }
     expect(witcher.some((h) => h.kind === "collection")).toBe(true);
@@ -714,11 +714,11 @@ describe.skipIf(!clientId || !clientSecret)("real IGDB API", () => {
     }
   });
 
-  test("byGame() accepts the game link of every endpoint that has one", async () => {
+  test("findByGames() accepts the game link of every endpoint that has one", async () => {
     const linked = (Object.keys(endpoints) as EndpointName[]).filter((e) => gameLink(e) !== undefined);
     expect(linked.length).toBe(24);
     const maps = await Promise.all(
-      linked.map((e) => (igdb[e] as unknown as Query<"characters">).byGame([1942])),
+      linked.map((e) => (igdb[e] as unknown as Query<"characters">).findByGames([1942])),
     );
     const rows = Object.fromEntries(linked.map((e, i) => [e, maps[i]?.get(1942)?.length]));
     expect(rows.release_dates).toBeGreaterThan(0);
@@ -728,18 +728,18 @@ describe.skipIf(!clientId || !clientSecret)("real IGDB API", () => {
     expect(rows.game_versions).toBe(0);
   });
 
-  test("byGame() groups rows, reads past 500 rows and lists shared rows under each game", async () => {
-    const ttb = await igdb.game_time_to_beats.select("normally").byGame([1942, 999_999_999]);
+  test("findByGames() groups rows, reads past 500 rows and lists shared rows under each game", async () => {
+    const ttb = await igdb.game_time_to_beats.select("normally").findByGames([1942, 999_999_999]);
     expect(ttb.get(1942)?.[0]?.normally).toBeGreaterThan(200_000); // seconds, about 70 h
     expect(ttb.get(999_999_999)).toEqual([]);
     // Games 109 and 9630 have the most characters in IGDB (362 and 273): more than one page.
-    const chars = await igdb.characters.select("name").byGame([109, 9630, 1942]);
+    const chars = await igdb.characters.select("name").findByGames([109, 9630, 1942]);
     expect(chars.get(109)?.length).toBeGreaterThan(300);
     expect(chars.get(9630)?.length).toBeGreaterThan(200);
     expect(Object.keys(chars.get(1942)?.[0] ?? {}).sort()).toEqual(["id", "name"]);
     // Characters of the Mario franchise: about 950 games, some characters in several of them.
     const mario = await igdb.franchises.select("games").findByIdOrThrow(845);
-    const byGame = await igdb.characters.select("name").byGame(mario.games ?? []);
+    const byGame = await igdb.characters.select("name").findByGames(mario.games ?? []);
     expect(byGame.size).toBe(mario.games?.length ?? -1);
     const counts = new Map<number, number>();
     for (const rows of byGame.values()) for (const c of rows) counts.set(c.id, (counts.get(c.id) ?? 0) + 1);

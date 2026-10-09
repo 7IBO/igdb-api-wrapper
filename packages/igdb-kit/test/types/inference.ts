@@ -10,6 +10,7 @@ import {
   type GameLinkedEndpoint,
   GameType,
   type Language,
+  MAIN_GAME_TYPES,
   Platform,
   PopularityType,
   ReleaseDateRegion,
@@ -246,6 +247,10 @@ expectType<Equal<SearchHit<"platform">["platform"]["id"], number>>();
 igdb.searchAll("mario", { select: { character: ["nope"] } });
 // @ts-expect-error companies are not in the search index
 igdb.searchAll("ubisoft", { kinds: ["company"] });
+// Game types: one id, several, or all; editions are kept with `includeEditions` (`editions` is deprecated).
+igdb.searchAll("zelda", { gameTypes: GameType.Mod, includeEditions: true });
+igdb.searchAll("zelda", { gameTypes: MAIN_GAME_TYPES, editions: true });
+igdb.games.where((g) => g.game_type.in(...MAIN_GAME_TYPES));
 
 // New reference constants.
 expectType<Equal<typeof ReleaseDateStatus.Cancelled, 5>>();
@@ -302,8 +307,9 @@ expectType<
 // @ts-expect-error only on games
 igdb.platforms.weightedPopular({ [PopularityType.IGDBPlaying]: 1 });
 
-// popularitySnapshot() yields rows ready to store.
-for await (const rows of igdb.popularitySnapshot({ top: 100 })) {
+// popularitySnapshot() yields rows ready to store; `top` is the deprecated name of `limit`.
+igdb.popularitySnapshot({ types: PopularityType.IGDBVisits, top: 100 });
+for await (const rows of igdb.popularitySnapshot({ types: [PopularityType.IGDBVisits], limit: 100 })) {
   expectType<
     Equal<
       (typeof rows)[number],
@@ -351,22 +357,27 @@ expectType<Equal<typeof bySteamId, Map<string, { id: number; name?: string }>>>(
 // @ts-expect-error only on games
 igdb.platforms.findByExternalIds(ExternalGameSource.Steam, ["1"]);
 
-// byGame() groups rows of endpoints that point to games, by game id.
-const ttbByGame = await igdb.game_time_to_beats.select("normally").byGame([1942]);
+// findByGames() groups rows of endpoints that point to games, by game id.
+const ttbByGame = await igdb.game_time_to_beats.select("normally").findByGames([1942]);
 expectType<Equal<typeof ttbByGame, Map<number, { id: number; normally?: number }[]>>>();
-const charactersByGame = await igdb.characters.select("name", "mug_shot.image_id").byGame([1942]);
+const charactersByGame = await igdb.characters.select("name", "mug_shot.image_id").findByGames([1942]);
 expectType<
   Equal<
     typeof charactersByGame,
     Map<number, { id: number; name?: string; mug_shot?: { id: number; image_id?: string } }[]>
   >
 >();
-igdb.release_dates.byGame([1]);
-igdb.collections.byGame([1]);
+igdb.release_dates.findByGames([1]);
+igdb.collections.findByGames([1]);
+// @ts-expect-error genres do not point to games
+igdb.genres.findByGames([1]);
+// @ts-expect-error the search endpoint needs a search term
+igdb.search.findByGames([1]);
+// Deprecated alias, same types.
+const ttbDeprecated = await igdb.game_time_to_beats.select("normally").byGame([1942]);
+expectType<Equal<typeof ttbDeprecated, typeof ttbByGame>>();
 // @ts-expect-error genres do not point to games
 igdb.genres.byGame([1]);
-// @ts-expect-error the search endpoint needs a search term
-igdb.search.byGame([1]);
 expectType<
   Equal<
     Extract<GameLinkedEndpoint, "events" | "popularity_primitives" | "games">,
@@ -504,6 +515,7 @@ if (release) {
   >();
 }
 releaseDate(page, { locale: "fr-FR", statuses: [ReleaseDateStatus.FullRelease, null] });
+releaseDate(page, { statuses: ReleaseDateStatus.FullRelease });
 // @ts-expect-error not a status
 releaseDate(page, { statuses: ["released"] });
 expectType<Equal<ReturnType<typeof storeOf>, Store | null>>();

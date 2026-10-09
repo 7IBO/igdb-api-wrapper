@@ -27,11 +27,12 @@ interface KindEntities {
 }
 
 /**
- * Game types searchAll() keeps by default: main games, their remakes, remasters, ports and expanded
- * re-releases, and expansions. Mods, forks, DLCs, bundles, episodes, seasons, packs and updates
- * outnumber main games in most searches (153 mods out of 381 game hits for "zelda").
+ * The game types of full games: main games, their remakes, remasters, ports and expanded
+ * re-releases, and expansions. `searchAll()` keeps these by default, and `where` takes them as
+ * `g.game_type.in(...MAIN_GAME_TYPES)`. Mods, forks, DLCs, bundles, episodes, seasons, packs and
+ * updates outnumber main games in most searches (153 mods out of 381 game hits for "zelda").
  */
-export const SEARCH_GAME_TYPES: readonly number[] = [
+export const MAIN_GAME_TYPES: readonly number[] = [
   GameType.MainGame,
   GameType.Expansion,
   GameType.StandaloneExpansion,
@@ -40,6 +41,9 @@ export const SEARCH_GAME_TYPES: readonly number[] = [
   GameType.ExpandedGame,
   GameType.Port,
 ];
+
+/** @deprecated Renamed {@link MAIN_GAME_TYPES}. */
+export const SEARCH_GAME_TYPES: readonly number[] = MAIN_GAME_TYPES;
 
 /** Selected paths per kind; a kind without a selection gets its `name`. */
 export type SearchSelection = { [K in SearchKind]: string };
@@ -73,11 +77,13 @@ export interface SearchAllOptions extends ExecuteOptions {
   /** Number of hits, 1 to 500. Default 10. */
   limit?: number | undefined;
   /**
-   * Game types to keep, or `"all"`. Default {@link SEARCH_GAME_TYPES}, which leaves out mods, DLCs and
-   * the like. Fan games are main games in IGDB and cannot be told apart.
+   * Game types to keep, one id or several, or `"all"`. Default {@link MAIN_GAME_TYPES}, which leaves
+   * out mods, DLCs and the like. Fan games are main games in IGDB and cannot be told apart.
    */
-  gameTypes?: readonly number[] | "all" | undefined;
-  /** Keep editions of a game (`version_parent` set, such as a "Complete Edition"). Default false. */
+  gameTypes?: number | readonly number[] | "all" | undefined;
+  /** Also keep editions of a game (`version_parent` set, such as a "Complete Edition"). Default false. */
+  includeEditions?: boolean | undefined;
+  /** @deprecated Use `includeEditions`. */
   editions?: boolean | undefined;
   /**
    * `relevance` (default) reads every match, up to `maxRows`, and ranks it: exact name, then names
@@ -136,8 +142,9 @@ export async function searchAll(
     kinds = SEARCH_KINDS,
     select = {},
     limit = 10,
-    gameTypes = SEARCH_GAME_TYPES,
-    editions = false,
+    gameTypes = MAIN_GAME_TYPES,
+    editions,
+    includeEditions = editions ?? false,
     order = "relevance",
     maxRows = 2000,
     ...execute
@@ -148,8 +155,9 @@ export async function searchAll(
   if (kinds.length === 0 || kinds.some((kind) => !SEARCH_KINDS.includes(kind))) {
     throw new QueryError(`kinds must be some of ${SEARCH_KINDS.join(", ")}, got ${kinds.join(", ")}`);
   }
-  if (gameTypes !== "all" && (gameTypes.length === 0 || !gameTypes.every(Number.isSafeInteger))) {
-    throw new QueryError(`gameTypes must be "all" or a non-empty list of game type ids`);
+  const types = typeof gameTypes === "number" ? [gameTypes] : gameTypes;
+  if (types !== "all" && (types.length === 0 || !types.every(Number.isSafeInteger))) {
+    throw new QueryError(`gameTypes must be "all", a game type id or a non-empty list of them`);
   }
   if (!Number.isInteger(maxRows) || maxRows < 1) throw new QueryError(`maxRows must be a positive integer`);
   // IGDB answers an empty term with no rows.
@@ -169,8 +177,8 @@ export async function searchAll(
   const filters = kinds.map((kind) => {
     if (kind !== "game") return `${kind} != null`;
     const parts = ["game != null"];
-    if (gameTypes !== "all") parts.push(`game.game_type = (${gameTypes.join(",")})`);
-    if (!editions) parts.push("game.version_parent = null");
+    if (types !== "all") parts.push(`game.game_type = (${types.join(",")})`);
+    if (!includeEditions) parts.push("game.version_parent = null");
     return parts.length > 1 ? `(${parts.join(" & ")})` : parts[0];
   });
   const query = endpoint

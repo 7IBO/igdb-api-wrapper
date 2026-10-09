@@ -100,8 +100,8 @@ export type IGDBClient = { readonly [K in EndpointName]: Query<K> } & {
   webhooks: Webhooks;
   /**
    * Today's PopScore rows, one ranked array per type, to store: IGDB keeps only the latest value of
-   * each game and type, so a history is built from your own snapshots. `top` reads only the most
-   * popular rows of each type (`ceil(top / 500)` requests per type); without it every row is read
+   * each game and type, so a history is built from your own snapshots. `limit` reads only the most
+   * popular rows of each type (`ceil(limit / 500)` requests per type); without it every row is read
    * (about 700,000 rows: some 145 multiqueries, 40 s at the default rate limit). Runs at `background`
    * priority.
    */
@@ -112,7 +112,7 @@ export type IGDBClient = { readonly [K in EndpointName]: Query<K> } & {
   raw<T = unknown>(path: string, body: string, options?: ExecuteOptions): Promise<T>;
   /**
    * Defines games with data from other endpoints attached, each under its key: time to beat,
-   * characters, release dates, websites… (any endpoint that points to games, see `byGame()`).
+   * characters, release dates, websites… (any endpoint that points to games, see `findByGames()`).
    *
    * ```ts
    * const gamePage = igdb.defineView("games", {
@@ -216,7 +216,9 @@ export function createIGDB(options: IGDBClientOptions): IGDBClient {
           fields: ["game_id", "popularity_type", "value", "calculated_at", "external_popularity_source"],
           sort: { field: "value", direction: "desc" },
         }),
-        snapshotOptions.types ?? Object.values(PopularityType),
+        typeof snapshotOptions.types === "number"
+          ? [snapshotOptions.types]
+          : (snapshotOptions.types ?? Object.values(PopularityType)),
         snapshotOptions,
       ),
     raw: async (path: string, body: string, runOptions?: ExecuteOptions) =>

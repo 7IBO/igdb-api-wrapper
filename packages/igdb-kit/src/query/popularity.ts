@@ -59,9 +59,14 @@ export interface PopularitySnapshotRow {
 }
 
 export interface PopularitySnapshotOptions extends ExecuteOptions {
-  /** PopScore types to read. Defaults to every `PopularityType`. */
-  types?: readonly number[] | undefined;
-  /** Only the `top` most popular rows of each type, read in value order. Defaults to every row. */
+  /** PopScore types to read: `PopularityType` ids, one or several. Default: every type. */
+  types?: number | readonly number[] | undefined;
+  /**
+   * Rows per type: only the `limit` most popular rows of each type, read in value order. Default:
+   * every row.
+   */
+  limit?: number | undefined;
+  /** @deprecated Use `limit`, which is also per type. */
   top?: number | undefined;
 }
 
@@ -280,8 +285,8 @@ export async function weightedPopular<R>(
 }
 
 /**
- * @internal Reads PopScore rows to store, one array per type, ranked. With `top`, each type is read
- * in value order with offsets (`ceil(top / 500)` requests per type), all types at once. Otherwise the
+ * @internal Reads PopScore rows to store, one array per type, ranked. With `limit`, each type is read
+ * in value order with offsets (`ceil(limit / 500)` requests per type), all types at once. Otherwise the
  * types are counted together, then every row is read in id order with offsets (IGDB updates values
  * in place, so ids stay put): each type's pages are requested at once, two types at a time so that
  * the next one queues behind the current one. Three types are held at most.
@@ -292,10 +297,10 @@ export async function* popularitySnapshot(
   types: readonly number[],
   options: PopularitySnapshotOptions,
 ): AsyncGenerator<PopularitySnapshotRow[], void, undefined> {
-  const { types: _, top, ...rest } = options;
+  const { types: _, top, limit = top, ...rest } = options;
   const execute: ExecuteOptions = { ...rest, priority: rest.priority ?? "background" };
-  if (top !== undefined && (!Number.isInteger(top) || top < 1)) {
-    throw new QueryError(`top must be a positive integer, got ${top}`);
+  if (limit !== undefined && (!Number.isInteger(limit) || limit < 1)) {
+    throw new QueryError(`limit must be a positive integer, got ${limit}`);
   }
   for (const type of types) {
     if (!Number.isSafeInteger(type) || type < 0) throw new QueryError(`Invalid popularity type: ${type}`);
@@ -303,16 +308,18 @@ export async function* popularitySnapshot(
   const unique = [...new Set(types)];
   const ofType = (type: number) => primitives.where(`popularity_type = ${type}`);
   const counts =
-    top === undefined ? Promise.all(unique.map((type) => ofType(type).count().execute(execute))) : undefined;
+    limit === undefined
+      ? Promise.all(unique.map((type) => ofType(type).count().execute(execute)))
+      : undefined;
   counts?.catch(() => {}); // awaited by the reads below
   const read = async (type: number, index: number): Promise<PopularityRow[]> => {
-    const rows = top ?? ((await counts) as number[])[index] ?? 0;
+    const rows = limit ?? ((await counts) as number[])[index] ?? 0;
     const query =
-      top === undefined ? ofType(type).with({ sort: { field: "id", direction: "asc" } }) : ofType(type);
+      limit === undefined ? ofType(type).with({ sort: { field: "id", direction: "asc" } }) : ofType(type);
     const pages = await Promise.all(
       Array.from({ length: Math.ceil(rows / PAGE) }, (_, i) =>
         query
-          .limit(Math.min(PAGE, top === undefined ? PAGE : top - i * PAGE))
+          .limit(Math.min(PAGE, limit === undefined ? PAGE : limit - i * PAGE))
           .offset(i * PAGE)
           .execute(execute),
       ),
@@ -320,7 +327,7 @@ export async function* popularitySnapshot(
     const all = pages.flat();
     // Rows added since the count come after the last id read.
     const last = all[all.length - 1];
-    if (top === undefined && last !== undefined && pages[pages.length - 1]?.length === PAGE) {
+    if (limit === undefined && last !== undefined && pages[pages.length - 1]?.length === PAGE) {
       for await (const row of query.where(`id > ${last.id}`).iterate({ ...execute, pageSize: PAGE }))
         all.push(row);
     }
@@ -332,7 +339,7 @@ export async function* popularitySnapshot(
     return rows;
   };
   // The top rows of each type are few: they are all requested at once.
-  const ahead = top === undefined ? 2 : unique.length;
+  const ahead = limit === undefined ? 2 : unique.length;
   const queue = unique.slice(0, ahead).map((type, index) => start(type, index));
   for (const [index, type] of unique.entries()) {
     const rows = await (queue.shift() ?? start(type, index));

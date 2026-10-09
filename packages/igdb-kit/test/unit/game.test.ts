@@ -58,6 +58,7 @@ describe("releaseDate()", () => {
       status: ReleaseDateStatus.EarlyAccess,
       platform: Platform.PCMicrosoftWindows,
     });
+    expect(releaseDate(fixtures.hades, { statuses: ReleaseDateStatus.EarlyAccess })).toEqual(early);
     // Deprecated: status names.
     expect(releaseDate(fixtures.hades, { statuses: ["early_access"] })).toEqual(early);
   });

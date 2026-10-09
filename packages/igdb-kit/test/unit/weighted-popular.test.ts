@@ -332,23 +332,28 @@ describe("popularitySnapshot()", () => {
     expect(mock.calls.some((c) => c.body.includes(`id > ${100_499}`))).toBe(true);
   });
 
-  test("top reads only the most popular rows, in value order", async () => {
+  test("limit reads only the most popular rows of each type, in value order", async () => {
     const many = rowsOf(
       PopularityType.IGDBVisits,
       Array.from({ length: 1200 }, (_, i) => [i + 1, (1200 - i) / 1e6] as [number, number]),
     );
     const mock = api(many);
     const pages = [];
-    for await (const page of testClient(mock.fetch).popularitySnapshot({ types: [1], top: 700 }))
+    for await (const page of testClient(mock.fetch).popularitySnapshot({ types: 1, limit: 700 }))
       pages.push(page);
     expect(pages[0]).toHaveLength(700);
     expect(pages[0]?.[699]).toMatchObject({ game_id: 700, rank: 700, calculated_at: null });
     const bodies = mock.calls.map((c) => c.body).join("\n");
     expect(bodies).toContain("sort value desc; limit 500; offset 0;");
     expect(bodies).toContain("sort value desc; limit 200; offset 500;");
+    // The deprecated `top` reads the same rows.
+    const again = [];
+    for await (const page of testClient(api(many).fetch).popularitySnapshot({ types: [1], top: 700 }))
+      again.push(page);
+    expect(again).toEqual(pages);
   });
 
-  test("defaults to every PopularityType, skips incomplete and duplicate rows, validates top", async () => {
+  test("defaults to every PopularityType, skips incomplete and duplicate rows, validates limit", async () => {
     const mock = api([]);
     const igdb = testClient(mock.fetch);
     for await (const _ of igdb.popularitySnapshot()) throw new Error("no rows expected");
@@ -364,6 +369,7 @@ describe("popularitySnapshot()", () => {
         { id: 4, game_id: 2, popularity_type: 1 },
       ]).map((r) => [r.game_id, r.value]),
     ).toEqual([[1, 0.5]]);
-    await expect(igdb.popularitySnapshot({ top: 0 }).next()).rejects.toThrow(QueryError);
+    await expect(igdb.popularitySnapshot({ limit: 0 }).next()).rejects.toThrow(QueryError);
+    await expect(igdb.popularitySnapshot({ top: 1.5 }).next()).rejects.toThrow(QueryError);
   });
 });
