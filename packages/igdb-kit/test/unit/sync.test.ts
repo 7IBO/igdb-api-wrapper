@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { imageUrl, QueryError } from "../../src";
+import { artworkType, ImageType, imageUrl, QueryError } from "../../src";
 import { apicalypseError, type Call, mockFetch, testClient } from "./helpers";
 
 /** A fake endpoint holding `ids`, answering the queries sync() sends. */
@@ -255,5 +255,34 @@ describe("imageUrl", () => {
       "https://images.igdb.com/igdb/image/upload/t_1080p/sc6abc.jpg",
     );
     expect(() => imageUrl("https://example.com/a/b.jpg")).toThrow(/Not an IGDB image/);
+  });
+});
+
+describe("artworkType", () => {
+  // As a query returns them with both fields selected: a missing one comes back undefined.
+  const artwork = (
+    image_type: number | { id: number } | undefined,
+    artwork_type: number | { id: number } | undefined,
+  ) => ({
+    image_type,
+    artwork_type,
+  });
+
+  test("reads image_type, else converts artwork_type to its numbering", () => {
+    expect(artworkType(artwork(ImageType.KeyArtWithLogo, 3))).toBe(3);
+    expect(artworkType(artwork({ id: ImageType.Icon }, 12))).toBe(ImageType.Icon);
+    // 8 is Infographic in artwork_types and Main cover in image_types; 9 and 10 are swapped.
+    expect(artworkType(artwork(undefined, 8))).toBe(ImageType.Infographic);
+    expect(artworkType(artwork(undefined, 9))).toBe(ImageType.AlternativeCover);
+    expect(artworkType(artwork(undefined, { id: 10 }))).toBe(ImageType.HistoricalCover);
+    expect(artworkType(artwork(undefined, 15))).toBe(ImageType.HistoricalArtwork);
+    expect(artworkType(artwork(undefined, 4))).toBe(ImageType.ConceptArt);
+    expect(artworkType(artwork(undefined, undefined))).toBeUndefined();
+    expect(artworkType(artwork(undefined, 99))).toBeUndefined();
+  });
+
+  test("needs both fields selected", () => {
+    // @ts-expect-error artwork_type not selected
+    expect(artworkType({ image_type: 1 })).toBe(1);
   });
 });

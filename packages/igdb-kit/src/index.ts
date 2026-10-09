@@ -20,7 +20,13 @@ export {
 } from "./core/limiter";
 export type { TransportHooks } from "./core/transport";
 export * from "./generated/schema";
-export { type ImageSize, type ImageUrlOptions, imageUrl } from "./images";
+export {
+  type ArtworkTypeFields,
+  artworkType,
+  type ImageSize,
+  type ImageUrlOptions,
+  imageUrl,
+} from "./images";
 export { type GameLinkedEndpoint, gameLink } from "./links/by-game";
 export { type Expanded, type IdKeys, REFERENCE_ENDPOINTS, REFERENCE_TTL_MS } from "./links/expand";
 export { defineSelection, type ResultOf, type Selection } from "./links/selection";

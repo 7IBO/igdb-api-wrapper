@@ -1,10 +1,11 @@
 // Runs against the real IGDB API. Skipped unless TWITCH_CLIENT_ID and TWITCH_CLIENT_SECRET are set.
-// Uses about 80 requests. The webhook test registers webhooks on example.com and removes them.
+// Uses about 85 requests. The webhook test registers webhooks on example.com and removes them.
 import { describe, expect, test } from "bun:test";
 import {
   AgeRatingCategory,
   AgeRatingOrganization,
   and,
+  artworkType,
   createIGDB,
   DateFormat,
   defineSelection,
@@ -242,6 +243,27 @@ describe.skipIf(!clientId || !clientSecret)("real IGDB API", () => {
     expect(pages).toHaveLength(1);
     expect(new Set(pages[0]?.map((r) => r.game_id)).size).toBe(total);
     expect(pages[0]?.[0]?.rank).toBe(1);
+  });
+
+  test("artworkType() converts artwork_type as IGDB does, where image_type is missing", async () => {
+    const [missing, both] = await Promise.all([
+      igdb.artworks
+        .select("image_type", "artwork_type")
+        .where((a) => a.image_type.isNull())
+        .limit(50),
+      igdb.artworks
+        .select("image_type", "artwork_type")
+        .where((a) => and(a.image_type.notNull(), a.artwork_type.notNull()))
+        .sort("id", "desc")
+        .limit(500),
+    ]);
+    // IGDB still fills artwork_type where image_type is missing.
+    expect(missing).toHaveLength(50);
+    expect(missing.every((a) => artworkType(a) !== undefined)).toBe(true);
+    // Where both are filled, the conversion gives IGDB's own image_type.
+    expect(both).toHaveLength(500);
+    for (const a of both)
+      expect(artworkType({ image_type: undefined, artwork_type: a.artwork_type })).toBe(a.image_type);
   });
 
   test("popularitySnapshot() returns ranked rows with their calculation time; IGDB keeps no history", async () => {

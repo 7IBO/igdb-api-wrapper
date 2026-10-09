@@ -1,3 +1,5 @@
+import { idOf, type Ref, type Requires } from "./game/select";
+
 /** Image sizes served by IGDB. */
 export type ImageSize =
   | "thumb" // 90x90, thumb crop
@@ -43,4 +45,48 @@ export function imageUrl(
   if (id.includes("/")) throw new TypeError(`Not an IGDB image id or URL: ${imageId}`);
   const suffix = options.retina ? "_2x" : "";
   return `https://images.igdb.com/igdb/image/upload/t_${size}${suffix}/${id}.${options.format ?? "jpg"}`;
+}
+
+/** `image_types` id of each `artwork_types` id: the two tables number some types differently. */
+const IMAGE_TYPE_OF_ARTWORK_TYPE: Record<number, number> = {
+  1: 1,
+  2: 2,
+  3: 3,
+  4: 4,
+  5: 5,
+  6: 6,
+  7: 7,
+  8: 12, // Infographic
+  9: 10, // Alternative cover
+  10: 9, // Historical cover
+  11: 11,
+  12: 13, // Icon
+  13: 14, // Historical logo
+  14: 15, // Historical icon
+  15: 16, // Historical artwork
+};
+
+/** Fields of `artworks` that {@link artworkType} reads. */
+export type ArtworkTypeFields = "image_type" | "artwork_type";
+
+interface ArtworkTypeInput {
+  image_type?: Ref | undefined;
+  artwork_type?: Ref | undefined;
+}
+
+/**
+ * The type of an artwork as an `ImageType` id: its `image_type`, else its `artwork_type` converted.
+ * IGDB replaced `artwork_type` with `image_type` but fills `image_type` on about half of the artworks
+ * and `artwork_type` on nearly all of them, and the two tables number some types differently (8 is
+ * "Infographic" in one and "Main cover" in the other). Undefined when the artwork has neither, or an
+ * `artwork_type` added to IGDB after this version: `artworkType(artwork) === ImageType.ConceptArt`.
+ */
+export function artworkType<A extends object>(
+  artwork: A & Requires<A, ArtworkTypeFields>,
+): number | undefined {
+  const input = artwork as ArtworkTypeInput;
+  const image = idOf(input.image_type);
+  if (image !== undefined) return image;
+  const legacy = idOf(input.artwork_type);
+  return legacy === undefined ? undefined : IMAGE_TYPE_OF_ARTWORK_TYPE[legacy];
 }

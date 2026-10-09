@@ -2388,5 +2388,67 @@
       "id": 16,
       "name": "Historical artwork"
     }
+  ],
+  "artwork_types": [
+    {
+      "id": 1,
+      "name": "Artwork"
+    },
+    {
+      "id": 2,
+      "name": "Key art without logo"
+    },
+    {
+      "id": 3,
+      "name": "Key art with logo"
+    },
+    {
+      "id": 4,
+      "name": "Concept art"
+    },
+    {
+      "id": 5,
+      "name": "Game logo (white)"
+    },
+    {
+      "id": 6,
+      "name": "Game logo (black)"
+    },
+    {
+      "id": 7,
+      "name": "Game logo (color)"
+    },
+    {
+      "id": 8,
+      "name": "Infographic"
+    },
+    {
+      "id": 9,
+      "name": "Alternative cover"
+    },
+    {
+      "id": 10,
+      "name": "Historical cover"
+    },
+    {
+      "id": 11,
+      "name": "Square cover"
+    },
+    {
+      "id": 12,
+      "name": "Icon"
+    },
+    {
+      "id": 13,
+      "name": "Historical logo"
+    },
+    {
+      "id": 14,
+      "name": "Historical icon"
+    },
+    {
+      "id": 15,
+      "name": "Historical artwork"
+    }
   ]
 }

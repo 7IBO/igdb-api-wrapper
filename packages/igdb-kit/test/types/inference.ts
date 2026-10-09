@@ -2,6 +2,7 @@
 import {
   type AgeRatingCategory,
   and,
+  artworkType,
   createIGDB,
   defineSelection,
   ExternalGameSource,
@@ -517,3 +518,12 @@ const ttb = await igdb.game_time_to_beats.select("hastily", "normally", "complet
 timeToBeat(ttb);
 // @ts-expect-error count is not selected
 timeToBeat(await igdb.game_time_to_beats.select("hastily", "normally", "completely").first());
+
+// artworkType() reads image_type and artwork_type, ids or expanded.
+const artworks = await igdb.artworks
+  .select("image_id", "image_type", "artwork_type.name")
+  .where((a) => a.game.eq(1942));
+expectType<Equal<ReturnType<typeof artworkType>, number | undefined>>();
+for (const artwork of artworks) artworkType(artwork);
+// @ts-expect-error artwork_type is not selected
+artworkType(await igdb.artworks.select("image_type").findByIdOrThrow(1));

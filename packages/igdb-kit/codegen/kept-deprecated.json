@@ -1,0 +1,8 @@
+{
+  "Artwork": {
+    "artwork_type": {
+      "replacement": "image_type",
+      "note": "IGDB replaced it with `image_type` but still fills it on 99.5% of artworks, where `image_type` is on about half, and numbers types differently (8 is \"Infographic\" here and \"Main cover\" there): `artworkType()` reads both."
+    }
+  }
+}
