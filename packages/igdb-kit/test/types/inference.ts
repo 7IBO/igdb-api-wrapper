@@ -11,6 +11,7 @@ import {
   type GameLinkedQuery,
   type GamesQuery,
   GameType,
+  Genre,
   type Language,
   MAIN_GAME_TYPES,
   Platform,
@@ -694,3 +695,23 @@ expectType<Equal<ReturnType<typeof artworkType>, number | null>>();
 for (const artwork of artworks) artworkType(artwork);
 // @ts-expect-error artwork_type is not selected
 artworkType(await igdb.artworks.select("image_type").findByIdOrThrow(1));
+
+// igdb-kit/i18n: tables and ids are checked, rows of any selection are accepted.
+import { createLabels, type LabelDictionary } from "../../src/i18n";
+import { fr } from "../../src/i18n/fr";
+
+const { label, description, entries } = createLabels([fr]);
+expectType<Equal<ReturnType<typeof label>, string | null>>();
+label("genres", Genre.Adventure, "fr");
+const labeled = await igdb.games.select("genres.name", "game_type.type").findByIdOrThrow(1942);
+for (const genre of labeled.genres ?? []) label("genres", genre, "fr");
+label("game_types", labeled.game_type, "fr");
+description("release_date_statuses", 6, "fr");
+entries("themes", "fr") satisfies { id: number; label: string }[];
+// @ts-expect-error not a table with labels
+label("platforms", 6, "fr");
+// @ts-expect-error genres have no description
+description("genres", 12, "fr");
+({ locale: "fr", labels: { genres: { 12: "RPG" } } }) satisfies LabelDictionary;
+// @ts-expect-error not a genre id
+({ locale: "fr", labels: { genres: { 999: "RPG" } } }) satisfies LabelDictionary;

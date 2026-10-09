@@ -71,6 +71,96 @@
         "default": "./dist/game.cjs"
       }
     },
+    "./i18n": {
+      "import": {
+        "types": "./dist/i18n.d.ts",
+        "default": "./dist/i18n.js"
+      },
+      "require": {
+        "types": "./dist/i18n.d.cts",
+        "default": "./dist/i18n.cjs"
+      }
+    },
+    "./i18n/fr": {
+      "import": {
+        "types": "./dist/i18n/fr.d.ts",
+        "default": "./dist/i18n/fr.js"
+      },
+      "require": {
+        "types": "./dist/i18n/fr.d.cts",
+        "default": "./dist/i18n/fr.cjs"
+      }
+    },
+    "./i18n/de": {
+      "import": {
+        "types": "./dist/i18n/de.d.ts",
+        "default": "./dist/i18n/de.js"
+      },
+      "require": {
+        "types": "./dist/i18n/de.d.cts",
+        "default": "./dist/i18n/de.cjs"
+      }
+    },
+    "./i18n/es": {
+      "import": {
+        "types": "./dist/i18n/es.d.ts",
+        "default": "./dist/i18n/es.js"
+      },
+      "require": {
+        "types": "./dist/i18n/es.d.cts",
+        "default": "./dist/i18n/es.cjs"
+      }
+    },
+    "./i18n/pt-BR": {
+      "import": {
+        "types": "./dist/i18n/pt-BR.d.ts",
+        "default": "./dist/i18n/pt-BR.js"
+      },
+      "require": {
+        "types": "./dist/i18n/pt-BR.d.cts",
+        "default": "./dist/i18n/pt-BR.cjs"
+      }
+    },
+    "./i18n/pl": {
+      "import": {
+        "types": "./dist/i18n/pl.d.ts",
+        "default": "./dist/i18n/pl.js"
+      },
+      "require": {
+        "types": "./dist/i18n/pl.d.cts",
+        "default": "./dist/i18n/pl.cjs"
+      }
+    },
+    "./i18n/ru": {
+      "import": {
+        "types": "./dist/i18n/ru.d.ts",
+        "default": "./dist/i18n/ru.js"
+      },
+      "require": {
+        "types": "./dist/i18n/ru.d.cts",
+        "default": "./dist/i18n/ru.cjs"
+      }
+    },
+    "./i18n/ja": {
+      "import": {
+        "types": "./dist/i18n/ja.d.ts",
+        "default": "./dist/i18n/ja.js"
+      },
+      "require": {
+        "types": "./dist/i18n/ja.d.cts",
+        "default": "./dist/i18n/ja.cjs"
+      }
+    },
+    "./i18n/zh-CN": {
+      "import": {
+        "types": "./dist/i18n/zh-CN.d.ts",
+        "default": "./dist/i18n/zh-CN.js"
+      },
+      "require": {
+        "types": "./dist/i18n/zh-CN.d.cts",
+        "default": "./dist/i18n/zh-CN.cjs"
+      }
+    },
     "./package.json": "./package.json"
   },
   "keywords": [
