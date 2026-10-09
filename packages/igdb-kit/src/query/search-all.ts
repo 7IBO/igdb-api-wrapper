@@ -10,6 +10,7 @@ import {
 import { type DeprecatedExecuteOptions, MAX_LIMIT, type Query } from "./query";
 import type { Task } from "./task";
 import type { FieldPath, Prettify, SelectResult } from "./types";
+import { literal } from "./where";
 
 /**
  * Kinds of entity the `search` endpoint indexes. It also has rows for people, an entity the API no
@@ -63,7 +64,8 @@ export type SearchHit<
         name: string;
         /**
          * The alternative names IGDB matched against, joined with spaces into one string ("Geralt
-         * Gwynbleidd Butcher of Blaviken White Wolf"). Missing when there are none.
+         * Gwynbleidd Butcher of Blaviken White Wolf"), or the one alternative or localized title of a
+         * game found by `alternativeTitles` ("Wiedźmin 3: Dziki Gon"). Missing when there are none.
          */
         alternative_name?: string;
         /** Whether the term was found in the name or only in the alternative names. */
@@ -97,6 +99,16 @@ export interface SearchAllOptions extends DeprecatedExecuteOptions {
   order?: "relevance" | "igdb" | undefined;
   /** With `relevance`, read at most this many matches, 500 per request. Default 2000. */
   maxRows?: number | undefined;
+  /**
+   * Also find games by the alternative and localized titles that contain the term, which IGDB's
+   * search index misses: "Wiedźmin 3", "ウィッチャー", "Pokémon Épée", "Layton und das geheimnisvolle
+   * Dorf" (26 of 67 localized titles found by the search alone, 56 with them). One more request, a
+   * multiquery of `alternative_names` and `game_localizations`. `"auto"` (default) sends it when the
+   * term has letters of another script than Latin, alongside the search, or when fewer than `limit`
+   * hits match by name. `true` always, `false` never. Only with `relevance` and the `game` kind; the
+   * match is exact on accents, as IGDB's `~` is.
+   */
+  alternativeTitles?: boolean | "auto" | undefined;
 }
 
 /** `searchAll()`, as declared on the client. */
@@ -133,9 +145,22 @@ interface SearchRow {
   theme?: { id: number; name?: string };
 }
 
+/** The client's endpoints `searchAll()` reads. */
+export interface SearchEndpoints {
+  search: Query<"search">;
+  alternative_names: Query<"alternative_names">;
+  game_localizations: Query<"game_localizations">;
+}
+
+/** A row of `alternative_names` or `game_localizations` read by `alternativeTitles`. */
+interface TitleRow {
+  name?: string;
+  game?: { id: number; name?: string; total_rating_count?: number };
+}
+
 /** @internal Runs `searchAll()` on the client's `search` endpoint. */
 export async function searchAll(
-  endpoint: Query<"search">,
+  endpoints: SearchEndpoints,
   term: string,
   options: SearchAllOptions & { select?: Partial<Record<SearchKind, readonly string[]>> } = {},
 ): Promise<SearchHit[]> {
@@ -148,6 +173,7 @@ export async function searchAll(
     includeEditions = editions ?? false,
     order = "relevance",
     maxRows = 2000,
+    alternativeTitles = "auto",
     ...execute
   } = options;
   if (!Number.isInteger(limit) || limit < 1 || limit > MAX_LIMIT) {
@@ -161,6 +187,8 @@ export async function searchAll(
     throw new QueryError(`gameTypes must be "all", a game type id or a non-empty list of them`);
   }
   if (!Number.isInteger(maxRows) || maxRows < 1) throw new QueryError(`maxRows must be a positive integer`);
+  if (![true, false, "auto"].includes(alternativeTitles))
+    throw new QueryError(`alternativeTitles must be true, false or "auto", got ${alternativeTitles}`);
   // IGDB answers an empty term with no rows.
   if (normalize(term) === "") return [];
 
@@ -175,14 +203,38 @@ export async function searchAll(
 
   // A row whose entity was deleted still passes `!= null` (23 of 25 collections behind "pokemon"):
   // the expansion then leaves the field out, and such rows are dropped below.
+  const gameParts = ["game != null"];
+  if (types !== "all") gameParts.push(`game.game_type = (${types.join(",")})`);
+  if (!includeEditions) gameParts.push("game.version_parent = null");
   const filters = kinds.map((kind) => {
     if (kind !== "game") return `${kind} != null`;
-    const parts = ["game != null"];
-    if (types !== "all") parts.push(`game.game_type = (${types.join(",")})`);
-    if (!includeEditions) parts.push("game.version_parent = null");
-    return parts.length > 1 ? `(${parts.join(" & ")})` : parts[0];
+    return gameParts.length > 1 ? `(${gameParts.join(" & ")})` : gameParts[0];
   });
-  const query = endpoint
+
+  // Alternative and localized titles containing the term, with the same game filters and fields.
+  const titles = relevance && kinds.includes("game") && alternativeTitles !== false;
+  const readTitles = (): Promise<TitleRow[][]> => {
+    const variants = [...new Set([term.trim(), term.trim().normalize("NFKC")])];
+    const where = `(${variants.map((v) => `name ~ *${literal(v)}*`).join(" | ")}) & ${gameParts.join(" & ")}`;
+    const titleFields = ["name", ...fields.filter((field) => field.startsWith("game."))] as never[];
+    return Promise.all([
+      endpoints.alternative_names
+        .select(...titleFields)
+        .where(where)
+        .limit(100)
+        .execute(execute),
+      endpoints.game_localizations
+        .select(...titleFields)
+        .where(where)
+        .limit(100)
+        .execute(execute),
+    ]) as Promise<TitleRow[][]>;
+  };
+  // Another script than Latin: IGDB's search finds few such titles, so ask alongside it.
+  let titleRows = titles && (alternativeTitles === true || otherScript(term)) ? readTitles() : undefined;
+  titleRows?.catch(() => undefined);
+
+  const query = endpoints.search
     .select(...(fields as never[]))
     .search(term)
     .where(filters.join(" | "));
@@ -227,8 +279,52 @@ export async function searchAll(
       matched: inAlternative ? "alternative_name" : "name",
       [kind]: shown,
     } as SearchHit;
-    ranked.push({ hit, tier: inAlternative ? 3 : tier === 3 ? 4 : tier, ratings, index });
+    // Tiers: 0 to 2 by name, 3 to 3.3 by an alternative name (3.2: its words), 4 neither.
+    ranked.push({ hit, tier: inAlternative ? 3.2 : tier === 3 ? 4 : tier, ratings, index });
   });
+
+  if (titles && !titleRows && ranked.filter((r) => r.tier <= 2).length < limit) titleRows = readTitles();
+  if (titleRows) {
+    const games = new Map<number, (typeof ranked)[number] & { title?: boolean }>();
+    for (const entry of ranked) if (entry.hit.kind === "game") games.set(entry.hit.id, entry);
+    let index = rows.length;
+    for (const row of (await titleRows).flat()) {
+      const game = row.game;
+      const title = row.name?.trim();
+      index++;
+      // A deleted game passes `game != null` and is left out of the expansion.
+      if (!game || !title) continue;
+      // After every name match: an exact title, then one starting with the term, then the rest.
+      const tier = 3 + nameTier(title, words) / 10;
+      const found = games.get(game.id);
+      if (found) {
+        // A game found by its name keeps its rank; one found by IGDB's alternative names, or by
+        // another of these titles, takes this title when it matches better.
+        if ((found.title || found.tier >= 3) && tier < found.tier) {
+          found.tier = tier;
+          found.hit.matched = "alternative_name";
+          found.hit.alternative_name = title;
+        }
+        continue;
+      }
+      let shown: { id: number; total_rating_count?: number } = game;
+      if (!keepRating) {
+        shown = { ...game };
+        delete shown.total_rating_count;
+      }
+      const hit = {
+        kind: "game",
+        id: game.id,
+        name: game.name ?? title,
+        alternative_name: title,
+        matched: "alternative_name",
+        game: shown,
+      } as SearchHit;
+      const entry = { hit, tier, ratings: game.total_rating_count ?? 0, index, title: true };
+      ranked.push(entry);
+      games.set(game.id, entry);
+    }
+  }
   if (relevance) {
     ranked.sort(
       (a, b) =>
@@ -239,6 +335,11 @@ export async function searchAll(
     );
   }
   return ranked.slice(0, limit).map((r) => r.hit);
+}
+
+/** Whether the term has letters of another script than Latin: "ウィッチャー", "Ведьмак". */
+function otherScript(term: string): boolean {
+  return /(?=\p{L})\P{Script=Latin}/u.test(term);
 }
 
 /** Lower case, without accents or punctuation: "Pokémon: Red" -> "pokemon red". */

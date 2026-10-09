@@ -188,6 +188,24 @@ describe("game filters", () => {
     expect(() => w((g) => g.developedBy(...mixed))).toThrow(/ids or company names, not both/);
   });
 
+  test("supportsLanguage: languages or a locale's, and one kind of support on the same row", () => {
+    expect(w((g) => g.supportsLanguage(Language.French))).toBe("where language_supports.language = (12);");
+    expect(w((g) => g.supportsLanguage("fr-CA", "audio"))).toBe(
+      "where language_supports.language = (12) & language_supports.language_support_type = 1;",
+    );
+    expect(w((g) => g.supportsLanguage("en-GB", "subtitles"))).toBe(
+      "where language_supports.language = (8,7) & language_supports.language_support_type = 2;",
+    );
+    expect(w((g) => and(g.supportsLanguage([2, 3], "interface"), g.rating.gt(80)))).toBe(
+      "where (language_supports.language = (2,3) & language_supports.language_support_type = 3) & rating > 80;",
+    );
+    expect(() => w((g) => g.supportsLanguage("xx"))).toThrow(/no language for the locale "xx"/);
+    expect(() => w((g) => g.supportsLanguage([]))).toThrow(/at least one language/);
+    expect(() => w((g) => g.supportsLanguage(-1))).toThrow(/Invalid language id/);
+    // @ts-expect-error not a kind
+    expect(() => w((g) => g.supportsLanguage(12, "voice"))).toThrow(/audio, subtitles or interface/);
+  });
+
   test("releasedIn: the release vocabulary of releases(), with statuses", () => {
     expect(
       w((g) =>
