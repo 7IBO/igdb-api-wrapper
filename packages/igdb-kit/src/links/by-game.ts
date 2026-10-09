@@ -113,8 +113,13 @@ export async function byGame<R>(
   await Promise.all(chunks.map(load));
 
   for (const row of [...rows.values()].sort((a, b) => a.id - b.id)) {
-    for (const game of linkedGames(row[link])) result.get(game)?.push(row as R);
-    if (!selectsLink) delete row[link];
+    // A copy without the link: an identical call in flight shares these rows and still needs it.
+    let shown = row;
+    if (!selectsLink) {
+      shown = { ...row };
+      delete shown[link];
+    }
+    for (const game of linkedGames(row[link])) result.get(game)?.push(shown as R);
   }
   for (const [id, group] of result) {
     if (sort) group.sort(compareBy(sort.field, sort.direction));

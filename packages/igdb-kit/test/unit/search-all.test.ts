@@ -107,6 +107,14 @@ describe("searchAll", () => {
     expect((await igdb.searchAll("witcher", { limit: 2 })).map((h) => h.id)).toEqual([1942, 1940]);
   });
 
+  test("identical searches at once share one request and rank alike", async () => {
+    const { igdb, calls } = searchClient(witcherRows);
+    const [a, b] = await Promise.all([igdb.searchAll("witcher"), igdb.searchAll("witcher")]);
+    expect(a.map((h) => h.id).slice(0, 2)).toEqual([1942, 1940]);
+    expect(b).toEqual(a);
+    expect(calls).toHaveLength(1);
+  });
+
   test("an exact name comes first, and the search index name counts (VII is indexed as 7)", async () => {
     const { igdb } = searchClient([
       {

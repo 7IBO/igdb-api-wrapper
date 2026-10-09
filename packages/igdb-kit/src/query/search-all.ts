@@ -203,14 +203,20 @@ export async function searchAll(
     const tier = Math.min(nameTier(name, words), nameTier(row.name ?? "", words));
     const inAlternative = tier === 3 && alternative !== undefined && containsWords(alternative, words);
     const ratings = (kind === "game" && row.game?.total_rating_count) || 0;
-    if (kind === "game" && !keepRating) delete (entity as { total_rating_count?: number }).total_rating_count;
+    // The rating count was only added to rank: a copy drops it, since an identical search in flight
+    // shares these rows.
+    let shown: { id: number; total_rating_count?: number } = entity;
+    if (kind === "game" && !keepRating) {
+      shown = { ...entity };
+      delete shown.total_rating_count;
+    }
     const hit = {
       kind,
       id: entity.id,
       name,
       ...(alternative === undefined ? {} : { alternative_name: alternative }),
       matched: inAlternative ? "alternative_name" : "name",
-      [kind]: entity,
+      [kind]: shown,
     } as SearchHit;
     ranked.push({ hit, tier: inAlternative ? 3 : tier === 3 ? 4 : tier, ratings, index });
   });

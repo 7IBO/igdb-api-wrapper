@@ -1,4 +1,5 @@
 import { IGDBError } from "../core/errors";
+import { readBodyCapped } from "../core/util";
 import { type EndpointName, type Endpoints, endpoints } from "../generated/schema";
 import type { SelectResult } from "../query/types";
 
@@ -44,15 +45,19 @@ export interface WebhookDelivery {
   url?: string | undefined;
 }
 
+function checkSecret(headers: HeaderSource, secret: string): void {
+  if (!sameSecret(header(headers, "x-secret"), secret)) {
+    throw new WebhookError("Invalid webhook secret", { status: 401 });
+  }
+}
+
 /**
  * Checks that a delivery comes from IGDB (its `X-Secret` header) and returns it typed by endpoint
  * and operation. For frameworks without fetch-style requests (Express, Fastify); otherwise use
  * `webhookHandler`.
  */
 export function parseWebhook(delivery: WebhookDelivery, secret: string): WebhookEvent {
-  if (!sameSecret(header(delivery.headers, "x-secret"), secret)) {
-    throw new WebhookError("Invalid webhook secret", { status: 401 });
-  }
+  checkSecret(delivery.headers, secret);
   const query = delivery.url ? new URL(delivery.url, "http://localhost").searchParams : undefined;
   const endpoint = normalizeEndpoint(header(delivery.headers, "x-endpoint") ?? query?.get("endpoint") ?? "");
   const operation = (header(delivery.headers, "x-operation") ?? query?.get("operation") ?? "").toLowerCase();
@@ -84,23 +89,32 @@ export interface WebhookHandlerOptions<N extends EndpointName> {
   secret: string;
   /** Called for each verified delivery. IGDB retries when this throws (the handler answers 500). */
   onEvent: (event: WebhookEvent<N>) => void | Promise<void>;
+  /**
+   * Largest delivery body read, in bytes; a larger one is answered 413. Default 1 MB (an entity
+   * weighs a few KB).
+   */
+  maxBodyBytes?: number | undefined;
 }
 
 /**
  * A fetch-style handler for IGDB deliveries: `(request: Request) => Promise<Response>`. Plug it into
  * `Bun.serve`, Hono (`c.req.raw`), Next.js route handlers, Deno or Cloudflare Workers. Answers 401 on
- * a wrong secret, 400 on an unreadable delivery, 200 once `onEvent` resolves.
+ * a wrong secret, before reading the body; 413 on a body above `maxBodyBytes`; 400 on an unreadable
+ * delivery; 200 once `onEvent` resolves.
  */
 export function webhookHandler<N extends EndpointName = EndpointName>(
   options: WebhookHandlerOptions<N>,
 ): (request: Request) => Promise<Response> {
+  const maxBodyBytes = options.maxBodyBytes ?? 1_048_576;
   return async (request) => {
     let event: WebhookEvent;
     try {
-      event = parseWebhook(
-        { headers: request.headers, body: await request.text(), url: request.url },
-        options.secret,
-      );
+      checkSecret(request.headers, options.secret);
+      const body = await readBodyCapped(request, maxBodyBytes);
+      if (body === undefined) {
+        return new Response(`Webhook body larger than ${maxBodyBytes} bytes`, { status: 413 });
+      }
+      event = parseWebhook({ headers: request.headers, body, url: request.url }, options.secret);
     } catch (error) {
       const status = error instanceof WebhookError ? (error.status ?? 400) : 400;
       return new Response(error instanceof Error ? error.message : "Bad request", { status });

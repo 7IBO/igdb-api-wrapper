@@ -286,9 +286,18 @@ describe("client-side validation", () => {
     expect(() => igdb.games.sort("name").search("zelda")).toThrow(/sort with search/);
   });
 
-  test("request bodies above 32 KB are rejected", () => {
+  test("request bodies above 32,000 bytes are rejected", () => {
     const ids = Array.from({ length: 6000 }, (_, i) => 100000 + i);
-    expect(() => igdb.games.where(`id = (${ids.join(",")})`).toApicalypse()).toThrow(/32 KB/);
+    expect(() => igdb.games.where(`id = (${ids.join(",")})`).toApicalypse()).toThrow(
+      /above IGDB.s limit of 32000/,
+    );
+    // IGDB accepts 32,000 bytes and answers 413 from 32,001 on.
+    const sized = (bytes: number) => {
+      const empty = igdb.games.where('name = ""').toApicalypse().length;
+      return igdb.games.where(`name = "${"x".repeat(bytes - empty)}"`);
+    };
+    expect(sized(32_000).toApicalypse()).toHaveLength(32_000);
+    expect(() => sized(32_001).toApicalypse()).toThrow("Query body is 32001 bytes");
   });
 });
 
@@ -326,6 +335,22 @@ describe("terminals", () => {
       "500",
       "500",
     ]);
+  });
+
+  test("lookups by id ignore the query's offset and sort", async () => {
+    const mock = mockFetch((call) => Response.json([{ id: Number(call.body.match(/id = \(?(\d+)/)?.[1]) }]));
+    const client = testClient(mock.fetch);
+    const paged = client.games.select("name").sort("name").offset(20);
+    expect(paged.findById(7).toApicalypse()).toBe("fields name; where id = 7; limit 1;");
+    expect(paged.findByIdOrThrow(7).toApicalypse()).toBe("fields name; where id = 7; limit 1;");
+    expect(await paged.findById(7)).toEqual({ id: 7 });
+    expect(await paged.findByIds([7])).toEqual([{ id: 7 }]);
+    expect(mock.calls.map((call) => call.body)).toEqual([
+      "fields name; where id = 7; limit 1;",
+      "fields name; where id = (7); limit 1;",
+    ]);
+    // The query itself keeps them.
+    expect(paged.toApicalypse()).toBe("fields name; sort name asc; offset 20;");
   });
 
   test("iterate pages with an id cursor", async () => {

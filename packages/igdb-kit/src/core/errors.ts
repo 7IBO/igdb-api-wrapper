@@ -55,7 +55,10 @@ export class NotFoundError extends IGDBError {
   }
 }
 
-/** The response would exceed IGDB's 10 MB cap. Lower `limit` or select fewer fields. */
+/**
+ * IGDB refused a size (413): the response would exceed its 10 MB cap (lower `limit` or select fewer
+ * fields), or the request body exceeds 32,000 bytes (send fewer ids). The message says which.
+ */
 export class PayloadTooLargeError extends IGDBError {
   override name = "PayloadTooLargeError";
 }
@@ -91,6 +94,21 @@ export class QueueFullError extends IGDBError {
 }
 
 /**
+ * IGDB's 413 for a request body over 32,000 bytes ("Content Too Large", then "Request Too Large"
+ * further up), as opposed to "Payload Too Large: Response size exceeds…" for a response over 10 MB.
+ */
+const REQUEST_TOO_LARGE = /request too large|content too large|entity too large|request body/i;
+
+/** An error entry with a `title`. The server's own errors (Javalin) have an object as `details`: dropped. */
+function toDetail(entry: unknown): ApicalypseErrorDetail[] {
+  if (typeof entry !== "object" || entry === null) return [];
+  const detail: Record<string, unknown> = { ...entry };
+  if (typeof detail.title !== "string") return [];
+  for (const key of ["cause", "details"]) if (typeof detail[key] !== "string") delete detail[key];
+  return [detail as unknown as ApicalypseErrorDetail];
+}
+
+/**
  * Turns an IGDB error response into a typed error. IGDB uses two shapes: an array of
  * `{ title, status, cause }` for Apicalypse errors, and `{ message }` from the API gateway (401, 429).
  * The status alone is not enough: a `limit` above 500 is a 403 that has nothing to do with auth.
@@ -106,9 +124,8 @@ export function errorFromResponse(
   } catch {
     parsed = undefined;
   }
-  const details: ApicalypseErrorDetail[] = Array.isArray(parsed)
-    ? parsed.filter((d): d is ApicalypseErrorDetail => typeof d === "object" && d !== null && "title" in d)
-    : [];
+  // An array for Apicalypse errors; a single entry for a request body over the limit.
+  const details = (Array.isArray(parsed) ? parsed : [parsed]).flatMap(toDetail);
   const gatewayMessage =
     parsed && typeof parsed === "object" && !Array.isArray(parsed) && "message" in parsed
       ? String((parsed as { message: unknown }).message)
@@ -119,7 +136,10 @@ export function errorFromResponse(
   const where = context.endpoint ? ` on ${context.endpoint}` : "";
   const options: IGDBErrorOptions = { status, details, ...context };
 
-  if (status === 413) return new PayloadTooLargeError(`Response too large${where}: ${text}`, options);
+  if (status === 413) {
+    const subject = REQUEST_TOO_LARGE.test(text) && !/response/i.test(text) ? "Request body" : "Response";
+    return new PayloadTooLargeError(`${subject} too large${where}: ${text}`, options);
+  }
   if (status === 429) return new RateLimitError(`Rate limited${where}: ${text}`, options);
   if (status === 401) return new AuthError(`Authentication failed${where}: ${text}`, options);
   if (status === 403 && /tier/i.test(text))

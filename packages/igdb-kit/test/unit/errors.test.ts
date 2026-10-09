@@ -61,4 +61,41 @@ describe("errorFromResponse", () => {
     expect(notFound).toBeInstanceOf(QueryError);
     expect(notFound.message).toContain("/gamez");
   });
+
+  test("a 413 says whether the request body or the response is too large", () => {
+    // A body of 32,001 bytes gets the server's own error, plain text without `Accept: application/json`;
+    // from 40,000 bytes, one Apicalypse entry, not an array.
+    const content = errorFromResponse(
+      413,
+      '{\n    "title": "Content Too Large",\n    "status": 413,\n    "type": "https://javalin.io/documentation#error-responses",\n    "details": {}\n}',
+      { endpoint: "multiquery" },
+    );
+    expect(content).toBeInstanceOf(PayloadTooLargeError);
+    expect(content.message).toBe("Request body too large on multiquery: Content Too Large");
+    expect(content.details[0]?.title).toBe("Content Too Large");
+    expect(content.details[0]).not.toHaveProperty("details");
+    expect(errorFromResponse(413, "Content Too Large", { endpoint: "games" }).message).toBe(
+      "Request body too large on games: Content Too Large",
+    );
+    const request = errorFromResponse(
+      413,
+      '{\n  "title": "Request Too Large",\n  "status": 413,\n  "cause": "Your request body exceeds the maximum allowed size of 32KB.",\n  "details": "Please reduce your request size or contact support via Discord (https://discord.gg/igdb)."\n}\n',
+      { endpoint: "games" },
+    );
+    expect(request).toBeInstanceOf(PayloadTooLargeError);
+    expect(request.message).toStartWith(
+      "Request body too large on games: Request Too Large: Your request body exceeds the maximum allowed size of 32KB.",
+    );
+    expect(request.details[0]?.title).toBe("Request Too Large");
+    // The response cap's details are cut in our logs after "select f".
+    const response = errorFromResponse(
+      413,
+      '[{"title":"Payload Too Large","status":413,"cause":"Response size exceeds maximum allowed","details":"Response exceeds 10MB limit. Reduce limit or select fewer fields"}]',
+      { endpoint: "games" },
+    );
+    expect(response).toBeInstanceOf(PayloadTooLargeError);
+    expect(response.message).toStartWith(
+      "Response too large on games: Payload Too Large: Response size exceeds maximum allowed",
+    );
+  });
 });

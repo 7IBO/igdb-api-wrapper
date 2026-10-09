@@ -126,4 +126,46 @@ describe("incoming deliveries", () => {
     expect((await post('{"id":13}')).status).toBe(500);
     expect(seen).toHaveLength(1);
   });
+
+  test("webhookHandler checks the secret before reading the body, and caps the body", async () => {
+    const seen: unknown[] = [];
+    const handler = webhookHandler({ secret: "s3cret", onEvent: (event) => void seen.push(event) });
+    const endless = (extra: Record<string, string> = {}) => {
+      const read = { chunks: 0 };
+      const body = new ReadableStream<Uint8Array>(
+        {
+          pull(controller) {
+            read.chunks++;
+            controller.enqueue(new TextEncoder().encode(" ".repeat(65_536)));
+          },
+        },
+        { highWaterMark: 0 },
+      );
+      const init = { method: "POST", headers: { ...headers, ...extra }, body, duplex: "half" };
+      return { request: new Request("https://x.test/igdb", init as RequestInit), read };
+    };
+    const forged = endless({ "x-secret": "bad" });
+    expect((await handler(forged.request)).status).toBe(401);
+    expect(forged.read.chunks).toBe(0);
+    // 1 MB by default: reading stops at the 17th chunk of 64 KB.
+    const flood = endless();
+    const refused = await handler(flood.request);
+    expect(refused.status).toBe(413);
+    expect(await refused.text()).toBe("Webhook body larger than 1048576 bytes");
+    expect(flood.read.chunks).toBe(17);
+    const declared = endless({ "content-length": "2000000" });
+    expect((await handler(declared.request)).status).toBe(413);
+    expect(declared.read.chunks).toBe(0);
+
+    const sized = (bytes: number) => `{"id":1,"pad":"${"x".repeat(bytes - 17)}"}`;
+    const post = (body: string, maxBodyBytes?: number) =>
+      webhookHandler({ secret: "s3cret", onEvent: () => {}, maxBodyBytes })(
+        new Request("https://x.test/igdb", { method: "POST", headers, body }),
+      );
+    expect((await post(sized(1_048_576))).status).toBe(200);
+    expect((await post(sized(1_048_577))).status).toBe(413);
+    expect((await post(sized(100), 100)).status).toBe(200);
+    expect((await post(sized(101), 100)).status).toBe(413);
+    expect(seen).toHaveLength(0);
+  });
 });

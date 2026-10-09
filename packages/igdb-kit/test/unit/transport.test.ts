@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
   AuthError,
+  IGDBError,
   memoryTokenStore,
   NetworkError,
   PayloadTooLargeError,
@@ -91,6 +92,37 @@ describe("transport", () => {
     await expect(
       testClient(broken.fetch, { retryTimeoutMs: 200 }).games.limit(1).execute(),
     ).rejects.toBeInstanceOf(NetworkError);
+  });
+
+  test("errors name the endpoint, and a body that is not JSON is an IGDBError", async () => {
+    const broken = mockFetch(() => {
+      throw new TypeError("fetch failed");
+    });
+    const network = await testClient(broken.fetch, { retryTimeoutMs: 200 })
+      .games.limit(1)
+      .execute()
+      .catch((e) => e);
+    expect(network).toBeInstanceOf(NetworkError);
+    expect(network).toMatchObject({ endpoint: "games", query: "limit 1;" });
+    const limited = mockFetch(() => Response.json({ message: "Too Many Requests" }, { status: 429 }));
+    const rate = await testClient(limited.fetch, { retryTimeoutMs: 300 })
+      .games.limit(1)
+      .execute()
+      .catch((e) => e);
+    expect(rate).toBeInstanceOf(RateLimitError);
+    expect(rate).toMatchObject({ status: 429, endpoint: "games", query: "limit 1;" });
+    // A proxyUrl that answers the app's HTML page.
+    const html = mockFetch(
+      () => new Response("<!doctype html><title>App</title>", { headers: { "content-type": "text/html" } }),
+    );
+    const page = await testClient(html.fetch)
+      .games.limit(1)
+      .execute()
+      .catch((e) => e);
+    expect(page).toBeInstanceOf(IGDBError);
+    expect(page.message).toBe("Response of games is not JSON (text/html): <!doctype html><title>App</title>");
+    expect(page).toMatchObject({ status: 200, endpoint: "games", query: "limit 1;" });
+    expect(page.cause).toBeInstanceOf(SyntaxError);
   });
 
   test("400 and 413 are not retried", async () => {
