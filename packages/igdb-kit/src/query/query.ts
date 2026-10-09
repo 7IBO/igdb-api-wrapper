@@ -9,6 +9,11 @@ import {
 } from "../generated/schema";
 import { byGame, type GameLinkedEndpoint } from "../links/by-game";
 import {
+  allIds,
+  chunk,
+  FEW_GAMES,
+  firstIds,
+  gameIds,
   type PopularityRow,
   type PopularityWeights,
   type WeightedPopular,
@@ -98,7 +103,10 @@ export interface QueryRunner {
 export interface PopularOptions extends ExecuteOptions {
   /** Number of games to return, 1 to 500. Defaults to 10. */
   limit?: number;
-  /** Stop after reading this many popularity rows when a `where` filters most games out. Defaults to 5000. */
+  /**
+   * Stop after reading this many popularity rows when a `where` filters most games out. Defaults to
+   * 5000. Does not apply when the `where` matches at most 10,000 games: their own rows are read instead.
+   */
   maxRows?: number;
 }
 
@@ -456,7 +464,9 @@ export class Query<N extends EndpointName, R = { id: number }> extends Executabl
    * The most popular games for one PopScore metric (`PopularityType.IGDBPlaying`,
    * `PopularityType.Steam24hrPeakPlayers`…), most popular first, each with its score. The selected
    * fields and the `where` of this query apply to the games: popularity rows are read 500 at a time
-   * until `limit` games match, or `maxRows` rows were read. Only on `games`.
+   * until `limit` games match, or `maxRows` rows were read. The games a `where` matches are counted
+   * along with the first page: if it is not enough and they are at most 10,000, their own rows are
+   * read instead, which is exact and takes a few requests. Only on `games`.
    */
   async popular(
     ...[type, options = {}]: N extends "games"
@@ -480,10 +490,16 @@ export class Query<N extends EndpointName, R = { id: number }> extends Executabl
         sort: { field: "value", direction: "desc" },
       },
     );
+    const matching = this.state.where ? gameIds(this as never) : undefined;
     const results: { game: R; value: number }[] = [];
     const seen = new Set<number>();
     for (let offset = 0; offset < maxRows && results.length < limit; offset += pageSize) {
-      const page = await rows.limit(pageSize).offset(offset).execute(execute);
+      // The count and first ids of the matches go with the first page.
+      const [page, matches] = await Promise.all([
+        rows.limit(pageSize).offset(offset).execute(execute),
+        offset === 0 && matching !== undefined ? firstIds(matching, execute) : undefined,
+      ]);
+      if (matches?.total === 0) return [];
       const ranked: { id: number; value: number }[] = [];
       for (const row of page) {
         if (row.game_id === undefined || seen.has(row.game_id)) continue;
@@ -500,8 +516,56 @@ export class Query<N extends EndpointName, R = { id: number }> extends Executabl
         if (game !== undefined && results.length < limit) results.push({ game, value });
       }
       if (page.length < pageSize) break;
+      if (
+        results.length < limit &&
+        matching !== undefined &&
+        matches !== undefined &&
+        matches.total <= FEW_GAMES
+      ) {
+        return this.popularAmong(rows, limit, results, await allIds(matching, matches, execute), execute);
+      }
     }
-    return results;
+    // Equal values in id order, as when the rows of few games are read.
+    return results.sort(
+      (a, b) => b.value - a.value || (a.game as { id: number }).id - (b.game as { id: number }).id,
+    );
+  }
+
+  /**
+   * The `limit` games among `candidates` with the most popular rows, ranked exactly: each game has one
+   * row per type at most, so the top `limit` rows of each list of ids hold the top of all. `found`
+   * holds games already read.
+   */
+  private async popularAmong(
+    rows: Query<EndpointName, { game_id?: number; value?: number }>,
+    limit: number,
+    found: readonly { game: R; value: number }[],
+    candidates: readonly number[],
+    execute: ExecuteOptions,
+  ): Promise<{ game: R; value: number }[]> {
+    const pages = await Promise.all(
+      chunk(candidates, MAX_LIMIT).map((ids) =>
+        rows
+          .where(`game_id = (${ids.join(",")})`)
+          .limit(limit)
+          .execute(execute),
+      ),
+    );
+    const best = new Map<number, number>();
+    for (const row of pages.flat()) {
+      if (row.game_id !== undefined && !best.has(row.game_id)) best.set(row.game_id, row.value ?? 0);
+    }
+    const ranked = [...best].sort((a, b) => b[1] - a[1] || a[0] - b[0]).slice(0, limit);
+    const games = new Map(found.map(({ game }) => [(game as { id: number }).id, game]));
+    const read = await this.findByIds(
+      ranked.flatMap(([id]) => (games.has(id) ? [] : [id])),
+      execute,
+    );
+    for (const game of read) games.set((game as { id: number }).id, game);
+    return ranked.flatMap(([id, value]) => {
+      const game = games.get(id);
+      return game === undefined ? [] : [{ game, value }];
+    });
   }
 
   /**
@@ -509,8 +573,10 @@ export class Query<N extends EndpointName, R = { id: number }> extends Executabl
    * 0.6, [PopularityType.IGDBPlaying]: 0.4 }`. Each type is scaled by its top value before weighting;
    * a game without a row in a type scores 0 there and gets `null` in `values`. Negative weights lower
    * a score. The fields and `where` of this query apply to the games. Each round reads 500 rows per
-   * positively weighted type, then the other types and the games of the new ids (about 3 multiqueries
-   * per round); it stops once no unread game can enter the top `limit`. Only on `games`.
+   * positively weighted type, then the other types and the games of the new ids (about 2 multiqueries
+   * per round); it stops once no unread game can enter the top `limit`. The games a `where` matches
+   * are counted during the first round: if it does not settle the top and they are at most 10,000,
+   * their own rows are scored instead. Only on `games`.
    */
   async weightedPopular(
     ...[weights, options = {}]: N extends "games"
@@ -528,6 +594,7 @@ export class Query<N extends EndpointName, R = { id: number }> extends Executabl
       (ids, execute) => this.findByIds(ids, execute),
       weights as PopularityWeights,
       options as WeightedPopularOptions,
+      this.state.where ? gameIds(this as never) : undefined,
     );
   }
 
