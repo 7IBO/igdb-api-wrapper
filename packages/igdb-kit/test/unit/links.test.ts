@@ -26,6 +26,7 @@ function fakeIgdb(tables: Record<string, Row[]>) {
     const after = where.match(/id > (-?\d+)/)?.[1];
     if (after !== undefined) rows = rows.filter((row) => row.id > Number(after));
     if (count) return Response.json({ count: rows.length });
+    const total = rows.length;
     if (call.body.includes("sort id asc")) rows = [...rows].sort((a, b) => a.id - b.id);
     rows = rows.slice(0, Number(call.body.match(/limit (\d+);/)?.[1] ?? 10));
     const fields = call.body
@@ -36,7 +37,7 @@ function fakeIgdb(tables: Record<string, Row[]>) {
       fields && !fields.includes("*")
         ? Object.fromEntries(Object.entries(row).filter(([k]) => k === "id" || fields.includes(k)))
         : row;
-    return Response.json(rows.map(project));
+    return Response.json(rows.map(project), { headers: { "x-count": String(total) } });
   });
 }
 
@@ -253,7 +254,7 @@ describe("findByGames()", () => {
     await expect(igdb.release_dates.offset(5).findByGames([1])).rejects.toThrow(/offset/);
     await expect(igdb.release_dates.findByGames([-1])).rejects.toThrow(QueryError);
     // @ts-expect-error genres do not point to games
-    await expect(igdb.genres.findByGames([1])).rejects.toThrow(/linked to games/);
+    expect(igdb.genres.findByGames).toBeUndefined();
   });
 });
 
@@ -319,6 +320,50 @@ describe("defineView()", () => {
     expect(mock.calls.map((c) => c.url.split("/").pop())).toEqual(["games", "multiquery"]);
     expect(mock.calls[0]?.body).toBe("fields name; where id != 0; limit 2;");
     expect((await view(igdb).first())?.id).toBe(10);
+  });
+
+  test("count() counts the games, and withCount() adds their links to the page", async () => {
+    const mock = fakeIgdb(tables);
+    const igdb = testClient(mock.fetch);
+    expect(await view(igdb).where("id != 0").count()).toBe(2);
+    expect(mock.calls[0]?.url).toEndWith("/games/count");
+    const page = await view(igdb).where("id != 0").limit(1).withCount();
+    expect(page).toEqual({
+      data: [
+        {
+          id: 10,
+          name: "The Witcher 3",
+          timeToBeat: [{ id: 7, normally: 254778 }],
+          characters: [
+            { id: 1, name: "Geralt" },
+            { id: 2, name: "Ciri" },
+          ],
+        },
+      ],
+      total: 2,
+    });
+    // The page and its total in one request, never batched, then the links of its games at once.
+    expect(mock.calls.slice(1).map((c) => c.url.split("/").pop())).toEqual(["games", "multiquery"]);
+  });
+
+  test("findById(), findByIds(), first() and withCount() send nothing before they are awaited", async () => {
+    const mock = fakeIgdb(tables);
+    const igdb = testClient(mock.fetch);
+    const games = view(igdb);
+    const one = games.findById(10);
+    const tasks = [one, games.findByIds([10, 20]), games.first(), games.withCount()];
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(mock.calls).toHaveLength(0);
+    expect((await one)?.id).toBe(10);
+    expect(mock.calls).toHaveLength(1);
+    expect(tasks).toHaveLength(4);
+    const aborted = AbortSignal.abort(new Error("stop"));
+    await expect(games.findById(10).execute({ signal: aborted })).rejects.toThrow("stop");
+    // Deprecated: the options as the last argument, applied when the task is awaited.
+    await expect(Promise.resolve(games.findById(10, { signal: aborted }))).rejects.toThrow("stop");
+    await expect(Promise.resolve(games.findByIds([10], { signal: aborted }))).rejects.toThrow("stop");
+    await expect(Promise.resolve(games.first({ signal: aborted }))).rejects.toThrow("stop");
+    expect(await games.findById(404).catch(() => "failed")).toBeNull();
   });
 
   test("a search is sent alone before the links", async () => {

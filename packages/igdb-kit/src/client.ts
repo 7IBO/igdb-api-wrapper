@@ -5,6 +5,7 @@ import { IGDBError, QueryError } from "./core/errors";
 import { type Limiter, type LocalLimiterOptions, sharedLimiter } from "./core/limiter";
 import { Transport, type TransportHooks } from "./core/transport";
 import { type EndpointName, endpoints, type Game, PopularityType } from "./generated/schema";
+import { gameLink } from "./links/by-game";
 import { type Expanded, expand, type IdKeys } from "./links/expand";
 import { type NoGameFields, View, type ViewLinks } from "./links/view";
 import { resolveLookups } from "./query/lookups";
@@ -17,9 +18,12 @@ import {
 import {
   type Executable,
   type ExecuteOptions,
+  GameLinkedQuery,
+  GamesQuery,
   MAX_BODY_BYTES,
   MAX_LIMIT,
   Query,
+  type QueryOf,
   type QueryRequest,
   type QueryRunner,
   type RawResponse,
@@ -83,7 +87,11 @@ export type IGDBClientOptions = IGDBServerClientOptions | IGDBProxyClientOptions
 type BatchInput = Record<string, Executable<any>>;
 export type BatchResult<T extends BatchInput> = { [K in keyof T]: Awaited<T[K]> };
 
-export type IGDBClient = { readonly [K in EndpointName]: Query<K> } & {
+/**
+ * The client: one query per endpoint (`igdb.games`, `igdb.platforms`…), typed by `QueryOf` so that
+ * each has only the methods that work on it, and the methods below.
+ */
+export type IGDBClient = { readonly [K in EndpointName]: QueryOf<K> } & {
   /**
    * Runs several queries together, as few multiqueries as possible (10 per request), and returns
    * each result under its key with its own type. Works even when `autoBatch` is off.
@@ -225,7 +233,7 @@ export function createIGDB(options: IGDBClientOptions): IGDBClient {
       (await transport.send(path, body, runOptions)).data,
     defineView: (endpoint: string, definition: { select?: readonly string[]; with?: ViewLinks }) => {
       if (endpoint !== "games") throw new QueryError(`Views are defined on games, not ${endpoint}`);
-      const games = (client.games as Query<"games">).select(...((definition.select ?? []) as never[]));
+      const games = (client.games as GamesQuery).select(...((definition.select ?? []) as never[]));
       return new View(games, definition.with ?? {});
     },
     expand,
@@ -235,7 +243,12 @@ export function createIGDB(options: IGDBClientOptions): IGDBClient {
       )) satisfies Forward,
   };
   for (const endpoint of Object.keys(endpoints) as EndpointName[]) {
-    client[endpoint] = new Query(runner, endpoint);
+    client[endpoint] =
+      endpoint === "games"
+        ? new GamesQuery(runner, endpoint)
+        : gameLink(endpoint) === undefined
+          ? new Query(runner, endpoint)
+          : new GameLinkedQuery(runner, endpoint as never);
   }
   return client as IGDBClient;
 }

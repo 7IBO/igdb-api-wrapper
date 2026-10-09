@@ -1,12 +1,13 @@
 import { QueryError } from "../core/errors";
 import { entities, type Game } from "../generated/schema";
-import type { ExecuteOptions, Query } from "../query/query";
+import type { Count, ExecuteOptions, GameLinkedQuery, GamesQuery, Query } from "../query/query";
+import { Task } from "../query/task";
 import type { Prettify, ScalarKeys } from "../query/types";
 import type { Condition, WhereRoot } from "../query/where";
 import { findByGames, gameLink } from "./by-game";
 
 // biome-ignore lint/suspicious/noExplicitAny: the rows of each linked query are typed by ViewRow.
-type AnyQuery = Query<any, any>;
+type AnyQuery = Query<any, any> | GameLinkedQuery<any, any> | GamesQuery<any>;
 
 /** Queries on endpoints that point to games, by the name their rows get in each view result. */
 export type ViewLinks = Record<string, AnyQuery>;
@@ -20,11 +21,12 @@ export type ViewRow<R, W extends ViewLinks> = Prettify<
 >;
 
 /**
- * Games with data from other endpoints attached, from `igdb.defineView()`. `findById()` and
- * `findByIds()` send the games and every linked query together, so batching packs them into as few
- * multiqueries as possible (one for a single game). A list (`where`, `search`, `sort`, `limit`, then
- * await) needs the game ids first, so it takes two rounds: the games, then the linked rows of all of
- * them at once; a `search` is always sent alone, as IGDB requires.
+ * Games with data from other endpoints attached, from `igdb.defineView()`. Like a query, a view sends
+ * nothing before it is awaited or executed, and neither do `findById()`, `findByIds()`, `first()` and
+ * `withCount()`. `findById()` and `findByIds()` send the games and every linked query together, so
+ * batching packs them into as few multiqueries as possible (one for a single game). A list (`where`,
+ * `search`, `sort`, `limit`, then await) needs the game ids first, so it takes two rounds: the games,
+ * then the linked rows of all of them at once; a `search` is always sent alone, as IGDB requires.
  */
 export class View<R, W extends ViewLinks> implements PromiseLike<ViewRow<R, W>[]> {
   /** @internal */
@@ -75,20 +77,46 @@ export class View<R, W extends ViewLinks> implements PromiseLike<ViewRow<R, W>[]
   }
 
   /** The game with this id and its linked rows, or null. */
-  async findById(id: number, options?: ExecuteOptions): Promise<ViewRow<R, W> | null> {
-    return (await this.findByIds([id], options))[0] ?? null;
+  findById(id: number): Task<ViewRow<R, W> | null>;
+  /** @deprecated Pass the options to `execute()`: `view.findById(id).execute({ signal })`. */
+  findById(id: number, options: ExecuteOptions | undefined): Task<ViewRow<R, W> | null>;
+  findById(id: number, options?: ExecuteOptions): Task<ViewRow<R, W> | null> {
+    return new Task(async (execute) => (await this.readIds([id], { ...options, ...execute }))[0] ?? null);
   }
 
   /** The games with these ids, in the order given (missing ids are skipped), with their linked rows. */
-  async findByIds(ids: readonly number[], options?: ExecuteOptions): Promise<ViewRow<R, W>[]> {
-    const batched = { ...options, batch: true };
-    const [games, linked] = await Promise.all([this.base.findByIds(ids, batched), this.load(ids, batched)]);
-    return this.attach(games, linked);
+  findByIds(ids: readonly number[]): Task<ViewRow<R, W>[]>;
+  /** @deprecated Pass the options to `execute()`: `view.findByIds(ids).execute({ signal })`. */
+  findByIds(ids: readonly number[], options: ExecuteOptions | undefined): Task<ViewRow<R, W>[]>;
+  findByIds(ids: readonly number[], options?: ExecuteOptions): Task<ViewRow<R, W>[]> {
+    return new Task((execute) => this.readIds(ids, { ...options, ...execute }));
   }
 
   /** The first game and its linked rows, or null. */
-  async first(options?: ExecuteOptions): Promise<ViewRow<R, W> | null> {
-    return (await this.limit(1).execute(options))[0] ?? null;
+  first(): Task<ViewRow<R, W> | null>;
+  /** @deprecated Pass the options to `execute()`: `view.first().execute({ signal })`. */
+  first(options: ExecuteOptions | undefined): Task<ViewRow<R, W> | null>;
+  first(options?: ExecuteOptions): Task<ViewRow<R, W> | null> {
+    return new Task(async (execute) => (await this.limit(1).execute({ ...options, ...execute }))[0] ?? null);
+  }
+
+  /** Number of games matching the view's `where` (and `search`), as `Query.count`; links are not read. */
+  count(): Count {
+    return this.base.count();
+  }
+
+  /**
+   * The page of games with their linked rows, and the number of games matching, as
+   * `Query.withCount`: the games and their count in one request, which is never batched, then the
+   * linked rows of all of them at once.
+   */
+  withCount(): Task<{ data: ViewRow<R, W>[]; total: number }> {
+    return new Task(async (options) => {
+      const batched = { ...options, batch: true };
+      const { data, total } = await this.base.withCount().execute(batched);
+      const ids = data.map((game) => (game as { id: number }).id);
+      return { data: this.attach(data, await this.load(ids, batched)), total };
+    });
   }
 
   async execute(options?: ExecuteOptions): Promise<ViewRow<R, W>[]> {
@@ -106,8 +134,29 @@ export class View<R, W extends ViewLinks> implements PromiseLike<ViewRow<R, W>[]
     return this.execute().then(onfulfilled, onrejected);
   }
 
+  /** Runs the view, like `await`, and handles its error as `Promise.catch` does. */
+  catch<B = never>(
+    onrejected?: ((reason: unknown) => B | PromiseLike<B>) | null,
+  ): Promise<ViewRow<R, W>[] | B> {
+    return this.execute().catch(onrejected);
+  }
+
+  /** Runs the view, like `await`, and calls `onfinally` once it settles, as `Promise.finally` does. */
+  finally(onfinally?: (() => void) | null): Promise<ViewRow<R, W>[]> {
+    return this.execute().finally(onfinally);
+  }
+
+  /** The games with these ids and their linked rows, all sent together. */
+  private async readIds(ids: readonly number[], options: ExecuteOptions): Promise<ViewRow<R, W>[]> {
+    const batched = { ...options, batch: true };
+    const [games, linked] = await Promise.all([this.base.findByIds(ids, batched), this.load(ids, batched)]);
+    return this.attach(games, linked);
+  }
+
   private async load(ids: readonly number[], options: ExecuteOptions): Promise<Map<number, unknown[]>[]> {
-    return Promise.all(Object.values(this.links).map((link) => findByGames<unknown>(link, ids, options)));
+    return Promise.all(
+      Object.values(this.links).map((link) => findByGames<unknown>(link as never, ids, options)),
+    );
   }
 
   private attach(games: R[], linked: Map<number, unknown[]>[]): ViewRow<R, W>[] {

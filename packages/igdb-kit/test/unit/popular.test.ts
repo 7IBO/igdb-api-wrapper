@@ -177,6 +177,6 @@ describe("popular()", () => {
     );
     await expect(igdb.games.search("zelda").popular(PopularityType.IGDBVisits)).rejects.toThrow(/search/);
     // @ts-expect-error only on games
-    await expect(igdb.platforms.popular(PopularityType.IGDBVisits)).rejects.toThrow(/only on games/);
+    expect(igdb.platforms.popular).toBeUndefined();
   });
 });

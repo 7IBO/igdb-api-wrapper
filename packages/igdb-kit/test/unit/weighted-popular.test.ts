@@ -246,7 +246,7 @@ describe("weightedPopular()", () => {
     await expect(igdb.games.weightedPopular({ 3: 1 }, { limit: 501 })).rejects.toThrow(QueryError);
     await expect(igdb.games.search("zelda").weightedPopular({ 3: 1 })).rejects.toThrow(/search/);
     // @ts-expect-error only on games
-    await expect(igdb.platforms.weightedPopular({ 3: 1 })).rejects.toThrow(/only on games/);
+    expect(igdb.platforms.weightedPopular).toBeUndefined();
   });
 });
 
