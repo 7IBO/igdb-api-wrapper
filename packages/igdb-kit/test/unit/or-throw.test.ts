@@ -29,7 +29,9 @@ describe("*OrThrow", () => {
     expect(error).toBeInstanceOf(NotFoundError);
     expect(error.message).toBe("No games with id 7");
     expect(error.query).toBe("where id = 7; limit 1;");
-    await expect(igdb.games.where("id = 7").firstOrThrow()).rejects.toThrow("No games matched the query");
+    await expect(igdb.games.where("id = 7").firstOrThrow().execute()).rejects.toThrow(
+      "No games matched the query",
+    );
     await expect(igdb.batch({ a: igdb.games.findByIdOrThrow(7) })).rejects.toBeInstanceOf(NotFoundError);
   });
 });
