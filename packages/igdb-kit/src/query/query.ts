@@ -132,7 +132,7 @@ export interface SyncOptions extends ExecuteOptions {
    * few multiqueries; fewer when pages are heavy, so that about 64 MB of pages are held.
    */
   concurrency?: number | undefined;
-  /** Up to this many matches, pages are read with an id cursor instead of id ranges. Default 5000. */
+  /** Up to this many matches, pages are read one after another with an id cursor. Default 0. */
   cursorThreshold?: number | undefined;
 }
 
@@ -633,23 +633,24 @@ export class Query<N extends EndpointName, R = { id: number }> extends Executabl
   /**
    * Every match, page by page, to copy an endpoint into your own storage. Pass `since` (the time you
    * started the previous sync) to get only what changed since then. The first page goes out with the
-   * count, in one multiquery. Large result sets are then fetched as id ranges sent in parallel, which
-   * automatic batching packs into multiqueries: each range is sized from the density of matches to
-   * hold most of a page, and one that holds more is read on with an id cursor. At most `concurrency`
-   * pages are requested or waiting at once, about 64 MB. Small result sets are read with an id cursor
-   * only. Requests default to `background` priority so they wait behind interactive ones. Pages
-   * arrive in id order.
+   * count, in one multiquery. The other pages are then requested in parallel, which automatic
+   * batching packs into multiqueries: each asks for the matches after a row read already, skipping
+   * those the pages in between hold (`offset`), so pages come back full wherever the ids lie. Each
+   * page starts on the last row of the previous one: when matches change during the sync and a page
+   * starts further, the rows in between are read again with an id cursor, so none is missed. At most
+   * `concurrency` pages are requested or waiting at once, about 64 MB. Requests default to
+   * `background` priority so they wait behind interactive ones. Pages arrive in id order.
    */
   async *sync(
     options: SyncOptions &
       ("updated_at" extends keyof Endpoints[N] ? { since?: Date | number } : { since?: never }) = {},
   ): AsyncGenerator<R[], void, undefined> {
     if (this.state.search) throw new QueryError("sync() cannot be combined with search");
-    const { concurrency = 40, cursorThreshold = 5000, since: _, ...execute } = options;
+    const { concurrency = 40, cursorThreshold = 0, since: _, ...execute } = options;
     const executeOptions: ExecuteOptions = { ...execute, priority: execute.priority ?? "background" };
     let query: Query<N, R> = this.with({
       fields: this.fieldsWithId(),
-      sort: undefined,
+      sort: { field: "id", direction: "asc" },
       offset: undefined,
       limit: undefined,
     });
@@ -663,116 +664,167 @@ export class Query<N extends EndpointName, R = { id: number }> extends Executabl
       query = query.where(`updated_at >= ${seconds}`);
     }
 
-    // The count, the highest id and the first page go out together, in one multiquery. The first
-    // page also tells what a row of this selection weighs, before the ranges are sized and packed.
-    const cursor = query.cursorPages(executeOptions);
-    const [total, last, start] = await Promise.all([
-      query.count().execute(executeOptions),
-      query
-        .with({ fields: ["id"], sort: { field: "id", direction: "desc" } })
-        .first()
-        .execute(executeOptions),
-      cursor.next(),
-    ]);
-    if (start.done) return;
-    yield start.value;
-    if (start.value.length >= total) return;
-    if (total <= cursorThreshold) {
-      yield* cursor;
-      return;
-    }
-
-    const after = (start.value[start.value.length - 1] as { id: number }).id;
-    const maxId = (last as { id: number } | null)?.id ?? after;
-    const density = (total - start.value.length) / Math.max(1, maxId - after);
-    const pageBytes = this.runner.pageSize?.(query.endpoint, query.state.fields).bytes ?? 0;
-    // Pages being read, or read and not yet yielded. A wave more is read on while the reader waits
-    // (see pump), so the window takes 80% of the bytes allowed.
-    const window = Math.max(
-      1,
-      Math.min(concurrency, Math.floor((SYNC_BYTES_IN_FLIGHT * 0.8) / Math.max(pageBytes, 1))),
-    );
-    // Requests leave in groups, which automatic batching packs into multiqueries.
-    const wave = Math.min(SYNC_WAVE, Math.ceil(window / 4));
-    const ordered = query.with({ sort: { field: "id", direction: "asc" } });
-    const ranges: SyncRange<R>[] = [];
+    // Pages are segments of the matches in id order. Each starts on the last row of the previous one
+    // and asks for the rows after its anchor, the furthest row read when it is planned, skipping
+    // those up to its start: offsets stay within the pages in flight.
+    const segments: SyncSegment<R>[] = [];
+    /** The last row of each page read. */
+    const ends: SyncAnchor[] = [];
+    let anchor: SyncAnchor = { id: -1, position: -1 };
+    /** Matches to read: the count, or less once a page comes back short. */
+    let total = Number.POSITIVE_INFINITY;
+    /** Position the next segment starts at: the last row of the last one planned. */
+    let next = 0;
+    /** Up to `cursorThreshold` matches, the rows after the first page are read with an id cursor. */
+    let planning = true;
+    let cap = MAX_LIMIT;
     let used = 0;
-    let next = after + 1;
+    let window = 1;
+    let wave = 1;
     let stopped = false;
 
-    /** Reads the next page of `range`, halving it when IGDB finds it too heavy. */
-    const read = (range: SyncRange<R>) => {
-      const size = ordered.pageRows(range.cap);
+    const plan = (start: number, size: number): SyncSegment<R> => {
+      const segment = { anchor, start: Math.max(start, anchor.position + 1), size };
+      segments.push(segment);
+      // Pages of one row cannot share one.
+      next = segment.start + size - (size > 1 ? 1 : 0);
+      return segment;
+    };
+    /** Reads `segment`, in two halves when IGDB finds it too heavy. */
+    const read = (segment: SyncSegment<R>) => {
       used++;
-      // Starts on the next microtask, once `range.reading` is set; still in the same batch.
+      // A half skips from the closest row read since, in case the skip made IGDB time out, and goes
+      // alone, so that it fails alone.
+      if (segment.split) {
+        segment.anchor = ends.reduce(
+          (best, end) => (end.position < segment.start && end.position > best.position ? end : best),
+          segment.anchor,
+        );
+      }
+      // Starts on the next microtask, once `segment.reading` is set; still in the same batch.
       const reading = Promise.resolve().then(async () => {
         try {
-          const page = await ordered
-            .where(`id > ${range.after} & id < ${range.to}`)
-            .limit(size)
-            .execute(executeOptions);
-          range.more = page.length === size;
-          if (page.length === 0) used--;
-          else {
-            range.pages.push(page);
-            range.after = (page[page.length - 1] as { id: number }).id;
+          const skip = segment.start - segment.anchor.position - 1;
+          const page = query.where(`id > ${segment.anchor.id}`).limit(segment.size);
+          const rows = await (skip > 0 ? page.offset(skip) : page).execute(
+            segment.split ? { ...executeOptions, batch: false } : executeOptions,
+          );
+          segment.rows = rows;
+          if (rows.length === 0) used--;
+          if (rows.length > 0) {
+            const end = {
+              id: (rows[rows.length - 1] as { id: number }).id,
+              position: segment.start + rows.length - 1,
+            };
+            ends.push(end);
+            if (end.position > anchor.position) anchor = end;
           }
+          // A short page holds the last matches.
+          if (rows.length < segment.size) total = Math.min(total, segment.start + rows.length);
         } catch (error) {
           used--;
-          if (size > 1 && tooHeavy(error)) range.cap = Math.ceil(size / 2);
-          else range.failed = { error };
+          if (segment.size > 1 && tooHeavy(error)) {
+            // Halves of the same size, the second starting on the last row of the first as segments
+            // do (two rows make two pages of one), unless it starts past the matches: the first one
+            // then shows whether rows were added.
+            const half = segment.size > 2 ? Math.ceil((segment.size + 1) / 2) : 1;
+            cap = Math.min(cap, half);
+            const start = segment.start + Math.max(1, half - 1);
+            const size = segment.start + segment.size - start;
+            if (start < total) {
+              segments.splice(segments.indexOf(segment) + 1, 0, {
+                anchor: segment.anchor,
+                start,
+                size,
+                split: true,
+              });
+            }
+            segment.size = half;
+            segment.split = true;
+          } else segment.failed = { error };
         } finally {
-          range.reading = undefined;
+          segment.reading = undefined;
         }
         pump();
       });
-      reading.catch(() => {}); // awaited when the range comes first
-      range.reading = reading;
+      reading.catch(() => {}); // awaited when the segment comes first
+      segment.reading = reading;
     };
     /**
-     * Reads on the ranges already started, in order, then starts new ones, up to the window. Waits
+     * Reads the halves of split segments, in order, then plans new segments, up to the window. Waits
      * until a wave of requests fits, so that they leave together, unless the reader waits on the
-     * first range (`now`): its page then leaves with the next pages of the following ranges, a wave
-     * past the window at most.
+     * first segment (`now`): it then leaves with the next ones, a wave past the window at most.
      */
     const pump = (now = false) => {
-      if (stopped || ranges.some((range) => range.failed)) return;
+      if (stopped || segments.some((segment) => segment.failed)) return;
       if (!now && window - used < wave) return;
-      for (const range of ranges) {
+      for (const segment of segments) {
         if (used >= (now ? window + wave : window)) break;
-        if (range.more && !range.reading) read(range);
+        if (!segment.rows && !segment.reading && segment.start < total) read(segment);
       }
-      while (next <= maxId && used < window) {
-        const from = next;
-        // About 80% of a page of matches per range, from the page size learned so far.
-        next += Math.max(1, Math.floor((ordered.pageRows() * 0.8) / density));
-        const range: SyncRange<R> = { after: from - 1, to: next, cap: MAX_LIMIT, pages: [], more: true };
-        ranges.push(range);
-        read(range);
-      }
+      // Up to the position after the last match, so that a full last page means rows were added.
+      while (planning && next < total && used < window) read(plan(next, query.pageRows(cap)));
     };
 
     try {
-      pump();
-      while (ranges.length > 0) {
-        const head = ranges[0] as SyncRange<R>;
-        const page = head.pages.shift();
-        if (page) {
-          used--;
+      // The count goes out with the first page, in one multiquery. That page also tells what a row
+      // of this selection weighs, before the next pages are sized and packed.
+      const first = plan(0, query.pageRows());
+      read(first);
+      const [count] = await Promise.all([query.count().execute(executeOptions), first.reading]);
+      total = Math.min(total, count);
+      planning = count > cursorThreshold;
+      const pageBytes = this.runner.pageSize?.(query.endpoint, query.state.fields).bytes ?? 0;
+      // Pages being read, or read and not yet yielded. A wave more is read on while the reader waits
+      // (see pump), so the window takes 80% of the bytes allowed.
+      window = Math.max(
+        1,
+        Math.min(concurrency, Math.floor((SYNC_BYTES_IN_FLIGHT * 0.8) / Math.max(pageBytes, 1))),
+      );
+      // Requests leave in groups, which automatic batching packs into multiqueries.
+      wave = Math.min(SYNC_WAVE, Math.ceil(window / 4));
+
+      let last = -1;
+      let more = false;
+      while (segments.length > 0) {
+        const head = segments[0] as SyncSegment<R>;
+        const rows = head.rows;
+        if (rows) {
+          segments.shift();
+          if (rows.length > 0) used--;
           pump();
-          yield page;
+          const skipped = head.start > head.anchor.position + 1;
+          // A full page may have more rows after it; so may an empty one that skipped rows, if
+          // matches were deleted since its offset was planned.
+          more = rows.length === head.size || (rows.length === 0 && skipped);
+          const start = (rows[0] as { id: number } | undefined)?.id;
+          // A page that skipped rows and starts past the last one yielded: matches changed since its
+          // offset was planned, so the rows in between are read again.
+          if (start !== undefined && start > last && skipped) {
+            const gap = query.where(`id < ${start}`).cursorPages({ ...executeOptions, after: last });
+            for await (const page of gap) {
+              last = (page[page.length - 1] as { id: number }).id;
+              yield page;
+            }
+          }
+          const from = rows.findIndex((row) => (row as { id: number }).id > last);
+          if (from >= 0) {
+            last = (rows[rows.length - 1] as { id: number }).id;
+            yield from === 0 ? rows : rows.slice(from);
+          }
         } else if (head.failed) {
           throw head.failed.error;
         } else if (head.reading) {
           await head.reading;
-        } else if (head.more) {
-          pump(true);
-          if (!head.reading) read(head); // the next page in order is read even past the window
+        } else if (head.start >= total) {
+          segments.shift(); // a half planned past the matches, before a short page showed where they end
         } else {
-          ranges.shift();
-          pump();
+          pump(true);
+          if (!head.reading) read(head); // the next segment in order is read even past the window
         }
       }
+      // The last page was full, or empty while rows matched: read on after the last row yielded.
+      if (more) yield* query.cursorPages({ ...executeOptions, after: last });
     } finally {
       stopped = true;
     }
@@ -939,18 +991,23 @@ export class WithCount<R> extends Executable<{ data: R[]; total: number }> {
   }
 }
 
-/** Ids after `after` and below `to`, read by `sync()` a page at a time. */
-interface SyncRange<R> {
-  after: number;
-  to: number;
-  /** Rows per page at most: halved when IGDB finds a page too heavy. */
-  cap: number;
-  /** Pages read and not yet yielded. */
-  pages: R[][];
-  /** The page being read. */
+/** A row `sync()` read, and its position among the matches in id order. */
+interface SyncAnchor {
+  id: number;
+  position: number;
+}
+
+/** A page of `sync()`: `size` matches from position `start`, asked for as the rows after `anchor`. */
+interface SyncSegment<R> {
+  anchor: SyncAnchor;
+  start: number;
+  size: number;
+  /** A half of a page IGDB found too heavy. */
+  split?: boolean | undefined;
+  /** The rows, once read. */
+  rows?: R[] | undefined;
+  /** The read in progress. */
   reading?: Promise<void> | undefined;
-  /** The last page was full, so more rows may follow. */
-  more: boolean;
   failed?: { error: unknown } | undefined;
 }
 

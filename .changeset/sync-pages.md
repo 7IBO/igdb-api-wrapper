@@ -1,0 +1,5 @@
+---
+"igdb-kit": patch
+---
+
+`sync()` takes far fewer requests, wherever the matching ids lie. The first page goes out with the count; the other pages are requested in parallel, packed into multiqueries, each asking for the matches after a row already read and skipping those the pages in between hold, so every page comes back full. A day of changes on `games` (about 33,000) takes 8 requests and 3 seconds instead of 87 and 22, all 73,000 companies with `*` 26 requests instead of 90, and the 133,000 rows of one popularity type, crowded into a few stretches of ids, 28 requests and 7 seconds. Matches added or removed during the sync shift the pages: repeated rows are dropped and rows a page skipped past are read again, so none is missed. Sets of up to 5,000 matches, read one page after another until now, are read the same way (`cursorThreshold` defaults to 0). At most `concurrency` pages and about 64 MB are requested or waiting at once, where 40 pages of heavy rows could hold several hundred MB.
