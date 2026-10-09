@@ -103,6 +103,7 @@ Avoid filters three levels deep, such as `involved_companies.company.name`: IGDB
 ```ts
 await igdb.games.select("name").first();                 // R | null
 await igdb.games.select("name").findById(1942);          // R | null
+await igdb.games.select("name").findByIdOrThrow(1942);   // R, or throws NotFoundError (also firstOrThrow())
 await igdb.games.select("name").findByIds(ids);          // R[], in the order given, split by 500
 await igdb.games.where((g) => g.rating.gte(90)).count(); // number
 await igdb.games.select("name").limit(20).withCount();   // { data: R[]; total: number }, one request
@@ -177,6 +178,7 @@ All errors extend `IGDBError` and carry `status`, `details` (IGDB's own error en
 | `TierError` | Data outside your API access tier (the `content_safety_*` endpoints) |
 | `AuthError` | Bad credentials, or a token still refused after one renewal |
 | `RateLimitError` | Still 429 when the retry budget ran out |
+| `NotFoundError` | `findByIdOrThrow()` or `firstOrThrow()` found nothing |
 | `NetworkError` | 5xx or network failure that persisted |
 
 429, 5xx and network errors are retried with backoff until `retryTimeoutMs` (30 s by default) runs out. Every request accepts an `AbortSignal`: `query.execute({ signal })`.

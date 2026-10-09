@@ -20,6 +20,7 @@ export {
   Query,
   type QueryRequest,
   Single,
+  SingleOrThrow,
   WithCount,
 } from "./query/query";
 export type { FieldPath, ScalarPath, SelectResult, TimestampKeys } from "./query/types";
