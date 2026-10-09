@@ -1,16 +1,23 @@
 import type { ExecuteOptions } from "./query";
 
 /**
- * A result that takes several requests, such as a view's games and their linked rows. Nothing is
- * sent before it is awaited or executed, like a query; `execute()` takes the options of a request
- * (`signal`, `priority`, `batch`), which apply to each of them.
+ * A result that takes several requests, such as `findByIds()` or `popular()`. Nothing is sent before
+ * it is awaited or executed, like a query, and `igdb.batch()` takes it like a query. Awaiting it
+ * sends its requests once, the first time; `execute()` sends them again on each call, with the
+ * options of a request (`signal`, `priority`, `batch`), which apply to each of them.
  */
-export class Task<T> implements PromiseLike<T> {
+export class Task<T> implements Promise<T> {
+  private run: Promise<T> | undefined;
+
   /** @internal */
   constructor(private readonly start: (options: ExecuteOptions) => Promise<T>) {}
 
+  get [Symbol.toStringTag](): string {
+    return "Task";
+  }
+
   /** Sends the requests and resolves with the result. Each call sends them again. */
-  execute(options: ExecuteOptions = {}): Promise<T> {
+  async execute(options: ExecuteOptions = {}): Promise<T> {
     return this.start(options);
   }
 
@@ -19,16 +26,18 @@ export class Task<T> implements PromiseLike<T> {
     onfulfilled?: ((value: T) => A | PromiseLike<A>) | null,
     onrejected?: ((reason: unknown) => B | PromiseLike<B>) | null,
   ): Promise<A | B> {
-    return this.execute().then(onfulfilled, onrejected);
+    this.run ??= this.execute();
+    return this.run.then(onfulfilled, onrejected);
   }
 
   /** Runs the task, like `await`, and handles its error as `Promise.catch` does. */
   catch<B = never>(onrejected?: ((reason: unknown) => B | PromiseLike<B>) | null): Promise<T | B> {
-    return this.execute().catch(onrejected);
+    return this.then(undefined, onrejected);
   }
 
   /** Runs the task, like `await`, and calls `onfinally` once it settles, as `Promise.finally` does. */
   finally(onfinally?: (() => void) | null): Promise<T> {
-    return this.execute().finally(onfinally);
+    this.run ??= this.execute();
+    return this.run.finally(onfinally);
   }
 }

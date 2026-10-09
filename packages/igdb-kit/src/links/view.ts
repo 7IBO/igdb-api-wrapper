@@ -149,7 +149,10 @@ export class View<R, W extends ViewLinks> implements PromiseLike<ViewRow<R, W>[]
   /** The games with these ids and their linked rows, all sent together. */
   private async readIds(ids: readonly number[], options: ExecuteOptions): Promise<ViewRow<R, W>[]> {
     const batched = { ...options, batch: true };
-    const [games, linked] = await Promise.all([this.base.findByIds(ids, batched), this.load(ids, batched)]);
+    const [games, linked] = await Promise.all([
+      this.base.findByIds(ids).execute(batched),
+      this.load(ids, batched),
+    ]);
     return this.attach(games, linked);
   }
 

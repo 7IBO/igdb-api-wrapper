@@ -411,6 +411,16 @@ const { top, total, ps5 } = await igdb.batch({
 // ps5: { id: number; name?: string } | null
 ```
 
+It also takes views and the methods that take several requests, such as `findByIds()`, `findByGames()` or `popular()`, which return a `Task`: their first requests share the multiquery.
+
+```ts
+// 1 HTTP request
+const { games, dates } = await igdb.batch({
+  games: igdb.games.select("name").findByIds([1942, 1020]),
+  dates: igdb.release_dates.select("date", "platform").findByGames([1942]),
+});
+```
+
 Some queries are always sent alone: `search` queries (IGDB returns an empty multiquery when one block searches), `withCount()` (the total comes from a header multiquery does not have), and any query run with `execute({ batch: false })`. Set `autoBatch: false` to turn automatic grouping off; `batch()` still groups.
 
 ### Caching
@@ -543,13 +553,14 @@ The same rules hold across the library:
 - **Names.** IGDB's data keeps IGDB's names, in snake_case: endpoints, fields and the rows they return (`release_dates`, `first_release_date`). What igdb-kit adds is in camelCase: methods, options and computed objects (`findByGames()`, `includeWorldwide`, `minimumAge`). A row meant to be stored keeps IGDB's columns, such as `calculated_at` in `popularitySnapshot()`.
 - **Methods.** An endpoint only has the methods that work on it. `igdb.games` is a `GamesQuery`, with `popular()`, `weightedPopular()`, `releases()` and `findByExternalIds()`; the 24 endpoints whose rows point to games, such as `release_dates` or `characters`, are `GameLinkedQuery`s, with `findByGames()`; the others are plain `Query`s. `QueryOf<"release_dates">` names the type of an endpoint, and `select()`, `where()` and the other builder methods keep it.
 - **Placement.** A method that returns an endpoint's rows is on that endpoint, even when it reads others along the way (`igdb.games.popular()`, `igdb.release_dates.findByGames()`). The rest is on the client (`igdb.batch()`, `igdb.searchAll()`, `igdb.expand()`, `igdb.popularitySnapshot()`). Helpers that send no request are in `igdb-kit/game`, and server pieces in `igdb-kit/proxy`, `igdb-kit/redis` and `igdb-kit/webhooks`.
+- **Laziness.** Nothing is sent before it is awaited or executed: queries, views, and the `Task` returned by the methods that take several requests (`findByIds()`, `findByGames()`, `findByExternalIds()`, `popular()`, `weightedPopular()`, `releases()`, `searchAll()`, `expand()`). All of them go in `batch()`, and request options (`signal`, `priority`, `batch`) go to their `execute()`. A task is typed as a promise and sends its requests once, however many times it is awaited; `execute()` sends them again. `iterate()`, `sync()` and `popularitySnapshot()`, read with `for await`, take the request options among their own. `batch()`, `raw()` and the `webhooks` methods send at once.
 - **Options.** `limit` is the number of results (10 by default, 500 at most; `popularitySnapshot()` takes it per metric), `offset` skips results, `pageSize` is the number of rows of a page read by `iterate()`, `concurrency` the pages `sync()` requests at once, and `maxRows` caps the rows read: a method that ranks (`popular()`, `weightedPopular()`, `searchAll()`) returns the best it found within it, and `releases()`, which lists everything, throws rather than return part of the list. Options that filter on ids have plural names and take one id or several (`platforms`, `regions`, `statuses`, `gameTypes`, `types`); `releaseDate()` takes one `platform` and one `region`, since they choose the date to show rather than filter. A boolean that widens a filter starts with `include` (`includeWorldwide`, `includeEditions`).
 - **Dates.** A date argument takes a `Date`, a `"YYYY-MM-DD"` or ISO string, or Unix seconds (`DateInput`), and a number in milliseconds such as `Date.now()` throws a `QueryError`. Rows keep IGDB's Unix seconds, and computed objects give `Date`s (`start` and `end` of a release).
 - **Missing values.** A row leaves out the fields IGDB leaves out. A computed object has all its keys, with `null` where there is no value, so that it survives `JSON.stringify` and Next.js props, and a lookup that finds nothing returns `null` (`first()`, `findById()`, `releaseDate()`). `imageUrl()` is the exception: it returns `undefined` without an image, which `<img src>` accepts.
 - **Reference values.** IGDB ids everywhere, in options and in computed objects, read and written with the generated constants (`Platform.NintendoSwitch`, `ReleaseDateStatus.FullRelease`). Strings are for igdb-kit's own notions: `precision`, `match`, `store`, `relation`, `kind`.
 - **Read-only rows.** Identical queries sent at the same time share one response, so treat rows as read-only: igdb-kit never changes a row it received.
 - **Errors.** A `QueryError` for anything wrong with a query, whether igdb-kit finds it before sending or IGDB rejects the query; a `NotFoundError` for `*OrThrow()` and a company name that matches nothing; a `TypeError` for a wrong argument outside any query, such as something that is not an image id. An `IGDBError` carries the `endpoint` and the `query` it comes from.
-- **Renames.** A renamed method or option keeps working under its old name for one minor version, marked deprecated so that editors strike it through.
+- **Renames.** A renamed method or option, or a replaced way to pass options, keeps working for one minor version, marked deprecated so that editors strike it through.
 
 ## Compatibility
 

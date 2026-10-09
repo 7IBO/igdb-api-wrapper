@@ -16,7 +16,6 @@ import {
   popularitySnapshot,
 } from "./query/popularity";
 import {
-  type Executable,
   type ExecuteOptions,
   GameLinkedQuery,
   GamesQuery,
@@ -29,6 +28,7 @@ import {
   type RawResponse,
 } from "./query/query";
 import { type SearchAll, type SearchAllOptions, searchAll } from "./query/search-all";
+import { Task } from "./query/task";
 import type { FieldPath, SelectResult } from "./query/types";
 import { Webhooks } from "./webhooks/api";
 
@@ -83,8 +83,10 @@ export interface IGDBProxyClientOptions extends CommonClientOptions {
 
 export type IGDBClientOptions = IGDBServerClientOptions | IGDBProxyClientOptions;
 
-// biome-ignore lint/suspicious/noExplicitAny: any executable result type is accepted.
-type BatchInput = Record<string, Executable<any>>;
+/** What `batch()` runs: a query, a view or a task, anything awaited that takes request options. */
+// biome-ignore lint/suspicious/noExplicitAny: any result type is accepted.
+type Batchable = PromiseLike<any> & { execute(options?: ExecuteOptions): Promise<any> };
+type BatchInput = Record<string, Batchable>;
 export type BatchResult<T extends BatchInput> = { [K in keyof T]: Awaited<T[K]> };
 
 /**
@@ -93,8 +95,10 @@ export type BatchResult<T extends BatchInput> = { [K in keyof T]: Awaited<T[K]> 
  */
 export type IGDBClient = { readonly [K in EndpointName]: QueryOf<K> } & {
   /**
-   * Runs several queries together, as few multiqueries as possible (10 per request), and returns
-   * each result under its key with its own type. Works even when `autoBatch` is off.
+   * Runs several queries, views and tasks together, and returns each result under its key with its
+   * own type. Requests sent at the same time go as few multiqueries as possible (10 per request), so
+   * single queries take one multiquery and tasks such as `findByIds()` or `popular()` share theirs.
+   * Works even when `autoBatch` is off.
    */
   batch<T extends BatchInput>(queries: T, options?: Omit<ExecuteOptions, "batch">): Promise<BatchResult<T>>;
   /**
@@ -147,8 +151,14 @@ export type IGDBClient = { readonly [K in EndpointName]: QueryOf<K> } & {
     rows: readonly T[],
     key: K,
     target: Query<N, E>,
-    options?: ExecuteOptions,
-  ): Promise<Expanded<T, K, E>[]>;
+  ): Task<Expanded<T, K, E>[]>;
+  /** @deprecated Pass the options to `execute()`: `igdb.expand(rows, key, target).execute({ signal })`. */
+  expand<T extends object, K extends IdKeys<T>, N extends EndpointName, E>(
+    rows: readonly T[],
+    key: K,
+    target: Query<N, E>,
+    options: ExecuteOptions | undefined,
+  ): Task<Expanded<T, K, E>[]>;
 };
 
 /** Sends a query as is, without batching, through the cache. Used by `igdb-kit/proxy`. */
@@ -209,7 +219,9 @@ export function createIGDB(options: IGDBClientOptions): IGDBClient {
       return Object.fromEntries(keys.map((key, i) => [key, results[i]]));
     },
     searchAll: (term: string, searchOptions?: SearchAllOptions) =>
-      searchAll(client.search as Query<"search">, term, searchOptions),
+      new Task((execute) =>
+        searchAll(client.search as Query<"search">, term, { ...searchOptions, ...execute }),
+      ),
     webhooks: new Webhooks((method, path, body, requestOptions) =>
       transport.request(
         method,
@@ -236,7 +248,8 @@ export function createIGDB(options: IGDBClientOptions): IGDBClient {
       const games = (client.games as GamesQuery).select(...((definition.select ?? []) as never[]));
       return new View(games, definition.with ?? {});
     },
-    expand,
+    expand: (rows: readonly object[], key: never, target: never, expandOptions?: ExecuteOptions) =>
+      new Task((execute) => expand(rows, key, target, { ...expandOptions, ...execute })),
     [forwardKey]: ((path, body, forwardOptions) =>
       cached(path, body, forwardOptions.cacheTtlMs ?? 0, () =>
         transport.send(path, body, { signal: forwardOptions.signal }),

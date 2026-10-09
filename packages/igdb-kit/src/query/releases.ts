@@ -1,7 +1,7 @@
 import { QueryError } from "../core/errors";
 import type { EndpointName } from "../generated/schema";
 import { type DateInput, dateMillis } from "./dates";
-import type { ExecuteOptions, Query } from "./query";
+import type { DeprecatedExecuteOptions, ExecuteOptions, Query } from "./query";
 import { type ReleaseDetails, type ReleasePrecision, releaseDetails } from "./release-period";
 
 export type { ReleaseDetails, ReleasePrecision };
@@ -50,7 +50,7 @@ export interface ReleaseFilter {
   to?: DateInput | undefined;
 }
 
-export interface ReleasesOptions extends ReleaseFilter, ExecuteOptions {
+export interface ReleasesOptions extends ReleaseFilter, DeprecatedExecuteOptions {
   /**
    * Start of the window, inclusive: a `Date`, a `"YYYY-MM-DD"` string or Unix seconds. Release dates
    * are calendar days stored at 00:00 UTC, so the window is in UTC days: `from` is rounded down to its

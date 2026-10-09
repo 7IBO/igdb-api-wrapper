@@ -7,7 +7,8 @@ import {
   type Platform,
   type Theme,
 } from "../generated/schema";
-import { type ExecuteOptions, MAX_LIMIT, type Query } from "./query";
+import { type DeprecatedExecuteOptions, MAX_LIMIT, type Query } from "./query";
+import type { Task } from "./task";
 import type { FieldPath, Prettify, SelectResult } from "./types";
 
 /**
@@ -71,7 +72,7 @@ export type SearchHit<
     >
   : never;
 
-export interface SearchAllOptions extends ExecuteOptions {
+export interface SearchAllOptions extends DeprecatedExecuteOptions {
   /** Kinds to return. Default: all of them. */
   kinds?: readonly SearchKind[] | undefined;
   /** Number of hits, 1 to 500. Default 10. */
@@ -119,7 +120,7 @@ export type SearchAll = <
       theme?: readonly FieldPath<Theme, PT>[];
     };
   },
-) => Promise<SearchHit<K, { game: PG; character: PC; collection: PS; platform: PP; theme: PT }>[]>;
+) => Task<SearchHit<K, { game: PG; character: PC; collection: PS; platform: PP; theme: PT }>[]>;
 
 interface SearchRow {
   id: number;

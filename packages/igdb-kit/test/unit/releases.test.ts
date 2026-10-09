@@ -254,7 +254,9 @@ describe("releases()", () => {
       "sort id asc; limit 500; offset 500;",
     ]);
     const huge = testClient(api(rows, { total: 25_000 }).fetch);
-    await expect(huge.games.releases({ from: "2026-01-01", to: "2027-01-01" })).rejects.toThrow(/maxRows/);
+    await expect(huge.games.releases({ from: "2026-01-01", to: "2027-01-01" }).execute()).rejects.toThrow(
+      /maxRows/,
+    );
   });
 
   test("the query's limit and offset page the entries; sort throws", async () => {
@@ -265,19 +267,25 @@ describe("releases()", () => {
     ]);
     expect((await igdb.games.offset(3).releases(october)).map((e) => e.game.id)).toEqual([900]);
     expect(await igdb.games.limit(0).releases(october)).toEqual([]);
-    await expect(igdb.games.sort("name").releases(october)).rejects.toThrow(/remove sort\(\)/);
+    await expect(igdb.games.sort("name").releases(october).execute()).rejects.toThrow(/remove sort\(\)/);
   });
 
   test("validates its input", async () => {
     const igdb = testClient(api(rows).fetch);
-    await expect(igdb.games.releases({ from: "2026-11-01", to: "2026-10-01" })).rejects.toThrow(/after/);
-    await expect(igdb.games.releases({ from: "soon", to: "2026-10-01" })).rejects.toThrow(QueryError);
-    await expect(igdb.games.releases({ from: Date.now(), to: "2027-10-01" })).rejects.toThrow(/milliseconds/);
+    await expect(igdb.games.releases({ from: "2026-11-01", to: "2026-10-01" }).execute()).rejects.toThrow(
+      /after/,
+    );
+    await expect(igdb.games.releases({ from: "soon", to: "2026-10-01" }).execute()).rejects.toThrow(
+      QueryError,
+    );
+    await expect(igdb.games.releases({ from: Date.now(), to: "2027-10-01" }).execute()).rejects.toThrow(
+      /milliseconds/,
+    );
     await expect(
-      igdb.games.releases({ from: "2026-10-01", to: "2026-11-01", platforms: [] }),
+      igdb.games.releases({ from: "2026-10-01", to: "2026-11-01", platforms: [] }).execute(),
     ).rejects.toThrow(/platforms/);
     await expect(
-      igdb.games.search("zelda").releases({ from: "2026-10-01", to: "2026-11-01" }),
+      igdb.games.search("zelda").releases({ from: "2026-10-01", to: "2026-11-01" }).execute(),
     ).rejects.toThrow(/search/);
     // @ts-expect-error only on games
     expect(igdb.platforms.releases).toBeUndefined();

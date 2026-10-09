@@ -17,6 +17,7 @@ import {
   PopularityType,
   type Query,
   type QueryOf,
+  type ReleaseCalendarEntry,
   ReleaseDateRegion,
   ReleaseDateStatus,
   type ResultOf,
@@ -311,6 +312,31 @@ expectType<
   >
 >();
 
+// batch() also takes tasks, which the methods that take several requests return, and views.
+const mixed = await igdb.batch({
+  byIds: igdb.games.select("name").findByIds([1, 2]),
+  top: igdb.games.select("name").popular(PopularityType.IGDBPlaying),
+  dates: igdb.release_dates.select("date").findByGames([1942]),
+  hits: igdb.searchAll("zelda", { kinds: ["platform"] }),
+});
+expectType<Equal<typeof mixed.byIds, { id: number; name?: string }[]>>();
+expectType<Equal<typeof mixed.top, { game: { id: number; name?: string }; value: number }[]>>();
+expectType<Equal<typeof mixed.dates, Map<number, { id: number; date?: number }[]>>>();
+expectType<Equal<(typeof mixed.hits)[number]["kind"], "platform">>();
+// @ts-expect-error a promise has already started: batch() takes what it starts itself
+igdb.batch({ started: Promise.resolve(1) });
+
+// A task is lazy and typed as a promise of its result.
+const task = igdb.games.select("name").findByIds([1]);
+expectType<Equal<typeof task, Task<{ id: number; name?: string }[]>>>();
+expectType<typeof task extends Promise<{ id: number; name?: string }[]> ? true : false>();
+expectType<Equal<Awaited<ReturnType<typeof task.execute>>, { id: number; name?: string }[]>>();
+expectType<Equal<ReturnType<typeof igdb.games.releases>, Task<ReleaseCalendarEntry<{ id: number }>[]>>>();
+// Deprecated, still accepted: request options as the last argument, or among the method's options.
+igdb.games.findByIds([1], { signal: AbortSignal.timeout(1000) });
+igdb.games.popular(PopularityType.IGDBPlaying, { priority: "background" });
+igdb.searchAll("zelda", { batch: false });
+
 // popular() keeps the selection and adds the score; only on games.
 const popular = await igdb.games.select("name").popular(PopularityType.IGDBPlaying);
 expectType<Equal<typeof popular, { game: { id: number; name?: string }; value: number }[]>>();
@@ -450,6 +476,8 @@ expectType<Equal<typeof pageWithCount, { data: GamePage[]; total: number }>>();
 expectType<Equal<ReturnType<typeof gamePage.first>, Task<GamePage | null>>>();
 const pageOrNull = await gamePage.limit(5).catch(() => null);
 expectType<Equal<typeof pageOrNull, GamePage[] | null>>();
+const viewBatch = await igdb.batch({ one: gamePage.findById(1942), list: gamePage.limit(2) });
+expectType<Equal<typeof viewBatch, { one: GamePage | null; list: GamePage[] }>>();
 // @ts-expect-error unknown field in a view's select
 igdb.defineView("games", { select: ["nom"] });
 // @ts-expect-error a key that hides a game field
@@ -468,6 +496,17 @@ const withCover = await igdb.expand(listed, "cover", igdb.covers.select("image_i
 expectType<Equal<(typeof withCover)[number]["cover"], { id: number; image_id?: string } | undefined>>();
 // @ts-expect-error name holds no ids
 igdb.expand(listed, "name", igdb.platforms);
+// The target of expand() can be any endpoint's query, games included.
+const events = await igdb.events.select("name", "games").limit(1);
+const eventGames = await igdb.expand(events, "games", igdb.games.select("name"));
+expectType<Equal<(typeof eventGames)[number]["games"], { id: number; name?: string }[] | undefined>>();
+const expandTask = igdb.expand(listed, "platforms", igdb.platforms, { priority: "background" });
+expectType<
+  Equal<
+    typeof expandTask,
+    Task<{ id: number; name?: string; platforms?: { id: number }[]; cover?: number }[]>
+  >
+>();
 
 // Webhook deliveries narrow by endpoint and operation.
 import { webhookHandler } from "../../src/webhooks";

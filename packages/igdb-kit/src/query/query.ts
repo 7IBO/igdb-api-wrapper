@@ -28,6 +28,7 @@ import {
   type ReleasesOptions,
   releaseCalendar,
 } from "./releases";
+import { Task } from "./task";
 import type { ExcludePath, ExcludeResult, FieldPath, ScalarKeys, SelectResult } from "./types";
 import { type Condition, type NameLookup, throwIfRemoved, type WhereRoot, whereProxy } from "./where";
 
@@ -101,7 +102,20 @@ export interface QueryRunner {
   pageSize?(endpoint: EndpointName, fields: readonly string[]): { rows: number; bytes: number };
 }
 
-export interface PopularOptions extends ExecuteOptions {
+/**
+ * Request options that the methods returning a `Task` (`popular()`, `releases()`, `searchAll()`…)
+ * also take among their own options, deprecated: pass them to the task's `execute()`.
+ */
+export interface DeprecatedExecuteOptions {
+  /** @deprecated Pass it to `execute()`: `igdb.games.popular(type).execute({ signal })`. */
+  signal?: AbortSignal | undefined;
+  /** @deprecated Pass it to `execute()`: `igdb.games.popular(type).execute({ priority })`. */
+  priority?: Priority | undefined;
+  /** @deprecated Pass it to `execute()`, or put the task in `igdb.batch()`. */
+  batch?: boolean | undefined;
+}
+
+export interface PopularOptions extends DeprecatedExecuteOptions {
   /**
    * @deprecated Use the query's `limit()`, with `offset()` for the next pages:
    * `igdb.games.limit(20).popular(type)`. Number of games to return, 0 to 500.
@@ -375,9 +389,17 @@ export class Query<N extends EndpointName, R = { id: number }> extends Executabl
    * The entities with these ids, in the order given (missing ids are skipped). Splits them into
    * chunks of 500, fewer when the selected rows are heavy, which `batch` and automatic batching send
    * together; a chunk IGDB finds too heavy is split in two. The query's `offset` and `sort` do not
-   * apply.
+   * apply. Sends nothing before it is awaited.
    */
-  async findByIds(ids: readonly number[], options?: ExecuteOptions): Promise<R[]> {
+  findByIds(ids: readonly number[]): Task<R[]>;
+  /** @deprecated Pass the options to `execute()`: `query.findByIds(ids).execute({ signal })`. */
+  findByIds(ids: readonly number[], options: ExecuteOptions | undefined): Task<R[]>;
+  findByIds(ids: readonly number[], options?: ExecuteOptions): Task<R[]> {
+    return new Task((execute) => this.runFindByIds(ids, { ...options, ...execute }));
+  }
+
+  /** `findByIds()`, run. */
+  private async runFindByIds(ids: readonly number[], options: ExecuteOptions): Promise<R[]> {
     const unique = [...new Set(ids.map(toId))];
     const query = this.byIds();
     const size = query.pageRows();
@@ -720,10 +742,26 @@ export class GamesQuery<R = { id: number }> extends Query<"games", R> {
    * ["292030"])`. Returns a map from each found id to its game, with the selected fields; ids IGDB
    * does not know, or whose game this query's `where` excludes, are missing.
    */
-  async findByExternalIds(
+  findByExternalIds(source: number, uids: readonly (string | number)[]): Task<Map<string, R>>;
+  /** @deprecated Pass the options to `execute()`: `findByExternalIds(source, uids).execute({ signal })`. */
+  findByExternalIds(
+    source: number,
+    uids: readonly (string | number)[],
+    options: ExecuteOptions | undefined,
+  ): Task<Map<string, R>>;
+  findByExternalIds(
     source: number,
     uids: readonly (string | number)[],
     options?: ExecuteOptions,
+  ): Task<Map<string, R>> {
+    return new Task((execute) => this.runFindByExternalIds(source, uids, { ...options, ...execute }));
+  }
+
+  /** `findByExternalIds()`, run. */
+  private async runFindByExternalIds(
+    source: number,
+    uids: readonly (string | number)[],
+    options: ExecuteOptions,
   ): Promise<Map<string, R>> {
     const unique = [...new Set(uids.map(String))];
     // One uid can have several rows (per platform or edition), so ask for fewer uids than rows.
@@ -744,7 +782,7 @@ export class GamesQuery<R = { id: number }> extends Query<"games", R> {
         }
       }),
     );
-    const games = await this.findByIds([...gameOf.values()], options);
+    const games = await this.findByIds([...gameOf.values()]).execute(options);
     const byId = new Map(games.map((game) => [(game as { id: number }).id, game]));
     const result = new Map<string, R>();
     for (const uid of unique) {
@@ -763,7 +801,12 @@ export class GamesQuery<R = { id: number }> extends Query<"games", R> {
    * the first page: if it is not enough and they are at most 10,000, their own rows are read instead,
    * which is exact and takes a few requests.
    */
-  async popular(type: number, options: PopularOptions = {}): Promise<{ game: R; value: number }[]> {
+  popular(type: number, options: PopularOptions = {}): Task<{ game: R; value: number }[]> {
+    return new Task((execute) => this.runPopular(type, { ...options, ...execute }));
+  }
+
+  /** `popular()`, run. */
+  private async runPopular(type: number, options: PopularOptions): Promise<{ game: R; value: number }[]> {
     if (this.state.search) throw new QueryError("popular() cannot be combined with search");
     const { limit: deprecatedLimit, maxRows = 5000, ...execute } = options;
     const page = this.rankingPage("popular()", deprecatedLimit);
@@ -797,10 +840,7 @@ export class GamesQuery<R = { id: number }> extends Query<"games", R> {
         seen.add(row.game_id);
         ranked.push({ id: row.game_id, value: row.value ?? 0 });
       }
-      const games = await this.findByIds(
-        ranked.map((row) => row.id),
-        execute,
-      );
+      const games = await this.findByIds(ranked.map((row) => row.id)).execute(execute);
       const byId = new Map(games.map((game) => [(game as { id: number }).id, game]));
       for (const { id, value } of ranked) {
         const game = byId.get(id);
@@ -873,10 +913,7 @@ export class GamesQuery<R = { id: number }> extends Query<"games", R> {
     }
     const ranked = [...best].sort((a, b) => b[1] - a[1] || a[0] - b[0]).slice(0, limit);
     const games = new Map(found.map(({ game }) => [(game as { id: number }).id, game]));
-    const read = await this.findByIds(
-      ranked.flatMap(([id]) => (games.has(id) ? [] : [id])),
-      execute,
-    );
+    const read = await this.findByIds(ranked.flatMap(([id]) => (games.has(id) ? [] : [id]))).execute(execute);
     for (const game of read) games.set((game as { id: number }).id, game);
     return ranked.flatMap(([id, value]) => {
       const game = games.get(id);
@@ -895,9 +932,17 @@ export class GamesQuery<R = { id: number }> extends Query<"games", R> {
    * are counted during the first round: if it does not settle the top and they are at most 10,000,
    * their own rows are scored instead.
    */
-  async weightedPopular(
+  weightedPopular(
     weights: PopularityWeights,
     options: WeightedPopularOptions = {},
+  ): Task<WeightedPopular<R>[]> {
+    return new Task((execute) => this.runWeightedPopular(weights, { ...options, ...execute }));
+  }
+
+  /** `weightedPopular()`, run. */
+  private async runWeightedPopular(
+    weights: PopularityWeights,
+    options: WeightedPopularOptions,
   ): Promise<WeightedPopular<R>[]> {
     if (this.state.search) throw new QueryError("weightedPopular() cannot be combined with search");
     const page = this.rankingPage("weightedPopular()", options.limit);
@@ -908,7 +953,7 @@ export class GamesQuery<R = { id: number }> extends Query<"games", R> {
     });
     const ranked = await weightedPopular(
       rows,
-      (ids, execute) => this.findByIds(ids, execute),
+      (ids, execute) => this.findByIds(ids).execute(execute),
       weights,
       // The games before the page are ranked too.
       { ...options, limit: page.offset + page.limit },
@@ -924,14 +969,23 @@ export class GamesQuery<R = { id: number }> extends Query<"games", R> {
    * and `where` of this query apply to the games; its `limit` and `offset`, when set, page the entries,
    * and `sort` throws. Costs 1 + `ceil(dates / 500)` requests, batched, plus `ceil(games / 500)`.
    */
-  async releases(options: ReleasesOptions): Promise<ReleaseCalendarEntry<R>[]> {
+  releases(options: ReleasesOptions): Task<ReleaseCalendarEntry<R>[]> {
+    return new Task((execute) => this.runReleases({ ...options, ...execute }));
+  }
+
+  /** `releases()`, run. */
+  private async runReleases(options: ReleasesOptions): Promise<ReleaseCalendarEntry<R>[]> {
     if (this.state.search) throw new QueryError("releases() cannot be combined with search");
     if (this.state.sort) throw new QueryError("releases() returns games by release date: remove sort()");
     const dates = new Query<EndpointName, ReleaseRow>(this.runner, "release_dates", {
       fields: RELEASE_FIELDS,
       sort: { field: "id", direction: "asc" },
     });
-    const entries = await releaseCalendar(dates, (ids, execute) => this.findByIds(ids, execute), options);
+    const entries = await releaseCalendar(
+      dates,
+      (ids, execute) => this.findByIds(ids).execute(execute),
+      options,
+    );
     const { limit, offset = 0 } = this.state;
     return limit === undefined ? entries.slice(offset) : entries.slice(offset, offset + limit);
   }
@@ -952,13 +1006,16 @@ export class GameLinkedQuery<N extends GameLinkedEndpoint, R = { id: number }> e
    * no time to beat). A row linked to several of the games is under each of them. Ids are split by
    * 500 and pages of 500 rows are read until the end, sent together so batching packs them.
    */
-  findByGames(gameIds: readonly number[], options?: ExecuteOptions): Promise<Map<number, R[]>> {
-    return findByGames<R>(this as never, gameIds, options);
+  findByGames(gameIds: readonly number[]): Task<Map<number, R[]>>;
+  /** @deprecated Pass the options to `execute()`: `query.findByGames(ids).execute({ signal })`. */
+  findByGames(gameIds: readonly number[], options: ExecuteOptions | undefined): Task<Map<number, R[]>>;
+  findByGames(gameIds: readonly number[], options?: ExecuteOptions): Task<Map<number, R[]>> {
+    return new Task((execute) => findByGames<R>(this as never, gameIds, { ...options, ...execute }));
   }
 
   /** @deprecated Renamed `findByGames()`, like `findById()` and `findByIds()`; same arguments. */
-  byGame(gameIds: readonly number[], options?: ExecuteOptions): Promise<Map<number, R[]>> {
-    return findByGames<R>(this as never, gameIds, options);
+  byGame(gameIds: readonly number[], options?: ExecuteOptions): Task<Map<number, R[]>> {
+    return new Task((execute) => findByGames<R>(this as never, gameIds, { ...options, ...execute }));
   }
 }
 
