@@ -1,12 +1,24 @@
 export { type AgeRatingFields, ageRating, ageRatings, type GameAgeRating } from "./age";
+export {
+  type AlternativeNameInfo,
+  type AlternativeNameKind,
+  type AlternativeNameVariant,
+  type AlternativeTitle,
+  alternativeTitles,
+  parseAlternativeName,
+} from "./alternative-names";
 export { type CompanyFields, companies, type GameCompanies } from "./companies";
 export { type GameLanguage, type LanguageFields, languages } from "./languages";
+export { type ResolvedLocale, resolveLocale } from "./locale";
 export { type Multiplayer, type MultiplayerFields, multiplayer } from "./multiplayer";
 export {
   type AlternativeNameFields,
   type LocalizationFields,
+  type LocalizedCover,
+  type LocalizedCoverFields,
   type LocalizedName,
   localization,
+  localizedCover,
   localizedName,
 } from "./names";
 export {

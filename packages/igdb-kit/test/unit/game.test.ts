@@ -2,22 +2,28 @@ import { describe, expect, test } from "bun:test";
 import {
   AgeRatingOrganization,
   GameReleaseFormat,
+  Language,
   Platform,
+  Region,
   ReleaseDateRegion,
   ReleaseDateStatus,
 } from "../../src";
 import {
   ageRating,
   ageRatings,
+  alternativeTitles,
   companies,
   formatPlaytime,
   languages,
   localization,
+  localizedCover,
   localizedName,
   multiplayer,
   parentGame,
+  parseAlternativeName,
   releaseDate,
   releasesByPlatform,
+  resolveLocale,
   storeLinks,
   storeOf,
   timeToBeat,
@@ -112,9 +118,11 @@ describe("releaseDate()", () => {
     expect(switchIn("de_DE")).toMatchObject({ human: "Mar 18, 2021", match: "exact" });
     expect(switchIn("ja-JP")).toMatchObject({ human: "Jun 24, 2021", match: "exact" });
     expect(switchIn("en-AU")).toMatchObject({ human: "Sep 17, 2020", match: "worldwide" });
-    // No country, or one IGDB has no region for: no region requested.
-    expect(switchIn("fr")).toMatchObject({ human: "Sep 17, 2020", match: "any_region" });
-    expect(switchIn("es-MX")).toMatchObject({ match: "any_region" });
+    // A locale without a country takes its likely one: "fr" is France.
+    expect(switchIn("fr")).toMatchObject({ human: "Mar 18, 2021", match: "exact" });
+    expect(switchIn("ja")).toMatchObject({ human: "Jun 24, 2021", match: "exact" });
+    // A country IGDB has no region for: no region requested.
+    expect(switchIn("es-MX")).toMatchObject({ human: "Sep 17, 2020", match: "any_region" });
     // An explicit region wins over the locale.
     expect(
       releaseDate(fixtures.hades, {
@@ -449,10 +457,14 @@ describe("localizedName()", () => {
     expect(localizedName(fixtures.witcher3, "ja-JP")).toEqual({
       name: "ウィッチャー3 ワイルドハント",
       source: "localization",
+      language: "ja-JP",
+      variant: null,
     });
     expect(localizedName(fixtures.witcher3, "ko")).toEqual({
       name: "더 위쳐 3: 와일드 헌트",
       source: "localization",
+      language: "ko-KR",
+      variant: null,
     });
   });
 
@@ -460,6 +472,8 @@ describe("localizedName()", () => {
     expect(localizedName(fixtures.witcher3, "pl-PL")).toEqual({
       name: "Wiedźmin 3: Dziki Gon",
       source: "alternative_name",
+      language: "pl",
+      variant: null,
     });
     expect(localizedName(fixtures.witcher3, "ru")?.name).toBe("Ведьмак 3: Дикая охота"); // "Russian Title"
     expect(localizedName(fixtures.witcher3, "cs-CZ")?.name).toBe("Zaklínač 3: Divoký hon");
@@ -475,19 +489,23 @@ describe("localizedName()", () => {
       name: "Persona 5 Royal",
       alternative_names: fixtures.persona5Royal.alternative_names ?? [],
     };
-    expect(localizedName(romanized, "ja-JP")).toEqual({ name: "Persona 5 Royal", source: "name" });
+    expect(localizedName(romanized, "ja-JP")).toMatchObject({ name: "Persona 5 Royal", source: "name" });
   });
 
   test("the European localization for a European country", () => {
     expect(localizedName(fixtures.monsterRancher2, "en-GB")).toEqual({
       name: "Monster Rancher",
       source: "localization",
+      language: null,
+      variant: null,
     });
     expect(localizedName(fixtures.monsterRancher2, "en-US")).toEqual({
       name: "Monster Rancher 2",
       source: "name",
+      language: null,
+      variant: null,
     });
-    expect(localizedName(fixtures.monsterRancher2, "en")).toEqual({
+    expect(localizedName(fixtures.monsterRancher2, "en")).toMatchObject({
       name: "Monster Rancher 2",
       source: "name",
     });
@@ -495,7 +513,7 @@ describe("localizedName()", () => {
 
   test("a localization without a name falls through", () => {
     // The Witcher 3 has a European localization with a cover but no name.
-    expect(localizedName(fixtures.witcher3, "fr-FR")).toEqual({
+    expect(localizedName(fixtures.witcher3, "fr-FR")).toMatchObject({
       name: "The Witcher 3: Wild Hunt",
       source: "name",
     });
@@ -519,8 +537,318 @@ describe("localizedName()", () => {
   });
 
   test("only the name selected", () => {
-    expect(localizedName({ id: 1, name: "Pong" }, "ja-JP")).toEqual({ name: "Pong", source: "name" });
+    expect(localizedName({ id: 1, name: "Pong" }, "ja-JP")).toEqual({
+      name: "Pong",
+      source: "name",
+      language: null,
+      variant: null,
+    });
     expect(localizedName({ id: 1 } as { id: number; name?: string }, "ja-JP")).toBeNull();
+  });
+
+  test("alternative names in the wrong script are skipped, unless marked original", () => {
+    const named = (name: string, ...rows: [comment: string, name: string][]) => ({
+      name,
+      alternative_names: rows.map(([comment, n]) => ({ comment, name: n })),
+    });
+    // 28% of the "Japanese title" rows without a variant are romanizations.
+    expect(
+      localizedName(named("Persona 5 Royal", ["Japanese title", "Persona 5 The Royal"]), "ja")?.source,
+    ).toBe("name");
+    // Some official Japanese titles are in Latin letters.
+    expect(
+      localizedName(named("Resident Evil", ["Japanese title - original", "BIOHAZARD"]), "ja-JP"),
+    ).toEqual({
+      name: "BIOHAZARD",
+      source: "alternative_name",
+      language: "ja",
+      variant: "original",
+    });
+    const mother = named(
+      "Mother 3",
+      ["Japanese title - stylized", "MOTHER３"],
+      ["Japanese title - romanization", "Mazā Surī"],
+      ["Japanese title", "マザー3"],
+      ["Japanese title - original", "マザースリー"],
+    );
+    expect(localizedName(mother, "ja")?.name).toBe("マザースリー");
+    // Pinyin labeled "simplified", and kana in a "Chinese title".
+    const pinyin = named(
+      "Genshin",
+      ["Chinese title - simplified", "Yuanshen"],
+      ["Chinese title", "げんしん"],
+    );
+    expect(localizedName(pinyin, "zh-CN")?.source).toBe("name");
+    expect(localizedName(named("The Witcher 3", ["Russian title", "Vedmak 3"]), "ru")?.source).toBe("name");
+  });
+
+  test("translations only in the language's own script", () => {
+    const game = {
+      name: "Dragon Quest",
+      alternative_names: [
+        { comment: "Japanese title - translated", name: "Dragon Warrior" },
+        { comment: "Korean title - translated", name: "드래곤 퀘스트" },
+        { comment: "Portuguese title - translated", name: "Dragon Quest" },
+        { comment: "Korean title - romanization", name: "Deuraegon Kweseuteu" },
+      ],
+    };
+    expect(localizedName(game, "ja")?.source).toBe("name");
+    expect(localizedName(game, "ko-KR")).toMatchObject({ name: "드래곤 퀘스트", variant: "translated" });
+    expect(localizedName(game, "pt-BR")?.source).toBe("name");
+  });
+
+  test("countries and markets: Brazilian, Taiwanese, UK and North American titles", () => {
+    const game = {
+      name: "Puzzle Bobble",
+      alternative_names: [
+        { comment: "Portuguese title", name: "Bobble de Quebra-Cabeça" },
+        { comment: "Brazilian title", name: "Bobble Quebra-Cabeça" },
+        { comment: "Chinese title - simplified", name: "泡泡龙" },
+        { comment: "Taiwanese title", name: "泡泡龍" },
+        { comment: "North American title", name: "Bust-a-Move" },
+        { comment: "Cancelled UK title", name: "Bubble Buster" },
+        { comment: "Australian title", name: "Bust-a-Move Again" },
+      ],
+    };
+    expect(localizedName(game, "pt-BR")?.name).toBe("Bobble Quebra-Cabeça");
+    expect(localizedName(game, "pt-PT")?.name).toBe("Bobble de Quebra-Cabeça");
+    expect(localizedName(game, "zh-TW")?.name).toBe("泡泡龍");
+    expect(localizedName(game, "zh-HK")?.name).toBe("泡泡龍");
+    expect(localizedName(game, "zh")?.name).toBe("泡泡龙");
+    expect(localizedName(game, "en-US")).toMatchObject({ name: "Bust-a-Move", language: "en-US" });
+    expect(localizedName(game, "en-AU")?.name).toBe("Bust-a-Move Again");
+    // A market's title is not used elsewhere, nor a cancelled title.
+    expect(localizedName(game, "en-GB")?.source).toBe("name");
+    expect(localizedName(game, "en-CA")?.name).toBe("Bust-a-Move");
+  });
+});
+
+describe("resolveLocale()", () => {
+  const { ESRB, PEGI, CERO, USK, CLASSIND } = AgeRatingOrganization;
+
+  test("a full locale", () => {
+    expect(resolveLocale("fr-FR")).toEqual({
+      locale: "fr-FR",
+      language: "fr",
+      script: "Latn",
+      country: "FR",
+      releaseRegion: ReleaseDateRegion.Europe,
+      localizationRegions: [Region.Europe],
+      ageRatingOrganizations: [PEGI, ESRB],
+      languages: [Language.French],
+    });
+    expect(resolveLocale("de-DE").ageRatingOrganizations).toEqual([USK, PEGI, ESRB]);
+    expect(resolveLocale("de-AT").ageRatingOrganizations).toEqual([PEGI, ESRB]);
+    expect(resolveLocale("pt_br")).toMatchObject({
+      locale: "pt-BR",
+      releaseRegion: ReleaseDateRegion.Brazil,
+      ageRatingOrganizations: [CLASSIND, ESRB, PEGI],
+      languages: [Language.PortugueseBrazil, Language.PortuguesePortugal],
+    });
+  });
+
+  test("a locale without a country takes its likely one", () => {
+    expect(resolveLocale("ja")).toMatchObject({
+      script: "Jpan",
+      country: "JP",
+      releaseRegion: ReleaseDateRegion.Japan,
+      localizationRegions: [Region.Japan],
+      ageRatingOrganizations: [CERO, ESRB, PEGI],
+      languages: [Language.Japanese],
+    });
+    expect(resolveLocale("en")).toMatchObject({
+      country: "US",
+      releaseRegion: ReleaseDateRegion.NorthAmerica,
+      localizationRegions: [],
+      ageRatingOrganizations: [ESRB, PEGI],
+      languages: [Language.English, Language.EnglishUK],
+    });
+    expect(resolveLocale("zh")).toMatchObject({
+      script: "Hans",
+      country: "CN",
+      releaseRegion: ReleaseDateRegion.China,
+    });
+  });
+
+  test("language variants, best first", () => {
+    expect(resolveLocale("en-GB").languages).toEqual([Language.EnglishUK, Language.English]);
+    expect(resolveLocale("en-AU").languages).toEqual([Language.EnglishUK, Language.English]);
+    expect(resolveLocale("en-CA").languages).toEqual([Language.English, Language.EnglishUK]);
+    expect(resolveLocale("es").languages).toEqual([Language.SpanishSpain, Language.SpanishMexico]);
+    expect(resolveLocale("es-AR").languages).toEqual([Language.SpanishMexico, Language.SpanishSpain]);
+    expect(resolveLocale("es-419")).toMatchObject({
+      country: "419",
+      releaseRegion: null,
+      ageRatingOrganizations: [ESRB, PEGI],
+      languages: [Language.SpanishMexico, Language.SpanishSpain],
+    });
+    expect(resolveLocale("pt-PT").languages).toEqual([
+      Language.PortuguesePortugal,
+      Language.PortugueseBrazil,
+    ]);
+    expect(resolveLocale("zh-TW")).toMatchObject({
+      script: "Hant",
+      releaseRegion: ReleaseDateRegion.Asia,
+      languages: [Language.ChineseTraditional, Language.ChineseSimplified],
+    });
+    expect(resolveLocale("zh-Hant").languages[0]).toBe(Language.ChineseTraditional);
+    expect(resolveLocale("zh-HK").languages[0]).toBe(Language.ChineseTraditional);
+    expect(resolveLocale("nb-NO").languages).toEqual([Language.Norwegian]);
+    expect(resolveLocale("ca-ES")).toMatchObject({ releaseRegion: ReleaseDateRegion.Europe, languages: [] });
+  });
+
+  test("the language's localization comes before Europe", () => {
+    expect(resolveLocale("ja-FR").localizationRegions).toEqual([Region.Japan, Region.Europe]);
+    expect(resolveLocale("ko-US")).toMatchObject({
+      localizationRegions: [Region.Korea],
+      releaseRegion: ReleaseDateRegion.NorthAmerica,
+    });
+    // "eu" is Basque, spoken in Spain, not IGDB's "EU" region identifier.
+    expect(resolveLocale("eu").localizationRegions).toEqual([Region.Europe]);
+  });
+
+  test("a string that is not a locale", () => {
+    expect(resolveLocale("not a locale")).toMatchObject({
+      releaseRegion: null,
+      localizationRegions: [],
+      ageRatingOrganizations: [],
+      languages: [],
+    });
+    expect(resolveLocale("fr_FR_!").country).toBe("FR");
+  });
+});
+
+describe("parseAlternativeName()", () => {
+  const cases: [
+    comment: string | undefined,
+    kind: string,
+    language: string | null,
+    variant: string | null,
+  ][] = [
+    ["Windows Executable", "executable", null, null],
+    ["windows executable", "executable", null, null],
+    ["Alternative title", "alternative", null, "alternative"],
+    ["Stylized title", "stylized", null, "stylized"],
+    ["Alternative spelling", "spelling", null, "spelling"],
+    ["Acronym", "abbreviation", null, "abbreviation"],
+    ["Working title", "working", null, "working"],
+    ["Japanese title - romanization", "language", "ja", "romanized"],
+    ["Japanese title - stylized romanization", "language", "ja", "romanized"],
+    ["Japanese title - translated", "language", "ja", "translated"],
+    ["Japanese title - original (Game Boy Color)", "language", "ja", "original"],
+    ["Japanese PSX title", "language", "ja", null],
+    ["Former Japanese title", "language", "ja", "former"],
+    ["Chinese title - simplified", "language", "zh-Hans", null],
+    ["Chinese Traditional title", "language", "zh-Hant", null],
+    ["Chinese spelling (Simplified)", "language", "zh-Hans", "spelling"],
+    ["Chinese title - PinYin", "language", "zh", "romanized"],
+    ["Chinese title", "language", "zh", null],
+    ["Taiwanese title", "language", "zh-TW", null],
+    ["Korean title - translated", "language", "ko", "translated"],
+    ["Korean Acroynm", "language", "ko", "abbreviation"],
+    ["Korean Ttitle", "language", "ko", null],
+    ["Alternative title - Korean", "language", "ko", "alternative"],
+    ["Brazilian title", "language", "pt-BR", null],
+    ["Brazillian Title", "language", "pt-BR", null],
+    ["Portuguese title (Brazilian)", "language", "pt-BR", null],
+    ["Portugual title", "language", "pt", null],
+    ["Israeli title", "language", "he", null],
+    ["Isreal title", "language", "he", null],
+    ["Germany title", "language", "de", null],
+    ["Nederlands title", "language", "nl", null],
+    ["Latin America title", "language", "es-419", null],
+    ["English (UK) title", "language", "en-GB", null],
+    ["French atlernative title", "language", "fr", "alternative"],
+    ["Italian titile", "language", "it", null],
+    ["UK title", "regional", "en-GB", null],
+    ["U.S. Title", "regional", "en-US", null],
+    ["North American title", "regional", "en-US", null],
+    ["Cancelled North American title", "regional", "en-US", "working"],
+    ["European title", "regional", null, null],
+    ["PAL title", "regional", null, null],
+    ["South American title", "regional", null, null],
+    ["Steam title", "platform", null, null],
+    ["Stean title", "platform", null, null],
+    ["Mega Drive Title - romanization", "platform", null, "romanized"],
+    ["Alternative Abberviation", "abbreviation", null, "abbreviation"],
+    ["Full title", "other", null, null],
+    ["Translated title", "other", null, "translated"],
+    ["None", "other", null, null],
+    ["", "other", null, null],
+    [undefined, "other", null, null],
+  ];
+  for (const [comment, kind, language, variant] of cases) {
+    test(`"${comment}"`, () => {
+      expect(parseAlternativeName(comment)).toEqual({ kind, language, variant } as never);
+    });
+  }
+});
+
+describe("alternativeTitles()", () => {
+  test("every name with what its comment says, without executables", () => {
+    const titles = alternativeTitles(fixtures.witcher3);
+    expect(titles).toHaveLength((fixtures.witcher3.alternative_names?.length ?? 0) - 1);
+    expect(titles.some((t) => t.kind === "executable")).toBe(false);
+    expect(titles.find((t) => t.name === "TW3")).toMatchObject({
+      comment: "Acronym",
+      kind: "abbreviation",
+      language: null,
+      variant: "abbreviation",
+      row: { id: 74561 },
+    });
+    expect(titles.filter((t) => t.language?.startsWith("zh")).map((t) => t.language)).toEqual([
+      "zh-Hans",
+      "zh-Hant",
+    ]);
+    const blank = {
+      alternative_names: [
+        { id: 1, name: " ", comment: "Alternative title" },
+        { id: 2, name: "X", comment: " " },
+      ],
+    };
+    expect(alternativeTitles(blank)).toEqual([
+      {
+        name: "X",
+        comment: null,
+        kind: "other",
+        language: null,
+        variant: null,
+        row: { id: 2, name: "X", comment: " " },
+      },
+    ]);
+  });
+});
+
+describe("localizedCover()", () => {
+  const game = {
+    cover: { id: 1, image_id: "main" },
+    game_localizations: [
+      { id: 865, region: { id: 2 }, cover: { id: 494149, image_id: "coalad" } },
+      { id: 11578, region: 3, cover: { id: 537893, image_id: "cobj1h" } },
+      { id: 12000, region: 4, cover: 12 },
+    ],
+  };
+
+  test("the localization's cover for the locale, then the game's", () => {
+    expect(localizedCover(game, "ja-JP")).toEqual({ image_id: "cobj1h", source: "localization", region: 3 });
+    expect(localizedCover(game, "ko")).toEqual({ image_id: "coalad", source: "localization", region: 2 });
+    expect(localizedCover(game, "ja-FR")?.image_id).toBe("cobj1h");
+    // The European localization's cover is not expanded: the game's cover is used.
+    expect(localizedCover(game, "fr-FR")).toEqual({ image_id: "main", source: "cover", region: null });
+    expect(localizedCover(game, "en-US")).toEqual({ image_id: "main", source: "cover", region: null });
+  });
+
+  test("Europe for a European country, and null without any cover", () => {
+    type Cover = { id: number; image_id: string };
+    const european: {
+      cover?: Cover | undefined;
+      game_localizations: { id: number; region: number; cover: Cover }[];
+    } = {
+      game_localizations: [{ id: 1, region: 4, cover: { id: 2, image_id: "eu" } }],
+    };
+    expect(localizedCover(european, "de-AT")).toEqual({ image_id: "eu", source: "localization", region: 4 });
+    expect(localizedCover(european, "en-US")).toBeNull();
+    expect(localizedCover({ cover: { id: 1, image_id: "" }, game_localizations: [] }, "fr")).toBeNull();
   });
 });
 

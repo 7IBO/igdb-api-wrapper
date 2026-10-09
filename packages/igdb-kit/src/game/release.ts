@@ -1,6 +1,6 @@
 import { ReleaseDateRegion, ReleaseDateStatus } from "../generated/schema";
 import { type ReleaseDetails, type ReleasePrecision, releaseDetails } from "../query/release-period";
-import { europeanCountries, parseLocale } from "./locale";
+import { resolveLocale } from "./locale";
 import { type ItemOf, idOf, type Ref, type Requires } from "./select";
 
 /** Fields of `release_dates` that {@link releaseDate} reads. */
@@ -108,9 +108,10 @@ export interface ReleaseDateOptions {
   region?: number | undefined;
   /**
    * The user's locale (`"fr-FR"`, `"en-US"`, `"ja-JP"`), when `region` is not given: its country picks
-   * the region. Europe for a European country, North America for the US and Canada, Japan, Korea,
-   * China, Asia (Taiwan, Hong Kong, Southeast Asia), Australia, New Zealand and Brazil. Another
-   * country, or a locale without one (`"fr"`), requests no region.
+   * the region, as {@link resolveLocale} does. Europe for a European country, North America for the
+   * US and Canada, Japan, Korea, China, Asia (Taiwan, Hong Kong, Southeast Asia), Australia, New
+   * Zealand and Brazil. A locale without a country takes its likely one (`"fr"`: France). Another
+   * country requests no region.
    */
   locale?: string | undefined;
   /** `Platform` id. Only rows of that platform are considered. */
@@ -172,7 +173,9 @@ export function releasesByPlatform<G extends object>(
 }
 
 function pick(rows: readonly ReleaseDateRow[], options: ReleaseDateOptions): GameRelease | null {
-  const region = options.region ?? (options.locale === undefined ? undefined : regionOf(options.locale));
+  const region =
+    options.region ??
+    (options.locale === undefined ? undefined : (resolveLocale(options.locale).releaseRegion ?? undefined));
   const statuses = typeof options.statuses === "number" ? [options.statuses] : options.statuses;
   const ranked = rows
     .filter((row) => options.platform === undefined || idOf(row.platform) === options.platform)
@@ -235,32 +238,4 @@ function statusIs(status: number | null, option: number | null | ReleaseStatus):
   if (typeof option !== "string") return status === option;
   if (status === null) return option === "unknown";
   return (statusNames[status] ?? "other") === option;
-}
-
-// Countries IGDB's release regions stand for; European countries come from `europeanCountries`.
-const regionsByCountry: Record<string, number> = {
-  US: ReleaseDateRegion.NorthAmerica,
-  CA: ReleaseDateRegion.NorthAmerica,
-  JP: ReleaseDateRegion.Japan,
-  KR: ReleaseDateRegion.Korea,
-  CN: ReleaseDateRegion.China,
-  TW: ReleaseDateRegion.Asia,
-  HK: ReleaseDateRegion.Asia,
-  MO: ReleaseDateRegion.Asia,
-  SG: ReleaseDateRegion.Asia,
-  MY: ReleaseDateRegion.Asia,
-  TH: ReleaseDateRegion.Asia,
-  ID: ReleaseDateRegion.Asia,
-  PH: ReleaseDateRegion.Asia,
-  VN: ReleaseDateRegion.Asia,
-  AU: ReleaseDateRegion.Australia,
-  NZ: ReleaseDateRegion.NewZealand,
-  BR: ReleaseDateRegion.Brazil,
-};
-
-/** The `ReleaseDateRegion` of a locale's country, undefined without one. */
-function regionOf(locale: string): number | undefined {
-  const { country } = parseLocale(locale);
-  if (country === undefined) return undefined;
-  return europeanCountries.has(country) ? ReleaseDateRegion.Europe : regionsByCountry[country];
 }
