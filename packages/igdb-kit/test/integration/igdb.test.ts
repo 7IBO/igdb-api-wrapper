@@ -1,7 +1,7 @@
 // Runs against the real IGDB API. Skipped unless TWITCH_CLIENT_ID and TWITCH_CLIENT_SECRET are set.
 // Uses about 15 requests.
 import { describe, expect, test } from "bun:test";
-import { and, createIGDB, GameType, Platform, QueryError, Theme, TierError } from "../../src";
+import { and, createIGDB, GameType, Platform, QueryError, Theme, TierError, toDate } from "../../src";
 
 const clientId = process.env.TWITCH_CLIENT_ID;
 const clientSecret = process.env.TWITCH_CLIENT_SECRET;
@@ -105,5 +105,17 @@ describe.skipIf(!clientId || !clientSecret)("real IGDB API", () => {
       expect(g.version_parent).toBeUndefined();
       expect(g.platforms).toContain(Platform.PlayStation5);
     }
+  });
+
+  test("a Date filters a timestamp field in seconds", async () => {
+    const now = new Date();
+    const upcoming = await igdb.release_dates
+      .select("date", "game.name")
+      .where((r) => r.date.gte(now))
+      .sort("date", "asc")
+      .limit(5);
+    expect(upcoming).toHaveLength(5);
+    for (const r of upcoming)
+      expect(toDate(r.date ?? 0).getTime()).toBeGreaterThanOrEqual(now.getTime() - 1000);
   });
 });

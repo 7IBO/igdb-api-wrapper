@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { and, GameType, or, Platform, QueryError } from "../../src";
+import { and, GameType, or, Platform, QueryError, toDate, toUnix } from "../../src";
 import { mockFetch, testClient } from "./helpers";
 
 const igdb = testClient(mockFetch(() => Response.json([])).fetch);
@@ -86,6 +86,24 @@ describe("reference constants", () => {
     expect(igdb.games.where((g) => g.game_type.in(GameType.MainGame, GameType.Remake)).toApicalypse()).toBe(
       "where game_type = (0,8);",
     );
+  });
+});
+
+describe("timestamps", () => {
+  test("a Date in where becomes Unix seconds", () => {
+    const date = new Date("2026-01-01T00:00:00.999Z");
+    expect(igdb.games.where((g) => g.first_release_date.gte(date)).toApicalypse()).toBe(
+      "where first_release_date >= 1767225600;",
+    );
+    expect(igdb.games.where((g) => g.release_dates.date.in(date, 1767312000)).toApicalypse()).toBe(
+      "where release_dates.date = (1767225600,1767312000);",
+    );
+    expect(() => igdb.games.where((g) => g.first_release_date.gt(new Date("nope")))).toThrow(/Invalid Date/);
+  });
+
+  test("toUnix and toDate convert between Date and seconds", () => {
+    expect(toUnix(new Date("2026-01-01T00:00:00.999Z"))).toBe(1767225600);
+    expect(toDate(1767225600).toISOString()).toBe("2026-01-01T00:00:00.000Z");
   });
 });
 

@@ -1,7 +1,9 @@
 import { QueryError } from "../core/errors";
 import { entities, removedFields } from "../generated/schema";
+import type { TimestampKeys } from "./types";
 
 type Scalar = string | number | boolean;
+type Value = Scalar | Date;
 
 /** A compiled `where` condition. Combine with `.and()` / `.or()` or the {@link and} / {@link or} helpers. */
 export class Condition {
@@ -58,6 +60,21 @@ export interface NumberFilter<T extends number = number> extends NullFilter {
   notIn(...values: T[]): Condition;
 }
 
+/**
+ * Filters on a Unix-timestamp field. IGDB counts in seconds; a `Date` is converted for you, so
+ * `gte(new Date())` never compares milliseconds to seconds.
+ */
+export interface TimestampFilter extends NullFilter {
+  eq(value: number | Date): Condition;
+  ne(value: number | Date): Condition;
+  gt(value: number | Date): Condition;
+  gte(value: number | Date): Condition;
+  lt(value: number | Date): Condition;
+  lte(value: number | Date): Condition;
+  in(...values: (number | Date)[]): Condition;
+  notIn(...values: (number | Date)[]): Condition;
+}
+
 export interface StringFilter extends NullFilter {
   eq(value: string): Condition;
   ne(value: string): Condition;
@@ -107,10 +124,16 @@ type FieldFilter<T> = [T] extends [readonly (infer U)[]]
  * be filtered by id or by one of its own fields (`g.platforms.name.eq("PC")`). Filtering three levels
  * deep makes IGDB time out: resolve the id first instead.
  */
-export type WhereFields<E> = { readonly [K in keyof E]-?: FieldFilter<E[K]> };
+export type WhereFields<E> = {
+  readonly [K in keyof E & string]-?: K extends TimestampKeys<E> ? TimestampFilter : FieldFilter<E[K]>;
+};
 
-function literal(value: Scalar | null): string {
+function literal(value: Value | null): string {
   if (value === null) return "null";
+  if (value instanceof Date) {
+    if (Number.isNaN(value.getTime())) throw new QueryError("Invalid Date in where");
+    return String(toUnix(value));
+  }
   if (typeof value === "string") return `"${value.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
   if (typeof value === "number" && !Number.isFinite(value)) {
     throw new QueryError(`Invalid number in where: ${value}`);
@@ -118,7 +141,7 @@ function literal(value: Scalar | null): string {
   return String(value);
 }
 
-const list = (values: Scalar[], open: string, close: string) => {
+const list = (values: Value[], open: string, close: string) => {
   if (values.length === 0) throw new QueryError("Expected at least one value");
   return `${open}${values.map(literal).join(",")}${close}`;
 };
@@ -130,14 +153,14 @@ function filterOps(path: string): Record<string, (...args: never[]) => Condition
   return {
     isNull: () => c("= null"),
     notNull: () => c("!= null"),
-    eq: (v: Scalar) => c(`= ${literal(v)}`),
-    ne: (v: Scalar) => c(`!= ${literal(v)}`),
-    gt: (v: number) => c(`> ${literal(v)}`),
-    gte: (v: number) => c(`>= ${literal(v)}`),
-    lt: (v: number) => c(`< ${literal(v)}`),
-    lte: (v: number) => c(`<= ${literal(v)}`),
-    in: (...v: Scalar[]) => c(`= ${list(v, "(", ")")}`),
-    notIn: (...v: Scalar[]) => c(`!= ${list(v, "(", ")")}`),
+    eq: (v: Value) => c(`= ${literal(v)}`),
+    ne: (v: Value) => c(`!= ${literal(v)}`),
+    gt: (v: number | Date) => c(`> ${literal(v)}`),
+    gte: (v: number | Date) => c(`>= ${literal(v)}`),
+    lt: (v: number | Date) => c(`< ${literal(v)}`),
+    lte: (v: number | Date) => c(`<= ${literal(v)}`),
+    in: (...v: Value[]) => c(`= ${list(v, "(", ")")}`),
+    notIn: (...v: Value[]) => c(`!= ${list(v, "(", ")")}`),
     any: (...v: Scalar[]) => c(`= ${list(v, "(", ")")}`),
     all: (...v: Scalar[]) => c(`= ${list(v, "[", "]")}`),
     none: (...v: Scalar[]) => c(`!= ${list(v, "(", ")")}`),
@@ -183,4 +206,14 @@ export function throwIfRemoved(entity: string, field: string, path: string): voi
   throw new QueryError(
     `"${path}" was removed from ${entity} by IGDB and is always empty${replacement ? `: use "${replacement}" instead` : ""}`,
   );
+}
+
+/** IGDB timestamps are Unix seconds: `toUnix(new Date())` for a filter value. Rounds down. */
+export function toUnix(date: Date): number {
+  return Math.floor(date.getTime() / 1000);
+}
+
+/** A `Date` from an IGDB timestamp (Unix seconds), such as `first_release_date`. */
+export function toDate(seconds: number): Date {
+  return new Date(seconds * 1000);
 }

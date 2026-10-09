@@ -21,7 +21,7 @@ export {
   Single,
   WithCount,
 } from "./query/query";
-export type { FieldPath, ScalarPath, SelectResult } from "./query/types";
+export type { FieldPath, ScalarPath, SelectResult, TimestampKeys } from "./query/types";
 export {
   type ArrayFilter,
   and,
@@ -30,5 +30,8 @@ export {
   type NumberFilter,
   or,
   type StringFilter,
+  type TimestampFilter,
+  toDate,
+  toUnix,
   type WhereFields,
 } from "./query/where";
