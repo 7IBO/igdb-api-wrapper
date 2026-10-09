@@ -119,6 +119,34 @@ const { top, total, ps5 } = await igdb.batch({
 
 Some queries are always sent alone: `search` queries (IGDB returns an empty multiquery when one block searches), `withCount()` (the total comes from a header multiquery does not have), and any query run with `execute({ batch: false })`. Set `autoBatch: false` to turn automatic grouping off; `batch()` still groups.
 
+### Caching
+
+```ts
+const genres = await igdb.genres.select("name").limit(500).cache(24 * 3600_000); // kept a day
+```
+
+`cache(ttlMs)` keeps the response so identical queries skip IGDB and the rate limit. Responses live in memory by default; pass `cache` to share them (see Redis below). Set `cacheTtlMs` to cache every query, and `cache(false)` to opt one out. A failing cache store never fails a query.
+
+### Several processes: Redis
+
+IGDB counts the rate limit per client id, and Twitch keeps only 25 active tokens per app. When several processes or servers use the same app, share the token, the quota and the cache through Redis:
+
+```ts
+import { createIGDB } from "igdb-kit";
+import { redisCache, redisLimiter, redisTokenStore } from "igdb-kit/redis";
+
+const clientId = process.env.TWITCH_CLIENT_ID!;
+const igdb = createIGDB({
+  clientId,
+  clientSecret: process.env.TWITCH_CLIENT_SECRET!,
+  tokenStore: redisTokenStore(redis, { clientId }), // one token for every process, renewed by one
+  limiter: redisLimiter(redis, { clientId }),       // 4 req/s and 8 in flight across all processes
+  cache: redisCache(redis),
+});
+```
+
+`redis` can be an [ioredis](https://github.com/redis/ioredis) client, a [node-redis](https://github.com/redis/node-redis) client, Bun's `RedisClient`, or a function sending one raw command. igdb-kit depends on none of them.
+
 ### Errors
 
 All errors extend `IGDBError` and carry `status`, `details` (IGDB's own error entries) and the `query` that failed.
@@ -148,6 +176,8 @@ createIGDB({
   autoBatch: true,            // group concurrent queries into multiqueries
   batchWindowMs: 2,           // how long to wait for more queries before sending
   maxBatchBytes: 4_000_000,   // target size of one multiquery response
+  cache,                      // CacheStore for cache()d queries; default in memory
+  cacheTtlMs,                 // cache every query this long; default only cache()d ones
   hooks: { onRetry, onRateLimited, onTokenRefresh },
 });
 ```
@@ -167,4 +197,5 @@ bun run test             # unit tests
 bun run test:types       # compile-time inference tests
 bun run bench:types      # type-checking cost per query on each TypeScript version
 TWITCH_CLIENT_ID=… TWITCH_CLIENT_SECRET=… bun run --filter igdb-kit test:integration
+REDIS_URL=redis://localhost:6379 bun run --filter igdb-kit test:redis
 ```

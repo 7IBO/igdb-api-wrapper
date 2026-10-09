@@ -39,6 +39,8 @@ export interface QueryRequest {
   fields: readonly string[];
   /** Expected number of entities (the `limit`, 10 by default; 0 for a count). */
   limit: number;
+  /** How long to cache the response: set by `cache()`, else the client's `cacheTtlMs`. 0 disables. */
+  cacheTtlMs?: number | undefined;
 }
 
 export interface RawResponse {
@@ -61,6 +63,7 @@ interface QueryState {
   search?: string | undefined;
   limit?: number | undefined;
   offset?: number | undefined;
+  cacheTtlMs?: number | undefined;
 }
 
 /** Base of everything that can be awaited or put in a `batch()`. */
@@ -185,6 +188,17 @@ export class Query<N extends EndpointName, R = { id: number }> extends Executabl
     return this.with({ offset: count });
   }
 
+  /**
+   * Caches the response for `ttlMs` in the client's `cache` store (memory by default), or disables
+   * caching for this query with `false`. Identical queries then skip IGDB and the rate limit.
+   */
+  cache(ttlMs: number | false): this {
+    if (ttlMs !== false && (!Number.isFinite(ttlMs) || ttlMs <= 0)) {
+      throw new QueryError(`cache() takes a positive duration in milliseconds or false, got ${ttlMs}`);
+    }
+    return this.with({ cacheTtlMs: ttlMs === false ? 0 : ttlMs });
+  }
+
   /** The first result, or null. */
   first(): Single<R> {
     return new Single(this.runner, this.limit(1).toRequest());
@@ -253,7 +267,7 @@ export class Query<N extends EndpointName, R = { id: number }> extends Executabl
 
   /** @internal */
   toRequest(kind: "list" | "count" = "list"): QueryRequest {
-    const { fields, where, sort, search, limit, offset } = this.state;
+    const { fields, where, sort, search, limit, offset, cacheTtlMs } = this.state;
     const lines: string[] = [];
     if (kind === "list" && fields.length) lines.push(`fields ${fields.join(",")};`);
     if (search !== undefined) lines.push(`search ${JSON.stringify(search)};`);
@@ -275,6 +289,7 @@ export class Query<N extends EndpointName, R = { id: number }> extends Executabl
       hasSearch: search !== undefined,
       fields,
       limit: kind === "count" ? 0 : (limit ?? 10),
+      cacheTtlMs,
     };
   }
 

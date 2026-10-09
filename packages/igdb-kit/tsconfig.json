@@ -14,5 +14,5 @@
     "types": ["bun"],
     "noEmit": true
   },
-  "include": ["src", "scripts", "test/unit", "test/integration"]
+  "include": ["src", "scripts", "test/unit", "test/integration", "test/redis"]
 }
