@@ -55,6 +55,8 @@ export {
 export type {
   CalendarRelease,
   ReleaseCalendarEntry,
+  ReleaseDetails,
+  ReleaseFilter,
   ReleasePrecision,
   ReleasesOptions,
 } from "./query/releases";

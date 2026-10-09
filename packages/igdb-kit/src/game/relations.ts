@@ -54,7 +54,7 @@ export interface ParentGame<P> {
   /** The parent as selected: an id, or an object with the fields selected under it. */
   game: P;
   /** `version_title` of an edition ("Complete Edition"), when selected; missing on 1.5% of editions. */
-  title: string | undefined;
+  title: string | null;
 }
 
 type ParentOf<G, K extends string> = G extends { readonly [P in K]?: infer V } ? NonNullable<V> : never;
@@ -67,7 +67,7 @@ type ParentOf<G, K extends string> = G extends { readonly [P in K]?: infer V } ?
  *
  * ```ts
  * const dlc = await igdb.games.select("game_type", "parent_game.name", "version_parent.name", "version_title").findByIdOrThrow(240009);
- * parentGame(dlc); // { relation: "expansion", game: { id: 119133, name: "Elden Ring" }, title: undefined }
+ * parentGame(dlc); // { relation: "expansion", game: { id: 119133, name: "Elden Ring" }, title: null }
  * ```
  */
 export function parentGame<G extends object>(
@@ -76,10 +76,10 @@ export function parentGame<G extends object>(
   const input = game as ParentGameInput;
   let parent: ParentGame<Ref> | null = null;
   if (input.version_parent !== undefined) {
-    parent = { relation: "edition", game: input.version_parent, title: input.version_title };
+    parent = { relation: "edition", game: input.version_parent, title: input.version_title ?? null };
   } else if (input.parent_game !== undefined) {
     const type = idOf(input.game_type);
-    parent = { relation: relations[type ?? -1] ?? "other", game: input.parent_game, title: undefined };
+    parent = { relation: relations[type ?? -1] ?? "other", game: input.parent_game, title: null };
   }
   return parent as ParentGame<never> | null;
 }

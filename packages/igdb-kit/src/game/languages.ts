@@ -24,14 +24,14 @@ export interface GameLanguage<L = Ref> {
   /** The `language` as selected: an id, or an object with `name`, `native_name`, `locale`... */
   language: L;
   /**
-   * Voice-over in this language. Undefined (unknown) when IGDB has no audio data at all for the
-   * game; false when it lists audio for other languages only.
+   * Voice-over in this language. `null` (unknown) when IGDB has no audio data at all for the game;
+   * false when it lists audio for other languages only.
    */
-  audio: boolean | undefined;
+  audio: boolean | null;
   /** Same rule as `audio`. */
-  subtitles: boolean | undefined;
+  subtitles: boolean | null;
   /** Same rule as `audio`. */
-  interface: boolean | undefined;
+  interface: boolean | null;
 }
 
 const kinds = [
@@ -43,7 +43,7 @@ const kinds = [
 /**
  * The languages of a game with their audio, subtitles and interface support, one entry per
  * language in IGDB's order. IGDB lists only what is supported, so a kind of support the game has
- * no data for at all is `undefined` rather than false: 58% of the games with language data have no
+ * no data for at all is `null` rather than false: 58% of the games with language data have no
  * audio row, 51% no subtitles row. Empty when IGDB has no language data (39% of main games).
  *
  * ```ts
@@ -71,7 +71,7 @@ export function languages<G extends object>(
   }
   return [...byLanguage.values()].map(({ language, types }) => {
     const result = { language } as GameLanguage;
-    for (const [key, type] of kinds) result[key] = known.has(type) ? types.has(type) : undefined;
+    for (const [key, type] of kinds) result[key] = known.has(type) ? types.has(type) : null;
     return result as GameLanguage<LanguageOf<G>>;
   });
 }

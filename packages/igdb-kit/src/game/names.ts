@@ -1,3 +1,4 @@
+import { europeanCountries, parseLocale } from "./locale";
 import { type ItemOf, idOf, type Requires, type RequiresIfSelected } from "./select";
 
 /** Fields of `game_localizations` that {@link localizedName} reads when they are selected. */
@@ -39,26 +40,19 @@ export interface LocalizedName {
 // `regions` has three rows; `region` is matched on its identifier when expanded.
 const regionIdentifiers: Record<number, string> = { 2: "ko-KR", 3: "ja-JP", 4: "EU" };
 
-// Countries whose games IGDB files under the Europe localization (PAL titles).
-const europe = new Set(
-  "AD AL AT BA BE BG BY CH CY CZ DE DK EE ES FI FO FR GB GI GR HR HU IE IS IT LI LT LU LV MC MD ME MK MT NL NO PL PT RO RS RU SE SI SK SM UA VA XK".split(
-    " ",
-  ),
-);
-
 /**
  * The localization of a game for a locale (`ja-JP`, `ko`, `en-GB`): the one of its region (Japan,
  * Korea), else Europe for a European country. It can have no `name` (8% of them only carry a
- * regional `cover`). Undefined when there is none, as for 89% of games.
+ * regional `cover`). Null when there is none, as for 89% of games.
  */
 export function localization<G extends object>(
   game: G & Requires<G, LocalizationFields>,
   locale: string,
-): ItemOf<G, "game_localizations"> | undefined {
+): ItemOf<G, "game_localizations"> | null {
   const rows = (game as LocalizedNameInput).game_localizations ?? [];
-  return (findLocalization(rows, locale, "locale") ?? findLocalization(rows, locale, "continent")) as
-    | ItemOf<G, "game_localizations">
-    | undefined;
+  return (findLocalization(rows, locale, "locale") ??
+    findLocalization(rows, locale, "continent") ??
+    null) as ItemOf<G, "game_localizations"> | null;
 }
 
 /**
@@ -102,21 +96,10 @@ function findLocalization(
       (typeof row.region === "object" ? row.region.identifier : undefined) ??
       regionIdentifiers[idOf(row.region) ?? 0];
     if (!identifier) return false;
-    if (kind === "continent") return identifier === "EU" && country !== undefined && europe.has(country);
+    if (kind === "continent")
+      return identifier === "EU" && country !== undefined && europeanCountries.has(country);
     return identifier.includes("-") && parseLocale(identifier).language === language;
   });
-}
-
-function parseLocale(locale: string): {
-  language: string;
-  country: string | undefined;
-  script: string | undefined;
-} {
-  const parts = locale.replace(/_/g, "-").split("-");
-  const language = (parts[0] ?? "").toLowerCase();
-  const script = parts.find((p, i) => i > 0 && p.length === 4)?.toLowerCase();
-  const country = parts.find((p, i) => i > 0 && /^[a-z]{2}$/i.test(p))?.toUpperCase();
-  return { language, country, script };
 }
 
 /**

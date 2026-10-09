@@ -182,6 +182,39 @@ describe("game filters", () => {
     expect(() => w((g) => g.developedBy(...mixed))).toThrow(/ids or company names, not both/);
   });
 
+  test("releasedIn: the release vocabulary of releases(), with statuses", () => {
+    expect(
+      w((g) =>
+        g.releasedIn({
+          platforms: Platform.PlayStation5,
+          regions: [ReleaseDateRegion.Europe, ReleaseDateRegion.Japan],
+          from: "2026-01-01",
+          to: "2027-01-01",
+        }),
+      ),
+    ).toBe(
+      "where release_dates.platform = (167) & release_dates.release_region = (1,5,8) & " +
+        "release_dates.date >= 1767225600 & release_dates.date < 1798761600 & " +
+        "(release_dates.status = null | release_dates.status != (4,5));",
+    );
+    expect(w((g) => g.releasedIn({ regions: ReleaseDateRegion.Europe, includeWorldwide: false }))).toBe(
+      "where release_dates.release_region = (1) & (release_dates.status = null | release_dates.status != (4,5));",
+    );
+    expect(w((g) => g.releasedIn({ platforms: [6], statuses: [ReleaseDateStatus.EarlyAccess, null] }))).toBe(
+      "where release_dates.platform = (6) & (release_dates.status = (3) | release_dates.status = null);",
+    );
+    expect(w((g) => g.releasedIn({ statuses: ReleaseDateStatus.FullRelease }))).toBe(
+      "where release_dates.status = (6);",
+    );
+    expect(w((g) => g.releasedIn({ statuses: [null] }))).toBe("where release_dates.status = null;");
+    // The new names win over the deprecated ones.
+    expect(
+      w((g) => g.releasedIn({ platforms: 6, platform: 48, statuses: [6], includeCancelled: true })),
+    ).toBe("where release_dates.platform = (6) & release_dates.status = (6);");
+    expect(() => w((g) => g.releasedIn({ platforms: [] }))).toThrow(/platforms must not be empty/);
+    expect(() => w((g) => g.releasedIn({ statuses: [-1] }))).toThrow(/Invalid id in statuses/);
+  });
+
   test("releasedIn: one release date matching every option, worldwide included, cancelled left out", () => {
     expect(
       w((g) =>

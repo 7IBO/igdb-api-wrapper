@@ -97,11 +97,11 @@ igdb.games.where((g) => g.developedBy(908));                           // CD Pro
 igdb.games.where((g) => g.developedBy("CD Projekt RED"));               // the same, by name
 igdb.games.where((g) => and(g.publishedBy(50), g.rating.gte(80)));     // WB Games as (regional) publisher
 igdb.games.where((g) =>
-  g.releasedIn({ platform: Platform.NintendoSwitch, region: ReleaseDateRegion.Europe, from: new Date("2021-01-01") }),
+  g.releasedIn({ platforms: Platform.NintendoSwitch, regions: ReleaseDateRegion.Europe, from: "2021-01-01" }),
 );
 ```
 
-A name matches a whole company name, ignoring case: "CD Projekt RED" matches, "CD Projekt" or "cd projekt red studio" do not, and "Ubisoft" is not "Ubisoft Montreal". Pass ids or names, not both in one call. igdb-kit looks the names up in `companies` before sending the query (one request, cached for a day) and filters on their ids: IGDB answers a filter on `involved_companies.company.name` in 10 to 25 seconds, and the same filter on ids in well under one. A name that matches no company throws a `NotFoundError` whose `suggestions` lists the companies that contain it, such as "Ubisoft Entertainment" and "Ubisoft Montreal" for "Ubisoft". `toApicalypse()` shows the name form, which IGDB also accepts. These filters rely on how IGDB filters arrays of relations: every condition on `involved_companies` (or `release_dates`) in a `where` must hold for the same entry. `developedBy(50)` does not match The Witcher 3, which WB Games only published, and `releasedIn` needs one release date with that platform, region and date together. Worldwide releases count for every region (pass `worldwide: false` to change that), release dates marked Cancelled or Offline are left out (`includeCancelled: true` keeps them), and release dates without a status, more than half of them, count. The flip side: `and(g.developedBy(908), g.publishedBy(50))` asks for one company entry that is both, and matches nothing; run two queries instead. `g.platforms.any()` lists every announced platform, cancelled ones included, where `releasedIn({ platform })` looks at actual release dates. For franchises and series, `g.franchises.any(id)` and `g.collections.any(id)` are enough: the main `franchise` is always in `franchises`, and `collections` matches `collection_memberships` (spin-offs included).
+A name matches a whole company name, ignoring case: "CD Projekt RED" matches, "CD Projekt" or "cd projekt red studio" do not, and "Ubisoft" is not "Ubisoft Montreal". Pass ids or names, not both in one call. igdb-kit looks the names up in `companies` before sending the query (one request, cached for a day) and filters on their ids: IGDB answers a filter on `involved_companies.company.name` in 10 to 25 seconds, and the same filter on ids in well under one. A name that matches no company throws a `NotFoundError` whose `suggestions` lists the companies that contain it, such as "Ubisoft Entertainment" and "Ubisoft Montreal" for "Ubisoft". `toApicalypse()` shows the name form, which IGDB also accepts. These filters rely on how IGDB filters arrays of relations: every condition on `involved_companies` (or `release_dates`) in a `where` must hold for the same entry. `developedBy(50)` does not match The Witcher 3, which WB Games only published, and `releasedIn` needs one release date with that platform, region and date together. `releasedIn` takes the options of the release calendar below: `platforms` and `regions` (one id or several), `includeWorldwide`, `statuses`, `from` and `to`. Worldwide releases count for every region (pass `includeWorldwide: false` to change that), release dates marked Cancelled or Offline are left out unless `statuses` lists them, and release dates without a status, more than half of them, count (`null` in `statuses`). The flip side: `and(g.developedBy(908), g.publishedBy(50))` asks for one company entry that is both, and matches nothing; run two queries instead. `g.platforms.any()` lists every announced platform, cancelled ones included, where `releasedIn({ platforms })` looks at actual release dates. For franchises and series, `g.franchises.any(id)` and `g.collections.any(id)` are enough: the main `franchise` is always in `franchises`, and `collections` matches `collection_memberships` (spin-offs included).
 
 Reference tables come with named ids, so you don't hard-code `game_type = 0` or `platforms = 48`:
 
@@ -242,10 +242,10 @@ const october = await igdb.games
     regions: [ReleaseDateRegion.Europe],       // worldwide releases count too
   });
 // { game, release, releases }[], by date
-// release: { precision: "day", start: Date, end: Date, human: "Oct 20, 2026", platform, region, status }
+// release: { precision: "day", start: Date, end: Date, year: 2026, month: 10, day: 20, human: "Oct 20, 2026", platform, region, status }
 ```
 
-`release` is the game's most precise release in the window, then the earliest; `releases` lists them all. IGDB dates are not all days: `precision` is `"day"`, `"month"` (`Oct 2026`), `"quarter"` (`Q4 2026`), `"year"` or `"tbd"`, and `start` and `end` bound the period. A month, quarter or year is in the window when its whole period is, so `Q4 2026` is in October to December but not in October alone; `match: "overlap"` includes every period that overlaps the window. TBD dates are left out unless `precision` includes `"tbd"`, whatever the window.
+`release` is the game's most precise release in the window, then the earliest; `releases` lists them all. IGDB dates are not all days: `precision` is `"day"`, `"month"` (`Oct 2026`), `"quarter"` (`Q4 2026`), `"year"` or `"tbd"`, `start` and `end` bound the period, and `year`, `quarter`, `month` and `day` are set as far as the precision goes (`null` beyond). `releaseDate()` in `igdb-kit/game` returns the same fields. A month, quarter or year is in the window when its whole period is, so `Q4 2026` is in October to December but not in October alone; `match: "overlap"` includes every period that overlaps the window. TBD dates are left out unless `precision` includes `"tbd"`, whatever the window.
 
 Release dates are calendar days at 00:00 UTC, so the window is in UTC days: pass `"YYYY-MM-DD"` strings rather than local midnights. The query's `limit` and `offset`, when set, page the entries. By default Offline and Cancelled dates are left out, and dates without a status, more than half of them, are kept. `statuses: [ReleaseDateStatus.FullRelease, null]` picks statuses, `null` standing for "no status".
 
@@ -364,8 +364,8 @@ const game = await igdb.games
     "websites.url", "websites.trusted", "age_ratings.organization", "age_ratings.rating_category")
   .findByIdOrThrow(1942);
 
-releaseDate(game, { region: ReleaseDateRegion.Europe, platform: Platform.NintendoSwitch });
-// { date, precision: "day", year: 2021, month: 1, day: 28, status: "full_release", match: "worldwide", ... }
+releaseDate(game, { locale: "fr-FR", platform: Platform.NintendoSwitch });
+// { precision: "day", start, end, year: 2021, month: 1, day: 28, status: 6, region: 8, match: "worldwide", ... }
 companies(game).developers;                          // [{ id: 908, name: "CD Projekt RED" }]
 storeLinks(game);                                    // [{ store: "epic", url, trusted: true, ... }, { store: "steam", ... }]
 ageRating(game, [AgeRatingOrganization.PEGI, AgeRatingOrganization.ESRB]); // { label: "18", minimumAge: 18, ... }
@@ -373,18 +373,18 @@ ageRating(game, [AgeRatingOrganization.PEGI, AgeRatingOrganization.ESRB]); // { 
 
 | Helper | Returns | What it handles |
 |---|---|---|
-| `releaseDate(game, { region?, platform?, statuses? })` | The date to show, its `precision` (`day`, `month`, `quarter`, `year`, `tbd`), `status` and `match` (`exact`, `worldwide`, `other_region`) | Full release first, as IGDB's `first_release_date` does (not early or advanced access), then the region's own row over worldwide. Half of the dates have no status: `unknown`, not excluded. Quarters and years are stored as the period's last day, so use `precision` and `year`/`quarter`/`month`, never `date` alone. |
-| `releasesByPlatform(game, { region? })` | One release per platform, earliest first | |
+| `releaseDate(game, { region?, locale?, platform?, statuses? })` | The date to show, with the fields of a calendar release (`precision`, `start`, `end`, `year`, `quarter`, `month`, `day`, `status`…) and `match` (`exact`, `worldwide`, `other_region`) | Full release first, as IGDB's `first_release_date` does (not early or advanced access), then the region's own row over worldwide. `locale` picks the region from its country (`fr-FR`: Europe, `en-US`: North America, `ja-JP`: Japan). Half of the dates have no status: `status` is `null`, and they are not excluded. Quarters and years are stored as the period's last day: `start`, `end` and `precision` place them. |
+| `releasesByPlatform(game, { region?, locale? })` | One release per platform, earliest first | |
 | `companies(game)` | `{ developers, publishers, porting, supporting }` with your selected company fields | Several regional publishers, a company listed twice |
 | `storeLinks(game, { stores? })` | One link per store product from `websites` and `external_games` | The store comes from the address: archived copies and mistyped links are dropped. Missing URLs are built for Steam, Google Play and single-country Amazon products. |
 | `ageRating(game, organization)`, `ageRatings(game)` | `label` (`18`, `M`, `MA 15+`), `minimumAge`, `descriptors`, `synopsis`, or null | Labels and ages for all 40 IGDB categories; two ratings from one organization (the strictest wins) |
 | `localizedName(game, locale)`, `localization(game, locale)` | `{ name, source }` | Regional localization (`ja-JP`, `ko-KR`), then alternative names by their free-text comment ("Japanese title", "Chinese title - traditional"; romanizations skipped), then the European title for a European locale, then `name` |
-| `languages(game)` | Per language: `audio`, `subtitles`, `interface` | `undefined` when the game has no data of that kind, `false` when other languages have it |
+| `languages(game)` | Per language: `audio`, `subtitles`, `interface` | `null` when the game has no data of that kind, `false` when other languages have it |
 | `multiplayer(game, platform?)` | Player counts and co-op flags per platform | 0 means unknown, rows that apply to every platform |
 | `parentGame(game)` | `{ relation, game, title }` for editions, DLCs, expansions, remakes, ports... | `version_parent` and `parent_game`, named from `game_type` |
-| `timeToBeat(row)`, `formatPlaytime(seconds)` | `{ seconds, kind, count }`, `"71 hr"` | Rows of `game_time_to_beats` (97% of games have none); localized with `Intl` |
+| `timeToBeat(row, { prefer? })`, `formatPlaytime(seconds)` | `{ seconds, kind, count }`, `"71 hr"` | Rows of `game_time_to_beats` (97% of games have none); localized with `Intl` |
 
-Data is often missing, and helpers keep "unknown" apart from "no": 79% of games have no age rating, 39% of main games no language data, 94% no multiplayer data.
+Data is often missing, and helpers keep "unknown" apart from "no": 79% of games have no age rating, 39% of main games no language data, 94% no multiplayer data. A missing value is `null`, never `undefined`, so results survive `JSON.stringify` (and Next.js props), and references are ids: statuses are `ReleaseDateStatus` ids, store link formats `GameReleaseFormat` ids.
 
 ### Batching
 

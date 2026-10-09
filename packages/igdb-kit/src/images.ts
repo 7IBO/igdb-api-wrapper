@@ -78,15 +78,13 @@ interface ArtworkTypeInput {
  * The type of an artwork as an `ImageType` id: its `image_type`, else its `artwork_type` converted.
  * IGDB replaced `artwork_type` with `image_type` but fills `image_type` on about half of the artworks
  * and `artwork_type` on nearly all of them, and the two tables number some types differently (8 is
- * "Infographic" in one and "Main cover" in the other). Undefined when the artwork has neither, or an
+ * "Infographic" in one and "Main cover" in the other). Null when the artwork has neither, or an
  * `artwork_type` added to IGDB after this version: `artworkType(artwork) === ImageType.ConceptArt`.
  */
-export function artworkType<A extends object>(
-  artwork: A & Requires<A, ArtworkTypeFields>,
-): number | undefined {
+export function artworkType<A extends object>(artwork: A & Requires<A, ArtworkTypeFields>): number | null {
   const input = artwork as ArtworkTypeInput;
   const image = idOf(input.image_type);
   if (image !== undefined) return image;
   const legacy = idOf(input.artwork_type);
-  return legacy === undefined ? undefined : IMAGE_TYPE_OF_ARTWORK_TYPE[legacy];
+  return (legacy === undefined ? undefined : IMAGE_TYPE_OF_ARTWORK_TYPE[legacy]) ?? null;
 }

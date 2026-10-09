@@ -376,8 +376,8 @@ describe("artworkType", () => {
     expect(artworkType(artwork(undefined, { id: 10 }))).toBe(ImageType.HistoricalCover);
     expect(artworkType(artwork(undefined, 15))).toBe(ImageType.HistoricalArtwork);
     expect(artworkType(artwork(undefined, 4))).toBe(ImageType.ConceptArt);
-    expect(artworkType(artwork(undefined, undefined))).toBeUndefined();
-    expect(artworkType(artwork(undefined, 99))).toBeUndefined();
+    expect(artworkType(artwork(undefined, undefined))).toBeNull();
+    expect(artworkType(artwork(undefined, 99))).toBeNull();
   });
 
   test("needs both fields selected", () => {

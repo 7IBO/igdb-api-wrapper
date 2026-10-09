@@ -195,11 +195,16 @@ describe("releases()", () => {
       precision: "month",
       start: new Date("2026-10-01T00:00:00Z"),
       end: new Date("2026-11-01T00:00:00Z"),
+      year: 2026,
+      quarter: null,
+      month: 10,
+      day: null,
       human: "Oct 2026",
       platform: 6,
       region: 8,
       status: null,
     });
+    expect(calendar[2]?.release).toMatchObject({ year: 2026, quarter: null, month: 10, day: 19 });
   });
 
   test("a quarter or a year is in a window that holds it whole, or overlaps it with match: overlap", async () => {
@@ -322,7 +327,20 @@ describe("calendarWhere()", () => {
     expect(
       calendarWhere(oct, { precision: ["tbd"], regions: [5], includeWorldwide: false, statuses: [null] }),
     ).toBe("(date = null) & (release_region = (5)) & (status = null)");
+    // One id works as a list of one.
+    expect(
+      calendarWhere(oct, {
+        precision: ["day"],
+        platforms: Platform.PlayStation5,
+        regions: ReleaseDateRegion.Europe,
+        statuses: ReleaseDateStatus.FullRelease,
+      }),
+    ).toBe(
+      "(date_format = 0 & date >= 1790812800 & date < 1793491200) & (platform = (167)) & " +
+        "(release_region = (1,8)) & (status = (6))",
+    );
     expect(() => calendarWhere(oct, { statuses: [] })).toThrow(QueryError);
+    expect(() => calendarWhere(oct, { platforms: [] })).toThrow(/platforms must not be empty/);
     expect(() => calendarWhere(oct, { precision: [] })).toThrow(QueryError);
     // @ts-expect-error not a precision
     expect(() => calendarWhere(oct, { precision: ["week"] })).toThrow(/week/);

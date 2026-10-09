@@ -1,4 +1,4 @@
-import { ExternalGameSource, GameReleaseFormat } from "../generated/schema";
+import { ExternalGameSource } from "../generated/schema";
 import { idOf, type Ref, type Requires, type RequiresIfSelected } from "./select";
 
 /** Stores recognized from a link's address. */
@@ -62,17 +62,17 @@ type StoreLinksRequires<G> = RequiresIfSelected<G, "websites", WebsiteFields> &
 export interface StoreLink {
   store: Store;
   url: string;
-  /** `websites.trusted`; undefined for a link that only comes from `external_games`. */
-  trusted: boolean | undefined;
+  /** `websites.trusted`; `null` for a link that only comes from `external_games`. */
+  trusted: boolean | null;
   source: "website" | "external_game";
   /** True when IGDB has no URL and it was built from the store id (Steam, Google Play, Amazon). */
   built: boolean;
   /** `Platform` id, set by IGDB on Amazon products only. */
-  platform: number | undefined;
+  platform: number | null;
   /** ISO 3166-1 numeric country codes (840 for the US), set by IGDB on Amazon products only. */
-  countries: readonly number[] | undefined;
-  /** Set by IGDB on Amazon products only. */
-  format: "digital" | "physical" | undefined;
+  countries: readonly number[] | null;
+  /** `GameReleaseFormat` id (`Digital`, `Physical`), set by IGDB on Amazon products only. */
+  format: number | null;
 }
 
 export interface StoreLinksOptions {
@@ -123,14 +123,14 @@ const amazonDomains: Record<number, string> = {
   392: "amazon.co.jp",
 };
 
-/** The store a URL belongs to, from its host; undefined for anything else. */
-export function storeOf(url: string): Store | undefined {
+/** The store a URL belongs to, from its host; null for anything else. */
+export function storeOf(url: string): Store | null {
   const host = hostOf(url);
-  if (!host) return undefined;
+  if (!host) return null;
   for (const [store, def] of Object.entries(stores) as [Store, StoreDef][]) {
     if (def.host.test(host)) return store;
   }
-  return undefined;
+  return null;
 }
 
 /**
@@ -159,7 +159,7 @@ export function storeLinks<G extends object>(
       candidates.push({
         ...noDetails,
         url: site.url,
-        trusted: site.trusted,
+        trusted: site.trusted ?? null,
         source: "website",
         built: false,
       });
@@ -167,20 +167,14 @@ export function storeLinks<G extends object>(
   for (const row of input.external_games ?? []) {
     const url = row.url ?? buildUrl(row);
     if (!url) continue;
-    const format = idOf(row.game_release_format);
     candidates.push({
       url,
-      trusted: undefined,
+      trusted: null,
       source: "external_game",
       built: row.url === undefined,
-      platform: idOf(row.platform),
-      countries: row.countries,
-      format:
-        format === GameReleaseFormat.Digital
-          ? "digital"
-          : format === GameReleaseFormat.Physical
-            ? "physical"
-            : undefined,
+      platform: idOf(row.platform) ?? null,
+      countries: row.countries ?? null,
+      format: idOf(row.game_release_format) ?? null,
     });
   }
 
@@ -203,7 +197,7 @@ export function storeLinks<G extends object>(
 
 type Candidate = Omit<StoreLink, "store">;
 
-const noDetails = { platform: undefined, countries: undefined, format: undefined };
+const noDetails = { platform: null, countries: null, format: null };
 
 function buildUrl(row: ExternalGameRow): string | undefined {
   if (!row.uid) return undefined;

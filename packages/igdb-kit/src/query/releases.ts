@@ -2,37 +2,18 @@ import { QueryError } from "../core/errors";
 import type { EndpointName } from "../generated/schema";
 import { type DateInput, dateMillis } from "./dates";
 import type { ExecuteOptions, Query } from "./query";
+import { type ReleaseDetails, type ReleasePrecision, releaseDetails } from "./release-period";
+
+export type { ReleaseDetails, ReleasePrecision };
 
 /** IGDB's maximum `limit`: rows are read this many at a time. */
 const PAGE = 500;
 const DAY_MS = 86_400_000;
 
-/**
- * How precise a release date is, from its `date_format`. IGDB stores an imprecise date inside its
- * period: the 1st of the month for `month`, the last day of the quarter for `quarter`, and January 1st
- * or December 31st for `year`. Only `day` is an actual day; `tbd` has no date at all.
- */
-export type ReleasePrecision = "day" | "month" | "quarter" | "year" | "tbd";
-
 /** One row of `release_dates`, with its period worked out. */
-export interface CalendarRelease {
+export interface CalendarRelease extends ReleaseDetails {
   /** Id of the `release_dates` row. */
   id: number;
-  precision: ReleasePrecision;
-  /** First day of the period, at 00:00 UTC (the day itself for `day`). `null` when `tbd`. */
-  start: Date | null;
-  /** First day after the period, at 00:00 UTC (exclusive). `null` when `tbd`. */
-  end: Date | null;
-  /** IGDB's label for the date: `"Oct 20, 2026"`, `"Q4 2026"`, `"2027"`, `"TBD"`. */
-  human: string | null;
-  platform: number | null;
-  /** `ReleaseDateRegion` id; `ReleaseDateRegion.Worldwide` (8) for three dates out of four. */
-  region: number | null;
-  /**
-   * `ReleaseDateStatus` id (Full Release, Early Access, Advanced Access…). `null` when IGDB has none,
-   * which is the case of most dates: the status is unknown, not "not released".
-   */
-  status: number | null;
 }
 
 /** One game of the calendar, with every release of it in the window. */
@@ -44,7 +25,32 @@ export interface ReleaseCalendarEntry<R> {
   releases: CalendarRelease[];
 }
 
-export interface ReleasesOptions extends ExecuteOptions {
+/**
+ * Which release dates count, in `g.releasedIn()` (games with such a release) and `games.releases()`
+ * (the calendar): every option holds for the same release date.
+ */
+export interface ReleaseFilter {
+  /** Only releases on these platforms: `Platform` ids, one or several. */
+  platforms?: number | readonly number[] | undefined;
+  /**
+   * Only releases in these regions: `ReleaseDateRegion` ids, one or several. Worldwide releases (three
+   * dates out of four) count as releases in every region unless `includeWorldwide` is false.
+   */
+  regions?: number | readonly number[] | undefined;
+  /** With `regions`, also count worldwide releases. Default true. */
+  includeWorldwide?: boolean | undefined;
+  /**
+   * Only releases with these statuses: `ReleaseDateStatus` ids, `null` standing for "no status", which
+   * most dates have. Default: every status except Offline and Cancelled, and no status.
+   */
+  statuses?: number | readonly (number | null)[] | undefined;
+  /** Released on or after this date: a `Date`, a `"YYYY-MM-DD"` string or Unix seconds. */
+  from?: DateInput | undefined;
+  /** Released before this date: a `Date`, a `"YYYY-MM-DD"` string or Unix seconds. */
+  to?: DateInput | undefined;
+}
+
+export interface ReleasesOptions extends ReleaseFilter, ExecuteOptions {
   /**
    * Start of the window, inclusive: a `Date`, a `"YYYY-MM-DD"` string or Unix seconds. Release dates
    * are calendar days stored at 00:00 UTC, so the window is in UTC days: `from` is rounded down to its
@@ -53,17 +59,6 @@ export interface ReleasesOptions extends ExecuteOptions {
   from: DateInput;
   /** End of the window, exclusive, rounded up to a UTC day: `"2026-11-01"` ends with October 31st. */
   to: DateInput;
-  /** Only releases on these platforms (`Platform` ids). */
-  platforms?: readonly number[] | undefined;
-  /** Only releases in these regions (`ReleaseDateRegion` ids), plus worldwide ones unless `includeWorldwide` is false. */
-  regions?: readonly number[] | undefined;
-  /** With `regions`, also count worldwide releases, which are releases in every region. Default true. */
-  includeWorldwide?: boolean | undefined;
-  /**
-   * Only releases with these statuses (`ReleaseDateStatus` ids); `null` stands for "no status", which
-   * most dates have. Default: every status except Offline and Cancelled, and no status.
-   */
-  statuses?: readonly (number | null)[] | undefined;
   /**
    * Which precisions to include. `tbd` releases have no date, so they are included whatever the
    * window. Default: every precision except `tbd`.
@@ -207,7 +202,7 @@ export function calendarWhere(
     "platforms" | "regions" | "includeWorldwide" | "statuses" | "precision" | "match"
   >,
 ): string {
-  const { precision = DEFAULT_PRECISION, includeWorldwide = true, match = "within" } = options;
+  const { precision = DEFAULT_PRECISION, match = "within" } = options;
   if (precision.length === 0) throw new QueryError("precision must name at least one precision");
   // An imprecise date lies inside its period: a period within the window has its date in it (the
   // exact test is done on the rows), and widening the window to whole periods finds every overlap.
@@ -230,63 +225,44 @@ export function calendarWhere(
   const branches = [...ranges].map(([range, formats]) => `date_format = ${list(formats)} & ${range}`);
   if (tbd) branches.push("date = null");
   const parts = [branches.length === 1 ? (branches[0] as string) : branches.map((b) => `(${b})`).join(" | ")];
-  if (options.platforms !== undefined)
-    parts.push(`platform = (${ids(options.platforms, "platforms").join(",")})`);
-  if (options.regions !== undefined) {
-    const list = new Set(ids(options.regions, "regions"));
-    if (includeWorldwide) list.add(WORLDWIDE);
-    parts.push(`release_region = (${[...list].join(",")})`);
-  }
-  if (options.statuses === undefined) {
-    // `!=` keeps the dates without a status, unlike `=`.
-    parts.push(`status != (${EXCLUDED_STATUSES.join(",")})`);
-  } else {
-    if (options.statuses.length === 0) throw new QueryError("statuses must not be empty");
-    const known = options.statuses.filter((s): s is number => s !== null);
-    const withNone = options.statuses.includes(null);
-    const listed = known.length > 0 ? `status = (${ids(known, "statuses").join(",")})` : "";
-    parts.push(withNone ? (listed ? `(${listed} | status = null)` : "status = null") : listed);
-  }
+  // `!=` keeps the dates without a status, unlike `=`.
+  parts.push(...releaseFilterParts(options, "", `status != (${EXCLUDED_STATUSES.join(",")})`));
   return parts.length === 1 ? (parts[0] as string) : parts.map((p) => `(${p})`).join(" & ");
+}
+
+/**
+ * @internal The platform, region and status conditions of a {@link ReleaseFilter}, on the fields of
+ * `release_dates` under `prefix`; `defaultStatuses` when it names no status.
+ */
+export function releaseFilterParts(
+  filter: Pick<ReleaseFilter, "platforms" | "regions" | "includeWorldwide" | "statuses">,
+  prefix: string,
+  defaultStatuses?: string,
+): string[] {
+  const parts: string[] = [];
+  if (filter.platforms !== undefined)
+    parts.push(`${prefix}platform = (${ids(asList(filter.platforms), "platforms").join(",")})`);
+  if (filter.regions !== undefined) {
+    const list = new Set(ids(asList(filter.regions), "regions"));
+    if (filter.includeWorldwide !== false) list.add(WORLDWIDE);
+    parts.push(`${prefix}release_region = (${[...list].join(",")})`);
+  }
+  if (filter.statuses === undefined) {
+    if (defaultStatuses !== undefined) parts.push(defaultStatuses);
+  } else {
+    const statuses = asList(filter.statuses);
+    if (statuses.length === 0) throw new QueryError("statuses must not be empty");
+    const known = statuses.filter((s): s is number => s !== null);
+    const none = `${prefix}status = null`;
+    const listed = known.length > 0 ? `${prefix}status = (${ids(known, "statuses").join(",")})` : "";
+    parts.push(statuses.includes(null) ? (listed ? `(${listed} | ${none})` : none) : listed);
+  }
+  return parts;
 }
 
 /** @internal A `release_dates` row with its precision and period. */
 export function toCalendarRelease(row: ReleaseRow): CalendarRelease {
-  const base = {
-    id: row.id,
-    human: row.human ?? null,
-    platform: row.platform ?? null,
-    region: row.release_region ?? null,
-    status: row.status ?? null,
-  };
-  if (row.date === undefined) return { ...base, precision: "tbd", start: null, end: null };
-  const date = new Date(row.date * 1000);
-  const year = row.y ?? date.getUTCFullYear();
-  const format = row.date_format;
-  let precision: ReleasePrecision;
-  let start: number;
-  let end: number;
-  if (format === 0) {
-    precision = "day";
-    start = Math.floor(date.getTime() / DAY_MS) * DAY_MS;
-    end = start + DAY_MS;
-  } else if (format === 1) {
-    const month = (row.m ?? date.getUTCMonth() + 1) - 1;
-    precision = "month";
-    start = Date.UTC(year, month, 1);
-    end = Date.UTC(year, month + 1, 1);
-  } else if (format !== undefined && format >= 3 && format <= 6) {
-    const firstMonth = (format - 3) * 3;
-    precision = "quarter";
-    start = Date.UTC(year, firstMonth, 1);
-    end = Date.UTC(year, firstMonth + 3, 1);
-  } else {
-    // 2 (YYYY), or a format IGDB may add: the year, the coarsest period that has a date.
-    precision = "year";
-    start = Date.UTC(year, 0, 1);
-    end = Date.UTC(year + 1, 0, 1);
-  }
-  return { ...base, precision, start: new Date(start), end: new Date(end) };
+  return { id: row.id, ...releaseDetails(row) };
 }
 
 function inWindow(
@@ -337,6 +313,10 @@ function list(values: readonly number[]): string {
 
 function seconds(time: number): number {
   return Math.floor(time / 1000);
+}
+
+function asList<T>(value: T | readonly T[]): readonly T[] {
+  return Array.isArray(value) ? value : [value as T];
 }
 
 function ids(values: readonly number[], name: string): number[] {
