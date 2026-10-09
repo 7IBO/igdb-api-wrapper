@@ -43,6 +43,7 @@
   "scripts": {
     "build": "bun --bun tsdown",
     "codegen": "bun scripts/codegen.ts",
+    "audit": "bun scripts/audit-schema.ts",
     "typecheck": "tsc --noEmit",
     "test": "bun test test/unit",
     "test:integration": "bun test test/integration",

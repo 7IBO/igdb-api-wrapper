@@ -108,14 +108,6 @@ export const GameVersionFeatureValueIncludedFeatureEnum = {
 } as const;
 export type GameVersionFeatureValueIncludedFeatureEnum = (typeof GameVersionFeatureValueIncludedFeatureEnum)[keyof typeof GameVersionFeatureValueIncludedFeatureEnum];
 
-/** @deprecated Legacy enum, replaced by a reference table in the API. */
-export const TestDummyEnumTestEnum = {
-  TESTDUMMY_ENUM_TEST_NULL: 0,
-  ENUM1: 1,
-  ENUM2: 2,
-} as const;
-export type TestDummyEnumTestEnum = (typeof TestDummyEnumTestEnum)[keyof typeof TestDummyEnumTestEnum];
-
 /** Entity of the `age_ratings` endpoint. */
 export interface AgeRating {
   id: number;
@@ -2113,34 +2105,8 @@ export interface Search {
    * Unix timestamp in seconds.
    */
   published_at: number;
-  test_dummy: TestDummy;
   theme: Theme;
   /** Hash of the object */
-  checksum: string;
-}
-
-export interface TestDummy {
-  /** @internal Fields holding a Unix timestamp in seconds. */
-  readonly [timestampKey]?: "created_at" | "updated_at";
-  id: number;
-  bool_value: boolean;
-  /** Unix timestamp in seconds. */
-  created_at: number;
-  enum_test: TestDummyEnumTestEnum;
-  float_value: number;
-  game: Game;
-  integer_array: number[];
-  integer_value: number;
-  name: string;
-  new_integer_value: number;
-  private: boolean;
-  slug: string;
-  string_array: string[];
-  test_dummies: TestDummy[];
-  test_dummy: TestDummy;
-  /** Unix timestamp in seconds. */
-  updated_at: number;
-  url: string;
   checksum: string;
 }
 
@@ -3307,8 +3273,7 @@ export const entities: Record<string, Record<string, 0 | string>> = {
   Report: {id:0,source_item_id:0,target_item_id:0,report_type:"ReportType",entity_type:"EntityType",created_at:0,updated_at:0,checksum:0},
   ReportType: {id:0,name:0,created_at:0,updated_at:0,checksum:0},
   Screenshot: {id:0,alpha_channel:0,animated:0,game:"Game",height:0,image_id:0,url:0,width:0,checksum:0},
-  Search: {id:0,alternative_name:0,character:"Character",collection:"Collection",company:"Company",description:0,game:"Game",name:0,platform:"Platform",published_at:0,test_dummy:"TestDummy",theme:"Theme",checksum:0},
-  TestDummy: {id:0,bool_value:0,created_at:0,enum_test:0,float_value:0,game:"Game",integer_array:0,integer_value:0,name:0,new_integer_value:0,private:0,slug:0,string_array:0,test_dummies:"TestDummy",test_dummy:"TestDummy",updated_at:0,url:0,checksum:0},
+  Search: {id:0,alternative_name:0,character:"Character",collection:"Collection",company:"Company",description:0,game:"Game",name:0,platform:"Platform",published_at:0,theme:"Theme",checksum:0},
   Theme: {id:0,created_at:0,name:0,slug:0,updated_at:0,url:0,checksum:0},
   Website: {id:0,game:"Game",trusted:0,url:0,checksum:0,type:"WebsiteType"},
   WebsiteType: {id:0,type:0,created_at:0,updated_at:0,checksum:0},
