@@ -519,6 +519,10 @@ Requests can be marked `priority: "background"` so they wait behind `interactive
 
 Node.js 20 or later, and Bun; browsers through `igdb-kit/proxy`. ESM and CommonJS. Types are tested on TypeScript 5.9, 6.0 and 7.0.
 
+## Changelog
+
+What changed in each version is in [CHANGELOG.md](https://github.com/7IBO/igdb-kit/blob/main/packages/igdb-kit/CHANGELOG.md), also published as [GitHub releases](https://github.com/7IBO/igdb-kit/releases).
+
 ## Development
 
 ```sh
