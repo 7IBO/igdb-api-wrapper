@@ -60,6 +60,14 @@ describe("errorFromResponse", () => {
     const notFound = errorFromResponse(404, "Endpoint POST /gamez not found");
     expect(notFound).toBeInstanceOf(QueryError);
     expect(notFound.message).toContain("/gamez");
+    // The same with `Accept: application/json`: the server's own error object.
+    const json = errorFromResponse(
+      404,
+      '{"title":"Endpoint POST /gamez not found","status":404,"type":"https://javalin.io/documentation#endpointnotfound","details":{}}',
+      { endpoint: "gamez" },
+    );
+    expect(json).toBeInstanceOf(QueryError);
+    expect(json.message).toBe("Request failed with 404 on gamez: Endpoint POST /gamez not found");
   });
 
   test("a 413 says whether the request body or the response is too large", () => {

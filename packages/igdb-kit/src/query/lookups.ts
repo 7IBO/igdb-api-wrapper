@@ -74,6 +74,7 @@ export async function resolveLookups(
   if (bytes > MAX_BODY_BYTES) {
     throw new QueryError(
       `Query body is ${bytes} bytes once company names are replaced by ids, above IGDB's limit of ${MAX_BODY_BYTES}`,
+      { endpoint: request.endpoint },
     );
   }
   return { ...request, body, lookups: undefined };

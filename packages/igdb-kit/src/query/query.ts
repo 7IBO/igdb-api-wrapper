@@ -618,6 +618,7 @@ export class Query<N extends EndpointName, R = { id: number }> extends Executabl
     if (bytes > MAX_BODY_BYTES) {
       throw new QueryError(
         `Query body is ${bytes} bytes, above IGDB's limit of ${MAX_BODY_BYTES}: split long id lists (findByIds does it)`,
+        { endpoint: this.endpoint },
       );
     }
     return {

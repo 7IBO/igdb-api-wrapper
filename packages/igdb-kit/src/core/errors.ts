@@ -124,8 +124,10 @@ export function errorFromResponse(
   } catch {
     parsed = undefined;
   }
-  // An array for Apicalypse errors; a single entry for a request body over the limit.
-  const details = (Array.isArray(parsed) ? parsed : [parsed]).flatMap(toDetail);
+  // Apicalypse errors come as an array; the server's own (a body over the limit, an unknown endpoint)
+  // as one object, which only names the error.
+  const apicalypse = Array.isArray(parsed);
+  const details = (Array.isArray(parsed) ? (parsed as unknown[]) : [parsed]).flatMap(toDetail);
   const gatewayMessage =
     parsed && typeof parsed === "object" && !Array.isArray(parsed) && "message" in parsed
       ? String((parsed as { message: unknown }).message)
@@ -145,7 +147,7 @@ export function errorFromResponse(
   if (status === 403 && /tier/i.test(text))
     return new TierError(`Not available in your API tier${where}: ${text}`, options);
   if (status === 408) return new QueryTimeoutError(`IGDB timed out${where}: ${text}`, options);
-  if (details.length > 0) return new QueryError(`Invalid query${where}: ${text}`, options);
+  if (apicalypse && details.length > 0) return new QueryError(`Invalid query${where}: ${text}`, options);
   if (status === 403) return new AuthError(`Forbidden${where}: ${text}`, options);
   if (status >= 500) return new NetworkError(`IGDB server error ${status}${where}: ${text}`, options);
   return new QueryError(`Request failed with ${status}${where}: ${text}`, options);
