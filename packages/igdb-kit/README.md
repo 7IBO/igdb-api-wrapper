@@ -277,6 +277,45 @@ const firstDates = await igdb.release_dates.select("date", "platform").sort("dat
 
 Every requested id is in the map, with an empty array when nothing points to the game. The query's `where` applies, and its `sort` and `limit` apply to each game's rows. Every row comes back, not just the first 10. A row linked to several of the games, such as a character, is listed under each of them. Ids are sent 500 per query and pages of 500 rows are read until the end, all batched. A page that comes back full is split using the count, so the 9,000 language rows of 500 games take about 9 requests instead of 18 one after the other.
 
+`findBy(field, ids)` does the same through any relation or `..._id` field, on every endpoint. Most of IGDB's links have no field back (95 of 153): a game's editions point to it with `version_parent` while it lists none of them, mods and updates point to it with `parent_game`, and a bundle's content points to it with `bundles`:
+
+```ts
+const editions = await igdb.games.select("name", "version_title").findBy("version_parent", [1942, 119133]);
+editions.get(1942); // Game of the Year, Complete and Collector's editions
+const subsidiaries = await igdb.companies.select("name").findBy("parent", [104]); // Ubisoft's 61 studios
+```
+
+### Related games: family, series, catalog
+
+Three `igdb.games` methods read what a game, a series or a company is linked to, with the fields of the query on every game, in release order (undated games last):
+
+```ts
+const family = await igdb.games.select("name", "cover.image_id").family(1942); // 1 multiquery of 6 blocks
+family.editions; // Game of the Year, Complete, Collector's
+family.children; // [{ game, relation: "dlc" | "expansion" | "mod" | "update" | "remake" | "port"... }]
+family.bundles; // the bundles that contain it; `contents` lists a bundle's games
+family.series; // [{ collection: { id: 62, name: "The Witcher" }, games: [{ game, spinoff }] }]
+family.parent; // { id, relation: "edition" | "dlc"..., title } for an edition or a DLC, null here
+
+const zelda = await igdb.games.select("name").series(106, { subseries: true }); // 62 games, 2 requests
+const fromSoftware = await igdb.games.select("name").catalog(1012, { roles: ["developer"] }); // 148 games
+const ubisoft = await igdb.games.select("name").catalog(104, { includeSubsidiaries: true }); // its studios too
+```
+
+`family()` finds what the game's own fields can't show: its editions, and the mods, episodes, seasons, packs and updates that no list of the game holds (`relatedGames()` in `igdb-kit/game` reads the lists it does have, with no request). A series is the editorial line (`collections`, with sub-series, story arcs and spin-off series); a franchise is a wider universe, with editions, packs and crossovers, that `g.franchises.named("Zelda")` filters on. `catalog()` reads `involved_companies` once with each game's roles, about ten times faster than `developedBy()` or `publishedBy()` filters, which stay the way to combine a company with other conditions. These methods read whole lists, so `where`, `search`, `sort`, `limit` and `offset` throw.
+
+To attach the same games to a view, link a `games` query by its field with `linkedBy()`:
+
+```ts
+const gamePage = igdb.defineView("games", {
+  select: ["name"],
+  with: {
+    editions: igdb.games.select("name", "version_title").linkedBy("version_parent"),
+    children: igdb.games.select("name", "game_type").linkedBy("parent_game"),
+  },
+});
+```
+
 ### Views
 
 A view attaches that data to games under names you choose, with a type for the whole result:
@@ -600,9 +639,9 @@ Requests can be marked `priority: "background"` so they wait behind `interactive
 The same rules hold across the library:
 
 - **Names.** IGDB's data keeps IGDB's names, in snake_case: endpoints, fields and the rows they return (`release_dates`, `first_release_date`). What igdb-kit adds is in camelCase: methods, options and computed objects (`findByGames()`, `includeWorldwide`, `minimumAge`). A row meant to be stored keeps IGDB's columns, such as `calculated_at` in `popularitySnapshot()`.
-- **Methods.** An endpoint only has the methods that work on it. `igdb.games` is a `GamesQuery`, with `popular()`, `weightedPopular()`, `releases()` and `findByExternalIds()`; the 24 endpoints whose rows point to games, such as `release_dates` or `characters`, are `GameLinkedQuery`s, with `findByGames()`; the others are plain `Query`s. `QueryOf<"release_dates">` names the type of an endpoint, and `select()`, `where()` and the other builder methods keep it.
+- **Methods.** An endpoint only has the methods that work on it. `igdb.games` is a `GamesQuery`, with `popular()`, `weightedPopular()`, `releases()`, `findByExternalIds()`, `family()`, `series()` and `catalog()`; the 24 endpoints whose rows point to games, such as `release_dates` or `characters`, are `GameLinkedQuery`s, with `findByGames()`; the others are plain `Query`s. Every query has `findBy()`. `QueryOf<"release_dates">` names the type of an endpoint, and `select()`, `where()` and the other builder methods keep it.
 - **Placement.** A method that returns an endpoint's rows is on that endpoint, even when it reads others along the way (`igdb.games.popular()`, `igdb.release_dates.findByGames()`). The rest is on the client (`igdb.batch()`, `igdb.searchAll()`, `igdb.expand()`, `igdb.popularitySnapshot()`). Helpers that send no request are in `igdb-kit/game`, and server pieces in `igdb-kit/proxy`, `igdb-kit/redis` and `igdb-kit/webhooks`.
-- **Laziness.** Nothing is sent before it is awaited or executed: queries, views, and the `Task` returned by the methods that take several requests (`findByIds()`, `findByGames()`, `findByExternalIds()`, `popular()`, `weightedPopular()`, `releases()`, `searchAll()`, `expand()`). All of them go in `batch()`, and request options (`signal`, `priority`, `batch`) go to their `execute()`. A task is typed as a promise and sends its requests once, however many times it is awaited; `execute()` sends them again. `iterate()`, `sync()` and `popularitySnapshot()`, read with `for await`, take the request options among their own. `batch()`, `raw()` and the `webhooks` methods send at once.
+- **Laziness.** Nothing is sent before it is awaited or executed: queries, views, and the `Task` returned by the methods that take several requests (`findByIds()`, `findByGames()`, `findBy()`, `findByExternalIds()`, `popular()`, `weightedPopular()`, `releases()`, `family()`, `series()`, `catalog()`, `searchAll()`, `expand()`). All of them go in `batch()`, and request options (`signal`, `priority`, `batch`) go to their `execute()`. A task is typed as a promise and sends its requests once, however many times it is awaited; `execute()` sends them again. `iterate()`, `sync()` and `popularitySnapshot()`, read with `for await`, take the request options among their own. `batch()`, `raw()` and the `webhooks` methods send at once.
 - **Options.** `limit` is the number of results (10 by default, 500 at most; `popularitySnapshot()` takes it per metric), `offset` skips results, `pageSize` is the number of rows of a page read by `iterate()`, `concurrency` the pages `sync()` requests at once, and `maxRows` caps the rows read: a method that ranks (`popular()`, `weightedPopular()`, `searchAll()`) returns the best it found within it, and `releases()`, which lists everything, throws rather than return part of the list. Options that filter on ids have plural names and take one id or several (`platforms`, `regions`, `statuses`, `gameTypes`, `types`); `releaseDate()` takes one `platform` and one `region`, since they choose the date to show rather than filter. A boolean that widens a filter starts with `include` (`includeWorldwide`, `includeEditions`).
 - **Dates.** A date argument takes a `Date`, a `"YYYY-MM-DD"` or ISO string, or Unix seconds (`DateInput`), and a number in milliseconds such as `Date.now()` throws a `QueryError`. Rows keep IGDB's Unix seconds, and computed objects give `Date`s (`start` and `end` of a release).
 - **Missing values.** A row leaves out the fields IGDB leaves out. A computed object has all its keys, with `null` where there is no value, so that it survives `JSON.stringify` and Next.js props, and a lookup that finds nothing returns `null` (`first()`, `findById()`, `releaseDate()`). `imageUrl()` is the exception: it returns `undefined` without an image, which `<img src>` accepts.

@@ -964,6 +964,48 @@ describe.skipIf(!clientId || !clientSecret)("real IGDB API", () => {
     expect(found.every((g) => Array.isArray(g.characters))).toBe(true);
   });
 
+  test("family(), series(), catalog(), findBy() and linkedBy() read related games", async () => {
+    const counted = countingClient();
+    const family = await counted.igdb.games.select("name").family(1942);
+    expect(counted.requests).toBe(1);
+    expect(family?.game.name).toBe("The Witcher 3: Wild Hunt");
+    expect(family?.parent).toBeNull();
+    expect(family?.editions.length).toBeGreaterThanOrEqual(3);
+    const expansions = family?.children.filter((c) => c.relation === "expansion").map((c) => c.game.name);
+    expect(expansions).toContain("The Witcher 3: Wild Hunt - Blood and Wine");
+    expect(family?.children.some((c) => c.relation === "mod")).toBe(true);
+    expect(family?.bundles.length).toBeGreaterThan(0);
+    const witcher = family?.series.find((s) => s.collection.id === 62);
+    expect(witcher?.games.map((g) => g.game.name)[0]).toBe("The Witcher");
+
+    const zelda = await igdb.games.select("first_release_date").series(106);
+    expect(zelda.length).toBeGreaterThan(50);
+    const dated = zelda.filter((z) => z.game.first_release_date !== undefined);
+    expect(zelda.slice(0, dated.length)).toEqual(dated); // undated games last
+    const dates = dated.map((z) => z.game.first_release_date as number);
+    expect(dates).toEqual([...dates].sort((a, b) => a - b));
+    expect(zelda.some((z) => z.spinoff)).toBe(true);
+
+    const developed = await igdb.games.select("name").catalog(1012, { roles: ["developer"] });
+    expect(developed.find((g) => g.game.id === 119133)?.roles).toEqual(["developer"]);
+    expect(new Set(developed.map((g) => g.game.id)).size).toBe(developed.length);
+
+    const editions = await igdb.games.select("version_title").findBy("version_parent", [1942, 119133]);
+    expect(editions.get(119133)?.length).toBeGreaterThanOrEqual(5);
+    const card = await igdb
+      .defineView("games", {
+        select: ["name"],
+        with: { editions: igdb.games.select("version_title").linkedBy("version_parent") },
+      })
+      .findById(1942);
+    expect(card?.editions.map((e) => e.id).sort()).toEqual(
+      editions
+        .get(1942)
+        ?.map((e) => e.id)
+        .sort(),
+    );
+  }, 15_000);
+
   test("expand() caches reference tables and drops ids of deleted rows", async () => {
     const counted = countingClient();
     const games = await counted.igdb.games.select("name", "platforms").findByIds([1942, 1020]);

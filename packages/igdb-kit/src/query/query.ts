@@ -7,7 +7,15 @@ import {
   entities,
   type SearchableEndpoint,
 } from "../generated/schema";
-import { findByGames, type GameLinkedEndpoint } from "../links/by-game";
+import {
+  findByGames,
+  findByLink,
+  type GameLinkedEndpoint,
+  type GameLinkField,
+  isGameLinkField,
+  isLinkField,
+  type LinkField,
+} from "../links/by-game";
 import { type DateInput, dateSeconds } from "./dates";
 import {
   allIds,
@@ -21,6 +29,17 @@ import {
   type WeightedPopularOptions,
   weightedPopular,
 } from "./popularity";
+import {
+  type CatalogGame,
+  type CatalogOptions,
+  companyCatalog,
+  type GameFamily,
+  gameFamily,
+  type MakeQuery,
+  type SeriesGame,
+  type SeriesOptions,
+  seriesGames,
+} from "./related";
 import {
   RELEASE_FIELDS,
   type ReleaseCalendarEntry,
@@ -142,6 +161,8 @@ export interface QueryState {
   expectedRows?: number | undefined;
   /** Company names of the `where`, resolved to ids when the query runs. */
   lookups?: readonly NameLookup[] | undefined;
+  /** The field pointing to games that views and `findByGames()` group by, from `linkedBy()`. */
+  link?: string | undefined;
 }
 
 export interface SyncOptions extends ExecuteOptions {
@@ -426,6 +447,39 @@ export class Query<N extends EndpointName, R = { id: number }> extends Executabl
       ]);
       return halves.flat();
     }
+  }
+
+  /**
+   * The rows whose field `field` points to each of these ids, as a map from id to rows: the editions
+   * of games (`igdb.games.findBy("version_parent", ids)`), their DLCs and mods (`"parent_game"`), the
+   * games in bundles (`"bundles"`), the subsidiaries of companies (`igdb.companies.findBy("parent",
+   * ids)`). Works on any relation or `..._id` field, including the 95 of IGDB's links that have no
+   * field back. The fields and `where` of this query apply; `sort` and `limit` apply to each id's
+   * rows, and every row comes back, not just 10. Every requested id is in the map, with an empty
+   * array when nothing points to it; a row pointing to several of them is under each.
+   */
+  findBy(field: LinkField<Endpoints[N]>, ids: readonly number[]): Task<Map<number, R[]>> {
+    return new Task(async (execute) => {
+      if (!isLinkField(this.endpoint, field)) {
+        throw new QueryError(
+          `findBy() needs a relation or an ..._id field of ${this.endpoint}, not ${field}`,
+        );
+      }
+      return findByLink<R>(this as never, field, ids, execute);
+    });
+  }
+
+  /**
+   * The field that links this query's rows to games in a view (`with`) and in `findByGames()`, when
+   * it is not the endpoint's own `game` field: `igdb.games.select("name", "version_title")
+   * .linkedBy("version_parent")` lists a game's editions, `linkedBy("parent_game")` its DLCs, mods
+   * and other children, `linkedBy("bundles")` the content of a bundle.
+   */
+  linkedBy(field: GameLinkField<Endpoints[N]>): this {
+    if (!isGameLinkField(this.endpoint, field)) {
+      throw new QueryError(`linkedBy() needs a field of ${this.endpoint} that points to games, not ${field}`);
+    }
+    return this.with({ link: field });
   }
 
   /** Number of entities matching the `where` (and `search`). */
@@ -988,6 +1042,82 @@ export class GamesQuery<R = { id: number }> extends Query<"games", R> {
     );
     const { limit, offset = 0 } = this.state;
     return limit === undefined ? entries.slice(offset) : entries.slice(offset, offset + limit);
+  }
+
+  /**
+   * A game and every game related to it, in one multiquery of six blocks: its parent (by id), its
+   * editions, every game whose `parent_game` it is (DLCs, expansions, remakes, ports, and the mods,
+   * episodes, seasons, packs and updates no field of the game lists), the bundles that contain it,
+   * the games it contains when it is a bundle, and its series with all their games. Every game comes
+   * with the fields of this query; lists are in release order, undated games last. A list of more
+   * than 500 games takes more pages. Null when the game does not exist. `where`, `search`, `sort`, `limit` and `offset` throw: the family is read
+   * whole.
+   *
+   * ```ts
+   * const family = await igdb.games.select("name", "cover.image_id").family(1942);
+   * family?.children.filter((c) => c.relation === "expansion").map((c) => c.game.name);
+   * // ["The Witcher 3: Wild Hunt - Hearts of Stone", "The Witcher 3: Wild Hunt - Blood and Wine", ...]
+   * ```
+   */
+  family(id: number): Task<GameFamily<R> | null> {
+    return new Task(async (execute) => {
+      this.readsWhole("family()");
+      return gameFamily(this, this.maker(), toId(id), execute);
+    });
+  }
+
+  /**
+   * The games of a series (`collections`: "The Legend of Zelda", 106), in release order, undated
+   * games last, each with the series it is in and whether it is a spin-off. `subseries` adds the
+   * games of its sub-series and story arcs; `spinoffs: false` leaves spin-offs out. A series is the
+   * editorial line of games; a franchise (`g.franchises`) is a wider universe that also holds
+   * editions, packs and crossovers. Every game comes with the fields of this query; `where`,
+   * `search`, `sort`, `limit` and `offset` throw.
+   *
+   * ```ts
+   * const zelda = await igdb.games.select("name", "first_release_date").series(106, { subseries: true });
+   * ```
+   */
+  series(collectionId: number, options: SeriesOptions = {}): Task<SeriesGame<R>[]> {
+    return new Task(async (execute) => {
+      this.readsWhole("series()");
+      return seriesGames(this, this.maker(), toId(collectionId), { ...options, ...execute });
+    });
+  }
+
+  /**
+   * The games of a company, each with its roles in it (`developer`, `publisher`, `porting`,
+   * `supporting`), read from `involved_companies` in one pass: about ten times faster than
+   * `developedBy()` and `publishedBy()` filters, and with the roles. `roles` keeps the games where it
+   * had one of them; `includeSubsidiaries` adds its subsidiaries at every depth (`companies.parent`),
+   * and `companies` then says which of them worked on each game. A company that was renamed or merged
+   * (`changed_company_id`) keeps its own games. In release order, undated games last; every game
+   * comes with the fields of this query, and `where`, `search`, `sort`, `limit` and `offset` throw.
+   *
+   * ```ts
+   * const fromSoftware = await igdb.games.select("name").catalog(1012, { roles: ["developer"] });
+   * ```
+   */
+  catalog(companyId: number, options: CatalogOptions = {}): Task<CatalogGame<R>[]> {
+    return new Task(async (execute) => {
+      this.readsWhole("catalog()");
+      return companyCatalog(this, this.maker(), toId(companyId), { ...options, ...execute });
+    });
+  }
+
+  /** Builds the queries on other endpoints that `family()`, `series()` and `catalog()` send. */
+  private maker(): MakeQuery {
+    return (endpoint, state) => new Query(this.runner, endpoint, state);
+  }
+
+  /** Throws when the query filters, sorts or pages: these methods read whole lists. */
+  private readsWhole(method: string): void {
+    const { where, search, sort, limit, offset } = this.state;
+    if (where || search !== undefined || sort || limit !== undefined || offset !== undefined) {
+      throw new QueryError(
+        `${method} uses the query's fields only: remove where(), search(), sort(), limit() and offset()`,
+      );
+    }
   }
 }
 

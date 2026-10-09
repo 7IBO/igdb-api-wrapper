@@ -4,6 +4,7 @@ import {
   and,
   artworkType,
   type CalendarRelease,
+  type CompanyRole,
   createIGDB,
   defineSelection,
   ExternalGameSource,
@@ -725,6 +726,7 @@ import {
   externalIds,
   franchisesOf,
   groupByParent,
+  type ParentRelation,
   platformVersions,
   relatedGameFields,
   relatedGames,
@@ -856,3 +858,37 @@ igdb.platforms.where((p) => p.supportsLanguage(12));
 igdb.searchAll("Wiedźmin 3", { alternativeTitles: "auto" });
 // @ts-expect-error true, false or "auto"
 igdb.searchAll("Wiedźmin 3", { alternativeTitles: "always" });
+
+// Related games by query: findBy() on any link, linkedBy() for views, family(), series(), catalog().
+const editionsOf = await igdb.games.select("name").findBy("version_parent", [1942]);
+expectType<Equal<typeof editionsOf, Map<number, { id: number; name?: string }[]>>>();
+igdb.companies.select("name").findBy("parent", [104]);
+igdb.game_time_to_beats.findBy("game_id", [1942]);
+// @ts-expect-error name is not a link
+igdb.games.findBy("name", [1]);
+igdb.defineView("games", {
+  select: ["name"],
+  with: { editions: igdb.games.select("version_title").linkedBy("version_parent") },
+});
+igdb.characters.linkedBy("games");
+// @ts-expect-error platforms are not games
+igdb.games.linkedBy("platforms");
+// @ts-expect-error parent points to companies
+igdb.companies.linkedBy("parent");
+
+const family = await igdb.games.select("name", "cover.image_id").family(1942);
+if (family) {
+  family.game.cover?.image_id satisfies string | undefined;
+  family.editions[0]?.name satisfies string | undefined;
+  family.children[0]?.relation satisfies ParentRelation | undefined;
+  family.series[0]?.games[0]?.game.name satisfies string | undefined;
+  family.parent?.id satisfies number | undefined;
+}
+const zeldaGames = await igdb.games.select("name").series(106, { subseries: true, spinoffs: false });
+expectType<Equal<(typeof zeldaGames)[number]["game"], { id: number; name?: string }>>();
+const fromSoftware = await igdb.games.select("name").catalog(1012, { roles: ["developer"] });
+fromSoftware[0]?.roles satisfies CompanyRole[] | undefined;
+// @ts-expect-error not a role
+igdb.games.catalog(1012, { roles: ["designer"] });
+// @ts-expect-error family() is a games method
+igdb.platforms.family(6);
