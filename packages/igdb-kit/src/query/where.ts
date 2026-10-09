@@ -1,5 +1,12 @@
 import { QueryError } from "../core/errors";
-import { entities, removedFields } from "../generated/schema";
+import {
+  type EndpointName,
+  type Endpoints,
+  entities,
+  ReleaseDateRegion,
+  ReleaseDateStatus,
+  removedFields,
+} from "../generated/schema";
 import type { TimestampKeys } from "./types";
 
 type Scalar = string | number | boolean;
@@ -181,11 +188,109 @@ function filterOps(path: string): Record<string, (...args: never[]) => Condition
 
 const OPS = new Set(Object.keys(filterOps("")));
 
+/** Options of {@link GameFilters.releasedIn}. Every option applies to the same release date. */
+export interface ReleasedInOptions {
+  /** Platform ids, such as `Platform.PlayStation5`. */
+  platform?: number | readonly number[] | undefined;
+  /**
+   * Release regions, such as `ReleaseDateRegion.Europe`. Worldwide releases (73% of release dates)
+   * count as released in every region unless `worldwide` is false.
+   */
+  region?: number | readonly number[] | undefined;
+  /** Count worldwide releases as releases in `region`. Default true. */
+  worldwide?: boolean | undefined;
+  /**
+   * Released on or after this date (a `Date`, or Unix seconds). IGDB stores a month-only date on its
+   * first day, a quarter on its last day and a year-only date on December 31; TBD releases have no
+   * date and never match `from` or `to`.
+   */
+  from?: Date | number | undefined;
+  /** Released before this date (a `Date`, or Unix seconds). */
+  to?: Date | number | undefined;
+  /**
+   * Also count release dates IGDB marks Cancelled or Offline. Default false. Release dates without a
+   * status (more than half of them) always count.
+   */
+  includeCancelled?: boolean | undefined;
+}
+
+/**
+ * Named filters on games, on the root of `where(g => ...)`. IGDB matches every condition on one array
+ * of relations (`involved_companies`, `release_dates`) against the same entry, in the whole `where`:
+ * `developedBy(908)` only matches games where company 908 is itself a developer. The flip side is that
+ * two such filters joined with `and` must hold for one entry: `and(g.developedBy(908), g.publishedBy(50))`
+ * matches no game unless one company entry is both, and
+ * `and(g.releasedIn({ platform: 48 }), g.releasedIn({ platform: 6 }))` matches none. Run two queries
+ * instead. `or` works as expected.
+ */
+export interface GameFilters {
+  /** Games one of these companies developed (`involved_companies` with `developer`). */
+  developedBy(...companies: number[]): Condition;
+  /** Games one of these companies published, regional publishers included. */
+  publishedBy(...companies: number[]): Condition;
+  /**
+   * Games with a release date matching every option at once: `releasedIn({ platform:
+   * Platform.PlayStation5, region: ReleaseDateRegion.Europe, from: new Date("2026-01-01") })`.
+   * Unlike `g.platforms.any()`, which lists every announced platform (cancelled ones included), it
+   * looks at actual release dates and leaves out cancelled and offline ones.
+   */
+  releasedIn(options: ReleasedInOptions): Condition;
+}
+
+/** The argument of `where(e => ...)` on an endpoint: its fields, plus {@link GameFilters} on `games`. */
+export type WhereRoot<N extends EndpointName> = WhereFields<Endpoints[N]> &
+  (N extends "games" ? GameFilters : unknown);
+
+const ids = (values: readonly number[], what: string): string => {
+  for (const id of values) {
+    if (!Number.isSafeInteger(id) || id < 0) throw new QueryError(`Invalid ${what} id: ${id}`);
+  }
+  return list([...values], "(", ")");
+};
+const asArray = (value: number | readonly number[]): readonly number[] =>
+  typeof value === "number" ? [value] : value;
+
+function companyRole(role: "developer" | "publisher") {
+  return (...companies: number[]) =>
+    new Condition(
+      `involved_companies.company = ${ids(companies, "company")} & involved_companies.${role} = true`,
+      true,
+    );
+}
+
+const gameFilters: Record<keyof GameFilters, (...args: never[]) => Condition> = {
+  developedBy: companyRole("developer"),
+  publishedBy: companyRole("publisher"),
+  releasedIn: (options: ReleasedInOptions) => {
+    const parts: string[] = [];
+    if (options.platform !== undefined) {
+      parts.push(`release_dates.platform = ${ids(asArray(options.platform), "platform")}`);
+    }
+    if (options.region !== undefined) {
+      const regions = new Set(asArray(options.region));
+      if (options.worldwide !== false) regions.add(ReleaseDateRegion.Worldwide);
+      parts.push(`release_dates.release_region = ${ids([...regions], "region")}`);
+    }
+    if (options.from !== undefined) parts.push(`release_dates.date >= ${literal(options.from)}`);
+    if (options.to !== undefined) parts.push(`release_dates.date < ${literal(options.to)}`);
+    if (!options.includeCancelled) {
+      // `status != (4,5)` alone would drop release dates without a status, which IGDB treats as no match.
+      const skipped = `${ReleaseDateStatus.Offline},${ReleaseDateStatus.Cancelled}`;
+      parts.push(`(release_dates.status = null | release_dates.status != (${skipped}))`);
+    }
+    if (parts.length === 0) parts.push("release_dates != null");
+    return new Condition(parts.join(" & "), parts.length > 1);
+  },
+};
+
 /** Builds the proxy passed to `where(e => ...)`, validating each field against the schema. */
 export function whereProxy(entity: string, path: string[] = []): unknown {
   return new Proxy(Object.create(null), {
     get(_, prop) {
       if (typeof prop !== "string") return undefined;
+      if (path.length === 0 && entity === "Game" && prop in gameFilters) {
+        return gameFilters[prop as keyof GameFilters];
+      }
       const fields = entities[entity];
       if (path.length > 0 && OPS.has(prop)) return filterOps(path.join("."))[prop];
       if (!fields || !(prop in fields)) {

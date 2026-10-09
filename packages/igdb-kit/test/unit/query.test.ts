@@ -1,5 +1,19 @@
 import { describe, expect, test } from "bun:test";
-import { and, GameType, or, Platform, QueryError, toDate, toUnix } from "../../src";
+import {
+  AgeRatingCategory,
+  and,
+  CompanySize,
+  GameType,
+  Language,
+  or,
+  Platform,
+  QueryError,
+  Region,
+  ReleaseDateRegion,
+  ReleaseDateStatus,
+  toDate,
+  toUnix,
+} from "../../src";
 import { mockFetch, testClient } from "./helpers";
 
 const igdb = testClient(mockFetch(() => Response.json([])).fetch);
@@ -86,6 +100,110 @@ describe("reference constants", () => {
     expect(igdb.games.where((g) => g.game_type.in(GameType.MainGame, GameType.Remake)).toApicalypse()).toBe(
       "where game_type = (0,8);",
     );
+  });
+
+  test("labels that repeat or make poor names get a readable key", () => {
+    // Ratings repeat across organizations: the key starts with it.
+    expect([AgeRatingCategory.PEGI_18, AgeRatingCategory.USK_18, AgeRatingCategory.ESRB_E10]).toEqual([
+      12, 22, 4,
+    ]);
+    expect([AgeRatingCategory.GRAC_18, AgeRatingCategory.GRAC_19]).toEqual([40, 26]); // "18+" and "19+"
+    expect([CompanySize.Employees0To1, CompanySize.Employees5000Plus]).toEqual([1, 8]);
+    expect([Language.ChineseSimplified, Language.PortugueseBrazil, Language.English]).toEqual([2, 21, 7]);
+    // Ids are not contiguous: regions start at 2, release statuses jump from 6 to 34.
+    expect(Region).toEqual({ Korea: 2, Japan: 3, Europe: 4 });
+    expect(ReleaseDateStatus.NextGenOptimizationPatchRelease).toBe(36);
+  });
+});
+
+describe("exclude", () => {
+  test("one exclude line after fields, nested paths included, merged across calls", () => {
+    const q = igdb.games
+      .select("*", "cover.*")
+      .exclude("summary", "cover.url", "summary")
+      .exclude("storyline")
+      .where((g) => g.id.eq(1942));
+    expect(q.toApicalypse()).toBe("fields *,cover.*; exclude summary,cover.url,storyline; where id = 1942;");
+    expect(q.count().toApicalypse()).toBe("where id = 1942;");
+    expect(igdb.games.select("name", "summary").exclude("summary").select("name").toApicalypse()).toBe(
+      "fields name;",
+    );
+  });
+
+  test("only selected fields, never id, *, or an expanded relation (IGDB rejects or ignores them)", () => {
+    // @ts-expect-error not selected
+    expect(() => igdb.games.select("name").exclude("summary")).toThrow(/"summary": it is not selected/);
+    // @ts-expect-error cover is an id here, its fields are not selected
+    expect(() => igdb.games.select("*").exclude("cover.url")).toThrow(/not selected/);
+    // @ts-expect-error id is always returned
+    expect(() => igdb.games.select("*").exclude("id")).toThrow(/always returns "id"/);
+    // @ts-expect-error also nested
+    expect(() => igdb.games.select("cover.*").exclude("cover.id")).toThrow(/always returns "cover.id"/);
+    // @ts-expect-error wildcard
+    expect(() => igdb.games.select("cover.*").exclude("cover.*")).toThrow(/"\*" in exclude/);
+    // @ts-expect-error expanded relation
+    expect(() => igdb.games.select("*", "cover.image_id").exclude("cover")).toThrow(/remove its fields/);
+    // @ts-expect-error unknown field: IGDB would silently ignore it
+    expect(() => igdb.games.select("*").exclude("nope")).toThrow(/Unknown field "nope"/);
+    // A relation selected as an id can be excluded; so can a field selected by name.
+    expect(igdb.games.select("*").exclude("cover").toApicalypse()).toBe("fields *; exclude cover;");
+    expect(
+      igdb.games
+        .select("involved_companies.company.*")
+        .exclude("involved_companies.company.url")
+        .toApicalypse(),
+    ).toBe("fields involved_companies.company.*; exclude involved_companies.company.url;");
+  });
+});
+
+describe("game filters", () => {
+  const w = (fn: Parameters<typeof igdb.games.where>[0]) => igdb.games.where(fn).toApicalypse();
+
+  test("company roles rely on IGDB matching one involved company for both conditions", () => {
+    expect(w((g) => g.developedBy(908))).toBe(
+      "where involved_companies.company = (908) & involved_companies.developer = true;",
+    );
+    expect(w((g) => or(g.publishedBy(50, 248), g.rating.gt(90)))).toBe(
+      "where (involved_companies.company = (50,248) & involved_companies.publisher = true) | rating > 90;",
+    );
+    expect(() => w((g) => g.developedBy(-1))).toThrow(/Invalid company id/);
+    expect(() => w((g) => g.developedBy())).toThrow(QueryError);
+  });
+
+  test("releasedIn: one release date matching every option, worldwide included, cancelled left out", () => {
+    expect(
+      w((g) =>
+        g.releasedIn({
+          platform: Platform.PlayStation5,
+          region: [ReleaseDateRegion.Europe, ReleaseDateRegion.Japan],
+          from: new Date("2026-01-01T00:00:00Z"),
+          to: 1798761600,
+        }),
+      ),
+    ).toBe(
+      "where release_dates.platform = (167) & release_dates.release_region = (1,5,8) & " +
+        "release_dates.date >= 1767225600 & release_dates.date < 1798761600 & " +
+        "(release_dates.status = null | release_dates.status != (4,5));",
+    );
+    expect(
+      w((g) => g.releasedIn({ region: ReleaseDateRegion.Europe, worldwide: false, includeCancelled: true })),
+    ).toBe("where release_dates.release_region = (1);");
+    expect(w((g) => g.releasedIn({}))).toBe(
+      "where (release_dates.status = null | release_dates.status != (4,5));",
+    );
+    expect(w((g) => g.releasedIn({ includeCancelled: true }))).toBe("where release_dates != null;");
+    expect(w((g) => and(g.releasedIn({ platform: 6 }), g.developedBy(908)))).toBe(
+      "where (release_dates.platform = (6) & (release_dates.status = null | release_dates.status != (4,5))) & " +
+        "(involved_companies.company = (908) & involved_companies.developer = true);",
+    );
+    expect(() => w((g) => g.releasedIn({ from: new Date("nope") }))).toThrow(/Invalid Date/);
+  });
+
+  test("only on the root of games", () => {
+    // @ts-expect-error not on other endpoints
+    expect(() => igdb.platforms.where((p) => p.developedBy(1))).toThrow(/Unknown field "developedBy"/);
+    // @ts-expect-error not on nested games
+    expect(() => igdb.games.where((g) => g.similar_games.developedBy(1))).toThrow(/Unknown field/);
   });
 });
 

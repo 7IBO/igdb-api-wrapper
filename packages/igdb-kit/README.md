@@ -63,6 +63,15 @@ Queries are immutable and awaitable. They are compiled to Apicalypse, which you 
 | `"*"` | every field, relations as ids |
 | `"involved_companies.company.name"` | nested as deep as you need |
 
+`exclude()` leaves selected fields out, at any depth, and removes them from the result type. It is the way to take "everything but" with `*`, for example to keep `sync()` copies small:
+
+```ts
+const games = await igdb.games.select("*", "cover.*").exclude("summary", "storyline", "cover.url");
+// no summary or storyline; cover without url
+```
+
+Only fields the selection covers can be excluded: IGDB rejects the others once a relation is expanded, ignores unknown ones, and always returns `id`. To drop an expanded relation, remove it from `select`.
+
 ### Filtering
 
 ```ts
@@ -78,6 +87,20 @@ igdb.games.where("rating > 80");                                       // raw Ap
 ```
 
 Each field only offers the operators that fit its type, and enum fields only accept their values.
+
+On `games`, named filters cover the common relation lookups:
+
+```ts
+import { and, Platform, ReleaseDateRegion } from "igdb-kit";
+
+igdb.games.where((g) => g.developedBy(908));                           // CD Projekt RED as developer
+igdb.games.where((g) => and(g.publishedBy(50), g.rating.gte(80)));     // WB Games as (regional) publisher
+igdb.games.where((g) =>
+  g.releasedIn({ platform: Platform.NintendoSwitch, region: ReleaseDateRegion.Europe, from: new Date("2021-01-01") }),
+);
+```
+
+They rely on how IGDB filters arrays of relations: every condition on `involved_companies` (or `release_dates`) in a `where` must hold for the same entry. `developedBy(50)` does not match The Witcher 3, which WB Games only published, and `releasedIn` needs one release date with that platform, region and date together. Worldwide releases count for every region (pass `worldwide: false` to change that), release dates marked Cancelled or Offline are left out (`includeCancelled: true` keeps them), and release dates without a status, more than half of them, count. The flip side: `and(g.developedBy(908), g.publishedBy(50))` asks for one company entry that is both, and matches nothing; run two queries instead. `g.platforms.any()` lists every announced platform, cancelled ones included, where `releasedIn({ platform })` looks at actual release dates. For franchises and series, `g.franchises.any(id)` and `g.collections.any(id)` are enough: the main `franchise` is always in `franchises`, and `collections` matches `collection_memberships` (spin-offs included).
 
 Reference tables come with named ids, so you don't hard-code `game_type = 0` or `platforms = 48`:
 
@@ -106,7 +129,7 @@ const upcoming = await igdb.release_dates
 toDate(upcoming[0].date!);                                            // a Date
 ```
 
-`GameType`, `GameStatus`, `GameReleaseFormat`, `Genre`, `Theme`, `GameMode`, `PlayerPerspective`, `Platform`, `PlatformType`, `ExternalGameSource`, `PopularityType`, `ReleaseDateRegion`, `DateFormat`, `WebsiteType`, `AgeRatingOrganization`, `LanguageSupportType`, `CharacterGender` and `CharacterSpecie` are generated from the API.
+`GameType`, `GameStatus`, `GameReleaseFormat`, `Genre`, `Theme`, `GameMode`, `PlayerPerspective`, `Platform`, `PlatformType`, `PlatformFamily`, `ExternalGameSource`, `PopularityType`, `ReleaseDateRegion`, `ReleaseDateStatus`, `DateFormat`, `WebsiteType`, `AgeRatingOrganization`, `AgeRatingCategory`, `Language`, `LanguageSupportType`, `Region` (of `game_localizations`), `CompanyStatus`, `CompanySize`, `CompanyType`, `CollectionType`, `CollectionMembershipType`, `CollectionRelationType`, `NetworkType`, `ImageType`, `CharacterGender` and `CharacterSpecie` are generated from the API. Age ratings repeat across organizations, so their keys start with it: `AgeRatingCategory.PEGI_18`, `AgeRatingCategory.ESRB_M`.
 
 IGDB replaced several fields with reference tables: `games.category` became `game_type`, `release_dates.region` became `release_region`, `external_games.category` became `external_game_source`, and so on. IGDB still accepts the old names but leaves them empty or no longer updates them, so `where category = 0` silently matches nothing. igdb-kit leaves them out of the types and throws a `QueryError` that names the replacement.
 
@@ -127,7 +150,24 @@ for await (const game of igdb.games.select("name").iterate()) {
 await igdb.games.select("name").search("zelda").limit(5); // searchable endpoints only, no sort
 ```
 
-### Store ids
+### Searching everything
+
+`searchAll()` searches games, characters, collections, platforms and themes at once, through IGDB's `search` endpoint, and returns hits narrowed by `kind`, with the fields you select for each kind:
+
+```ts
+const hits = await igdb.searchAll("witcher", {
+  kinds: ["game", "character", "collection"],              // default: all five
+  select: { game: ["cover.image_id", "first_release_date"], character: ["mug_shot.image_id"] },
+  limit: 10,
+});
+for (const hit of hits) {
+  if (hit.kind === "game") hit.game.cover?.image_id;      // { id, name?, cover?, first_release_date? }
+  hit.name;                                                // display name, for every kind
+  hit.matched;                                             // "name" | "alternative_name"
+}
+```
+
+IGDB returns the most recently indexed matches first, so last week's mods come before the original (153 of the 381 game matches for "zelda" are mods). `searchAll` leaves out mods, DLCs, bundles, packs, updates and editions by default (`gameTypes`, `editions`), reads every match (500 per request, up to `maxRows`, 2000 by default) and ranks them: exact name, then names starting with the term, then names containing its words, then alternative names; ties go to the most rated games. `order: "igdb"` keeps IGDB's order in a single request. Companies are not in the search index, and rows pointing to deleted entities or to people are dropped. `alternative_name` holds every alternative name joined into one string.
 
 `findByExternalIds()` finds games from their id on Steam, GOG, Epic, Xbox, PlayStation Store… (`ExternalGameSource`), for example to match a Steam library:
 

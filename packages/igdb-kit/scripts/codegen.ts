@@ -21,7 +21,15 @@ const referencePath = join(root, "codegen/reference-tables.json");
  * a constant object named after its entity, so `GameType.MainGame` is both a value and, through
  * declaration merging, the entity type of the `game_types` endpoint.
  */
-const REFERENCE_TABLES: { name: string; endpoint: string; label: string; extra?: string }[] = [
+const REFERENCE_TABLES: {
+  name: string;
+  endpoint: string;
+  label: string;
+  /** Another field to download: shown in each member's comment, or used to name it (see below). */
+  extra?: string;
+  /** Rewrites of labels that make poor identifiers ("0-1 employees"), before the constant name is built. */
+  rename?: [RegExp, string][];
+}[] = [
   { name: "GameType", endpoint: "game_types", label: "type" },
   { name: "GameStatus", endpoint: "game_statuses", label: "status" },
   { name: "GameReleaseFormat", endpoint: "game_release_formats", label: "format" },
@@ -45,6 +53,28 @@ const REFERENCE_TABLES: { name: string; endpoint: string; label: string; extra?:
   { name: "LanguageSupportType", endpoint: "language_support_types", label: "name" },
   { name: "CharacterGender", endpoint: "character_genders", label: "name" },
   { name: "CharacterSpecie", endpoint: "character_species", label: "name" },
+  { name: "ReleaseDateStatus", endpoint: "release_date_statuses", label: "name" },
+  { name: "Region", endpoint: "regions", label: "name", extra: "identifier" },
+  { name: "Language", endpoint: "languages", label: "name", extra: "locale" },
+  // Ratings repeat across organizations (PEGI 18, USK 18): the key starts with the organization.
+  { name: "AgeRatingCategory", endpoint: "age_rating_categories", label: "rating", extra: "organization" },
+  { name: "CompanyStatus", endpoint: "company_statuses", label: "name" },
+  {
+    name: "CompanySize",
+    endpoint: "company_sizes",
+    label: "name",
+    rename: [
+      [/^(\d+)-(\d+) employees$/, "Employees $1 to $2"],
+      [/^(\d+)\+ employees$/, "Employees $1 plus"],
+    ],
+  },
+  { name: "CompanyType", endpoint: "company_types", label: "name" },
+  { name: "NetworkType", endpoint: "network_types", label: "name" },
+  { name: "CollectionType", endpoint: "collection_types", label: "name" },
+  { name: "CollectionMembershipType", endpoint: "collection_membership_types", label: "name" },
+  { name: "CollectionRelationType", endpoint: "collection_relation_types", label: "name" },
+  { name: "PlatformFamily", endpoint: "platform_families", label: "name" },
+  { name: "ImageType", endpoint: "image_types", label: "name" },
 ];
 
 type ReferenceRow = { id: number } & Record<string, string | number>;
@@ -295,6 +325,20 @@ const TYPOS: Record<string, string> = { Postitive: "Positive" };
 
 const referenceTables: Record<string, ReferenceRow[]> = JSON.parse(readFileSync(referencePath, "utf8"));
 const sourceNames = new Map((referenceTables.external_game_sources ?? []).map((r) => [r.id, String(r.name)]));
+const organizationNames = new Map(
+  (referenceTables.age_rating_organizations ?? []).map((r) => [r.id, String(r.name)]),
+);
+/** Extra fields shown in parentheses in each member's comment: "PlayStation 5 (PS5)", "French (fr-FR)". */
+const NOTES = new Set(["abbreviation", "locale", "identifier"]);
+
+/** "games.game_type, release_dates.status": the fields that hold ids of this table. */
+function usedBy(entity: string): string[] {
+  return [...messages].flatMap(([message, fields]) =>
+    fields
+      .filter((f) => f.type === entity && !isRemoved(message, f.name) && endpointOf.has(message))
+      .map((f) => `\`${endpointOf.get(message)}.${f.name}\``),
+  );
+}
 for (const t of REFERENCE_TABLES) {
   const rows = referenceTables[t.endpoint];
   if (!rows) throw new Error(`codegen/reference-tables.json has no ${t.endpoint}: run with --fetch`);
@@ -305,17 +349,24 @@ for (const t of REFERENCE_TABLES) {
     let label = String(row[t.label]);
     if (/^DUPLICATE\b/.test(label)) continue;
     for (const [typo, fix] of Object.entries(TYPOS)) label = label.replace(typo, fix);
+    for (const [pattern, replacement] of t.rename ?? []) label = label.replace(pattern, replacement);
     // Popularity types from another source than IGDB itself get its name: Steam24hrPeakPlayers.
     const source = t.extra === "external_popularity_source" ? sourceNames.get(Number(row[t.extra])) : "";
-    let key = identifier(`${source ?? ""} ${label}`);
+    // Age rating categories get their organization: PEGI_18, ESRB_M.
+    const organization = t.extra === "organization" ? organizationNames.get(Number(row[t.extra])) : undefined;
+    let key = organization
+      ? `${identifier(organization)}_${identifier(label).replace(/^_/, "")}`
+      : identifier(`${source ?? ""} ${label}`);
     if (used.has(key)) key = `${key}_${row.id}`;
     used.add(key);
-    const extra = t.extra === "abbreviation" && row.abbreviation ? ` (${row.abbreviation})` : "";
-    members.push(`  /** ${String(row[t.label]).replace(/\*\//g, "*\\/")}${extra} */\n  ${key}: ${row.id},`);
+    const note = t.extra && NOTES.has(t.extra) && row[t.extra] ? ` (${row[t.extra]})` : "";
+    const text = `${organization ? `${organization} ` : ""}${row[t.label]}${note}`;
+    members.push(`  /** ${text.replace(/\*\//g, "*\\/")} */\n  ${key}: ${row.id},`);
   }
+  const fields = usedBy(t.name);
   out += jsdoc(
     [
-      `Ids of the \`${t.endpoint}\` reference table, for filters such as \`where(g => g.${t.endpoint === "platforms" ? "platforms.any" : "game_type.eq"}(...))\`.`,
+      `Ids of the \`${t.endpoint}\` reference table${fields.length ? `, held by ${fields.join(", ")}` : ""}.`,
       "IGDB can add rows at any time: regenerate with `bun run codegen --fetch`.",
     ],
     "",

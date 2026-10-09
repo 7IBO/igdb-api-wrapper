@@ -1,5 +1,17 @@
 // Compile-time tests: `tsc -p test/types` fails if an inferred type drifts.
-import { createIGDB, ExternalGameSource, GameType, Platform, PopularityType } from "../../src";
+import {
+  type AgeRatingCategory,
+  and,
+  createIGDB,
+  ExternalGameSource,
+  GameType,
+  type Language,
+  Platform,
+  PopularityType,
+  ReleaseDateRegion,
+  type ReleaseDateStatus,
+  type SearchHit,
+} from "../../src";
 import { type Equal, expectType } from "./helpers";
 
 const igdb = createIGDB({ clientId: "x", clientSecret: "y" });
@@ -136,6 +148,89 @@ igdb.games.where((g) => g.category.eq(0));
 igdb.games.select("category");
 // @ts-expect-error and in sort
 igdb.release_dates.sort("region");
+
+// exclude() removes fields from the result, nested ones included, and only accepts selected fields.
+const x1 = igdb.games
+  .select("name", "summary", "cover.image_id", "cover.url", "platforms.*")
+  .exclude("summary", "cover.url");
+type X1 = Awaited<typeof x1>[number];
+expectType<Equal<X1["cover"], { id: number; image_id?: string } | undefined>>();
+expectType<Equal<"summary" extends keyof X1 ? true : false, false>>();
+const x2 = igdb.games.select("*", "cover.*").exclude("storyline", "cover.checksum").exclude("cover.url");
+type X2 = NonNullable<Awaited<ReturnType<typeof x2.first>>>;
+expectType<Equal<Extract<keyof X2, "storyline">, never>>();
+expectType<Equal<Extract<keyof NonNullable<X2["cover"]>, "url" | "checksum">, never>>();
+expectType<Equal<X2["name"], string | undefined>>();
+const x3 = igdb.games
+  .select("name", "platforms.name", "platforms.abbreviation")
+  .exclude("platforms.abbreviation");
+expectType<
+  Equal<
+    Awaited<typeof x3>[number],
+    { id: number; name?: string; platforms?: { id: number; name?: string }[] }
+  >
+>();
+// @ts-expect-error not selected
+igdb.games.select("name").exclude("summary");
+// @ts-expect-error IGDB always returns id
+igdb.games.select("*").exclude("id");
+// @ts-expect-error an expanded relation is removed from select, not excluded
+igdb.games.select("cover.*").exclude("cover");
+// @ts-expect-error no wildcard in exclude
+igdb.games.select("cover.*").exclude("cover.*");
+// @ts-expect-error cover is not expanded
+igdb.games.select("*").exclude("cover.url");
+
+// Named filters on games, usable with and()/or().
+igdb.games.where((g) => and(g.developedBy(908), g.rating.gte(80)));
+igdb.games.where((g) => g.publishedBy(50, 248).or(g.developedBy(908)));
+igdb.games.where((g) =>
+  g.releasedIn({
+    platform: Platform.PlayStation5,
+    region: ReleaseDateRegion.Europe,
+    from: new Date(),
+    to: 1_900_000_000,
+  }),
+);
+// @ts-expect-error only on games
+igdb.platforms.where((p) => p.developedBy(1));
+// @ts-expect-error not on nested relations
+igdb.games.where((g) => g.similar_games.developedBy(1));
+
+// searchAll() returns hits narrowed by kind, with the fields selected per kind.
+const hits = await igdb.searchAll("zelda", {
+  kinds: ["game", "character"],
+  select: { game: ["cover.image_id", "first_release_date"], character: ["mug_shot.image_id"] },
+});
+for (const hit of hits) {
+  expectType<Equal<typeof hit.kind, "game" | "character">>();
+  expectType<Equal<typeof hit.matched, "name" | "alternative_name">>();
+  if (hit.kind === "game") {
+    expectType<
+      Equal<
+        typeof hit.game,
+        { id: number; name?: string; cover?: { id: number; image_id?: string }; first_release_date?: number }
+      >
+    >();
+  } else {
+    expectType<
+      Equal<typeof hit.character, { id: number; name?: string; mug_shot?: { id: number; image_id?: string } }>
+    >();
+  }
+}
+const all = await igdb.searchAll("mario");
+expectType<Equal<(typeof all)[number]["kind"], "game" | "character" | "collection" | "platform" | "theme">>();
+expectType<Equal<Extract<(typeof all)[number], { kind: "theme" }>["theme"], { id: number; name?: string }>>();
+expectType<Equal<SearchHit<"platform">["platform"]["id"], number>>();
+// @ts-expect-error unknown field of a character
+igdb.searchAll("mario", { select: { character: ["nope"] } });
+// @ts-expect-error companies are not in the search index
+igdb.searchAll("ubisoft", { kinds: ["company"] });
+
+// New reference constants.
+expectType<Equal<typeof ReleaseDateStatus.Cancelled, 5>>();
+expectType<Equal<typeof AgeRatingCategory.PEGI_18, 12>>();
+expectType<Equal<typeof Language.French, 12>>();
 
 // Reference constants are values and the entity types of their endpoint at once.
 expectType<Equal<typeof GameType.MainGame, 0>>();

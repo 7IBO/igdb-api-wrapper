@@ -2170,7 +2170,7 @@ export interface WebsiteType {
 }
 
 /**
- * Ids of the `game_types` reference table, for filters such as `where(g => g.game_type.eq(...))`.
+ * Ids of the `game_types` reference table, held by `games.game_type`.
  * IGDB can add rows at any time: regenerate with `bun run codegen --fetch`.
  */
 export const GameType = {
@@ -2207,7 +2207,7 @@ export const GameType = {
 } as const;
 
 /**
- * Ids of the `game_statuses` reference table, for filters such as `where(g => g.game_type.eq(...))`.
+ * Ids of the `game_statuses` reference table, held by `games.game_status`.
  * IGDB can add rows at any time: regenerate with `bun run codegen --fetch`.
  */
 export const GameStatus = {
@@ -2230,7 +2230,7 @@ export const GameStatus = {
 } as const;
 
 /**
- * Ids of the `game_release_formats` reference table, for filters such as `where(g => g.game_type.eq(...))`.
+ * Ids of the `game_release_formats` reference table, held by `external_games.game_release_format`.
  * IGDB can add rows at any time: regenerate with `bun run codegen --fetch`.
  */
 export const GameReleaseFormat = {
@@ -2241,7 +2241,7 @@ export const GameReleaseFormat = {
 } as const;
 
 /**
- * Ids of the `genres` reference table, for filters such as `where(g => g.game_type.eq(...))`.
+ * Ids of the `genres` reference table, held by `games.genres`.
  * IGDB can add rows at any time: regenerate with `bun run codegen --fetch`.
  */
 export const Genre = {
@@ -2294,7 +2294,7 @@ export const Genre = {
 } as const;
 
 /**
- * Ids of the `themes` reference table, for filters such as `where(g => g.game_type.eq(...))`.
+ * Ids of the `themes` reference table, held by `games.themes`, `search.theme`.
  * IGDB can add rows at any time: regenerate with `bun run codegen --fetch`.
  */
 export const Theme = {
@@ -2345,7 +2345,7 @@ export const Theme = {
 } as const;
 
 /**
- * Ids of the `game_modes` reference table, for filters such as `where(g => g.game_type.eq(...))`.
+ * Ids of the `game_modes` reference table, held by `games.game_modes`.
  * IGDB can add rows at any time: regenerate with `bun run codegen --fetch`.
  */
 export const GameMode = {
@@ -2364,7 +2364,7 @@ export const GameMode = {
 } as const;
 
 /**
- * Ids of the `player_perspectives` reference table, for filters such as `where(g => g.game_type.eq(...))`.
+ * Ids of the `player_perspectives` reference table, held by `games.player_perspectives`.
  * IGDB can add rows at any time: regenerate with `bun run codegen --fetch`.
  */
 export const PlayerPerspective = {
@@ -2385,7 +2385,7 @@ export const PlayerPerspective = {
 } as const;
 
 /**
- * Ids of the `platforms` reference table, for filters such as `where(g => g.platforms.any(...))`.
+ * Ids of the `platforms` reference table, held by `executables.platform`, `external_games.platform`, `games.platforms`, `game_engines.platforms`, `multiplayer_modes.platform`, `release_dates.platform`, `search.platform`.
  * IGDB can add rows at any time: regenerate with `bun run codegen --fetch`.
  */
 export const Platform = {
@@ -2830,7 +2830,7 @@ export const Platform = {
 } as const;
 
 /**
- * Ids of the `platform_types` reference table, for filters such as `where(g => g.game_type.eq(...))`.
+ * Ids of the `platform_types` reference table, held by `platforms.platform_type`.
  * IGDB can add rows at any time: regenerate with `bun run codegen --fetch`.
  */
 export const PlatformType = {
@@ -2849,7 +2849,7 @@ export const PlatformType = {
 } as const;
 
 /**
- * Ids of the `external_game_sources` reference table, for filters such as `where(g => g.game_type.eq(...))`.
+ * Ids of the `external_game_sources` reference table, held by `external_games.external_game_source`, `popularity_primitives.external_popularity_source`, `popularity_types.external_popularity_source`.
  * IGDB can add rows at any time: regenerate with `bun run codegen --fetch`.
  */
 export const ExternalGameSource = {
@@ -2900,7 +2900,7 @@ export const ExternalGameSource = {
 } as const;
 
 /**
- * Ids of the `popularity_types` reference table, for filters such as `where(g => g.game_type.eq(...))`.
+ * Ids of the `popularity_types` reference table, held by `popularity_primitives.popularity_type`.
  * IGDB can add rows at any time: regenerate with `bun run codegen --fetch`.
  */
 export const PopularityType = {
@@ -2929,7 +2929,7 @@ export const PopularityType = {
 } as const;
 
 /**
- * Ids of the `release_date_regions` reference table, for filters such as `where(g => g.game_type.eq(...))`.
+ * Ids of the `release_date_regions` reference table, held by `platform_version_release_dates.release_region`, `release_dates.release_region`.
  * IGDB can add rows at any time: regenerate with `bun run codegen --fetch`.
  */
 export const ReleaseDateRegion = {
@@ -2956,7 +2956,7 @@ export const ReleaseDateRegion = {
 } as const;
 
 /**
- * Ids of the `date_formats` reference table, for filters such as `where(g => g.game_type.eq(...))`.
+ * Ids of the `date_formats` reference table, held by `companies.start_date_format`, `companies.change_date_format`, `platform_version_release_dates.date_format`, `release_dates.date_format`.
  * IGDB can add rows at any time: regenerate with `bun run codegen --fetch`.
  */
 export const DateFormat = {
@@ -2979,7 +2979,7 @@ export const DateFormat = {
 } as const;
 
 /**
- * Ids of the `website_types` reference table, for filters such as `where(g => g.game_type.eq(...))`.
+ * Ids of the `website_types` reference table, held by `company_websites.type`, `platform_websites.type`, `websites.type`.
  * IGDB can add rows at any time: regenerate with `bun run codegen --fetch`.
  */
 export const WebsiteType = {
@@ -3032,7 +3032,7 @@ export const WebsiteType = {
 } as const;
 
 /**
- * Ids of the `age_rating_organizations` reference table, for filters such as `where(g => g.game_type.eq(...))`.
+ * Ids of the `age_rating_organizations` reference table, held by `age_ratings.organization`, `age_rating_categories.organization`, `age_rating_content_descriptions_v2.organization`.
  * IGDB can add rows at any time: regenerate with `bun run codegen --fetch`.
  */
 export const AgeRatingOrganization = {
@@ -3053,7 +3053,7 @@ export const AgeRatingOrganization = {
 } as const;
 
 /**
- * Ids of the `language_support_types` reference table, for filters such as `where(g => g.game_type.eq(...))`.
+ * Ids of the `language_support_types` reference table, held by `language_supports.language_support_type`.
  * IGDB can add rows at any time: regenerate with `bun run codegen --fetch`.
  */
 export const LanguageSupportType = {
@@ -3066,7 +3066,7 @@ export const LanguageSupportType = {
 } as const;
 
 /**
- * Ids of the `character_genders` reference table, for filters such as `where(g => g.game_type.eq(...))`.
+ * Ids of the `character_genders` reference table, held by `characters.character_gender`.
  * IGDB can add rows at any time: regenerate with `bun run codegen --fetch`.
  */
 export const CharacterGender = {
@@ -3079,7 +3079,7 @@ export const CharacterGender = {
 } as const;
 
 /**
- * Ids of the `character_species` reference table, for filters such as `where(g => g.game_type.eq(...))`.
+ * Ids of the `character_species` reference table, held by `characters.character_species`.
  * IGDB can add rows at any time: regenerate with `bun run codegen --fetch`.
  */
 export const CharacterSpecie = {
@@ -3093,6 +3093,355 @@ export const CharacterSpecie = {
   Android: 4,
   /** Unknown */
   Unknown: 5,
+} as const;
+
+/**
+ * Ids of the `release_date_statuses` reference table, held by `release_dates.status`.
+ * IGDB can add rows at any time: regenerate with `bun run codegen --fetch`.
+ */
+export const ReleaseDateStatus = {
+  /** Alpha */
+  Alpha: 1,
+  /** Beta */
+  Beta: 2,
+  /** Early Access */
+  EarlyAccess: 3,
+  /** Offline */
+  Offline: 4,
+  /** Cancelled */
+  Cancelled: 5,
+  /** Full Release */
+  FullRelease: 6,
+  /** Advanced Access */
+  AdvancedAccess: 34,
+  /** Digital Compatibility Release */
+  DigitalCompatibilityRelease: 35,
+  /** Next-Gen Optimization Patch Release */
+  NextGenOptimizationPatchRelease: 36,
+} as const;
+
+/**
+ * Ids of the `regions` reference table, held by `game_localizations.region`.
+ * IGDB can add rows at any time: regenerate with `bun run codegen --fetch`.
+ */
+export const Region = {
+  /** Korea (ko-KR) */
+  Korea: 2,
+  /** Japan (ja-JP) */
+  Japan: 3,
+  /** Europe (EU) */
+  Europe: 4,
+} as const;
+
+/**
+ * Ids of the `languages` reference table, held by `language_supports.language`.
+ * IGDB can add rows at any time: regenerate with `bun run codegen --fetch`.
+ */
+export const Language = {
+  /** Arabic (ar) */
+  Arabic: 1,
+  /** Chinese (Simplified) (zh-CN) */
+  ChineseSimplified: 2,
+  /** Chinese (Traditional) (zh-TW) */
+  ChineseTraditional: 3,
+  /** Czech (cs-CZ) */
+  Czech: 4,
+  /** Danish (da-DK) */
+  Danish: 5,
+  /** Dutch (nl-NL) */
+  Dutch: 6,
+  /** English (en-US) */
+  English: 7,
+  /** English (UK) (en-GB) */
+  EnglishUK: 8,
+  /** Spanish (Spain) (es-ES) */
+  SpanishSpain: 9,
+  /** Spanish (Mexico) (es-MX) */
+  SpanishMexico: 10,
+  /** Finnish (fi-FI) */
+  Finnish: 11,
+  /** French (fr-FR) */
+  French: 12,
+  /** Hebrew (he-IL) */
+  Hebrew: 13,
+  /** Hungarian (hu-HU) */
+  Hungarian: 14,
+  /** Italian (it-IT) */
+  Italian: 15,
+  /** Japanese (ja-JP) */
+  Japanese: 16,
+  /** Korean (ko-KR) */
+  Korean: 17,
+  /** Norwegian (nb-NO) */
+  Norwegian: 18,
+  /** Polish (pl-PL) */
+  Polish: 19,
+  /** Portuguese (Portugal) (pt-PT) */
+  PortuguesePortugal: 20,
+  /** Portuguese (Brazil) (pt-BR) */
+  PortugueseBrazil: 21,
+  /** Russian (ru-RU) */
+  Russian: 22,
+  /** Swedish (sv-SE) */
+  Swedish: 23,
+  /** Turkish (tr-TR) */
+  Turkish: 24,
+  /** Thai (th-TH) */
+  Thai: 25,
+  /** Vietnamese (vi-VN) */
+  Vietnamese: 26,
+  /** German (de-DE) */
+  German: 27,
+  /** Ukrainian (uk-UA) */
+  Ukrainian: 28,
+} as const;
+
+/**
+ * Ids of the `age_rating_categories` reference table, held by `age_ratings.rating_category`.
+ * IGDB can add rows at any time: regenerate with `bun run codegen --fetch`.
+ */
+export const AgeRatingCategory = {
+  /** ESRB RP */
+  ESRB_RP: 1,
+  /** ESRB EC */
+  ESRB_EC: 2,
+  /** ESRB E */
+  ESRB_E: 3,
+  /** ESRB E10+ */
+  ESRB_E10: 4,
+  /** ESRB T */
+  ESRB_T: 5,
+  /** ESRB M */
+  ESRB_M: 6,
+  /** ESRB AO */
+  ESRB_AO: 7,
+  /** PEGI 3 */
+  PEGI_3: 8,
+  /** PEGI 7 */
+  PEGI_7: 9,
+  /** PEGI 12 */
+  PEGI_12: 10,
+  /** PEGI 16 */
+  PEGI_16: 11,
+  /** PEGI 18 */
+  PEGI_18: 12,
+  /** CERO A */
+  CERO_A: 13,
+  /** CERO B */
+  CERO_B: 14,
+  /** CERO C */
+  CERO_C: 15,
+  /** CERO D */
+  CERO_D: 16,
+  /** CERO Z */
+  CERO_Z: 17,
+  /** USK 0 */
+  USK_0: 18,
+  /** USK 6 */
+  USK_6: 19,
+  /** USK 12 */
+  USK_12: 20,
+  /** USK 16 */
+  USK_16: 21,
+  /** USK 18 */
+  USK_18: 22,
+  /** GRAC ALL */
+  GRAC_ALL: 23,
+  /** GRAC 12+ */
+  GRAC_12: 24,
+  /** GRAC 15+ */
+  GRAC_15: 25,
+  /** GRAC 19+ */
+  GRAC_19: 26,
+  /** GRAC TESTING */
+  GRAC_TESTING: 27,
+  /** CLASS_IND L */
+  CLASSIND_L: 28,
+  /** CLASS_IND 10 */
+  CLASSIND_10: 29,
+  /** CLASS_IND 12 */
+  CLASSIND_12: 30,
+  /** CLASS_IND 14 */
+  CLASSIND_14: 31,
+  /** CLASS_IND 16 */
+  CLASSIND_16: 32,
+  /** CLASS_IND 18 */
+  CLASSIND_18: 33,
+  /** ACB G */
+  ACB_G: 34,
+  /** ACB PG */
+  ACB_PG: 35,
+  /** ACB M */
+  ACB_M: 36,
+  /** ACB MA 15+ */
+  ACB_MA15: 37,
+  /** ACB R 18+ */
+  ACB_R18: 38,
+  /** ACB RC */
+  ACB_RC: 39,
+  /** GRAC 18+ */
+  GRAC_18: 40,
+} as const;
+
+/**
+ * Ids of the `company_statuses` reference table, held by `companies.status`.
+ * IGDB can add rows at any time: regenerate with `bun run codegen --fetch`.
+ */
+export const CompanyStatus = {
+  /** active */
+  Active: 0,
+  /** defunct */
+  Defunct: 1,
+  /** merged */
+  Merged: 2,
+  /** renamed */
+  Renamed: 3,
+} as const;
+
+/**
+ * Ids of the `company_sizes` reference table, held by `companies.company_size`.
+ * IGDB can add rows at any time: regenerate with `bun run codegen --fetch`.
+ */
+export const CompanySize = {
+  /** 0-1 employees */
+  Employees0To1: 1,
+  /** 2-10 employees */
+  Employees2To10: 2,
+  /** 11-50 employees */
+  Employees11To50: 3,
+  /** 51-200 employees */
+  Employees51To200: 4,
+  /** 201-500 employees */
+  Employees201To500: 5,
+  /** 501-1000 employees */
+  Employees501To1000: 6,
+  /** 1001-5000 employees */
+  Employees1001To5000: 7,
+  /** 5000+ employees */
+  Employees5000Plus: 8,
+} as const;
+
+/**
+ * Ids of the `company_types` reference table, held by `company_type_histories.company_type`.
+ * IGDB can add rows at any time: regenerate with `bun run codegen --fetch`.
+ */
+export const CompanyType = {
+  /** Main Company */
+  MainCompany: 1,
+  /** Division */
+  Division: 2,
+  /** Subsidiary */
+  Subsidiary: 3,
+  /** Holding Company */
+  HoldingCompany: 4,
+  /** Solo Dev */
+  SoloDev: 5,
+} as const;
+
+/**
+ * Ids of the `network_types` reference table, held by `event_networks.network_type`.
+ * IGDB can add rows at any time: regenerate with `bun run codegen --fetch`.
+ */
+export const NetworkType = {
+  /** Twitch */
+  Twitch: 1,
+  /** Official website */
+  OfficialWebsite: 2,
+  /** YouTube */
+  YouTube: 3,
+  /** Twitter */
+  Twitter: 4,
+} as const;
+
+/**
+ * Ids of the `collection_types` reference table, held by `collections.type`, `collection_membership_types.allowed_collection_type`, `collection_relation_types.allowed_child_type`, `collection_relation_types.allowed_parent_type`.
+ * IGDB can add rows at any time: regenerate with `bun run codegen --fetch`.
+ */
+export const CollectionType = {
+  /** Series */
+  Series: 1,
+} as const;
+
+/**
+ * Ids of the `collection_membership_types` reference table, held by `collection_memberships.type`.
+ * IGDB can add rows at any time: regenerate with `bun run codegen --fetch`.
+ */
+export const CollectionMembershipType = {
+  /** Member */
+  Member: 1,
+  /** Spin-off */
+  SpinOff: 2,
+} as const;
+
+/**
+ * Ids of the `collection_relation_types` reference table, held by `collection_relations.type`.
+ * IGDB can add rows at any time: regenerate with `bun run codegen --fetch`.
+ */
+export const CollectionRelationType = {
+  /** Subseries */
+  Subseries: 1,
+  /** Spin-off Series */
+  SpinOffSeries: 2,
+  /** Story Arc */
+  StoryArc: 34,
+} as const;
+
+/**
+ * Ids of the `platform_families` reference table, held by `platforms.platform_family`.
+ * IGDB can add rows at any time: regenerate with `bun run codegen --fetch`.
+ */
+export const PlatformFamily = {
+  /** PlayStation */
+  PlayStation: 1,
+  /** Xbox */
+  Xbox: 2,
+  /** Sega */
+  Sega: 3,
+  /** Linux */
+  Linux: 4,
+  /** Nintendo */
+  Nintendo: 5,
+  /** Atari */
+  Atari: 6,
+} as const;
+
+/**
+ * Ids of the `image_types` reference table, held by `artworks.image_type`, `covers.image_type`, `logos.image_type`.
+ * IGDB can add rows at any time: regenerate with `bun run codegen --fetch`.
+ */
+export const ImageType = {
+  /** Artwork */
+  Artwork: 1,
+  /** Key art without logo */
+  KeyArtWithoutLogo: 2,
+  /** Key art with logo */
+  KeyArtWithLogo: 3,
+  /** Concept art */
+  ConceptArt: 4,
+  /** Game logo (white) */
+  GameLogoWhite: 5,
+  /** Game logo (black) */
+  GameLogoBlack: 6,
+  /** Game logo (color) */
+  GameLogoColor: 7,
+  /** Main cover */
+  MainCover: 8,
+  /** Historical cover */
+  HistoricalCover: 9,
+  /** Alternative cover */
+  AlternativeCover: 10,
+  /** Square cover */
+  SquareCover: 11,
+  /** Infographic */
+  Infographic: 12,
+  /** Icon */
+  Icon: 13,
+  /** Historical logo */
+  HistoricalLogo: 14,
+  /** Historical icon */
+  HistoricalIcon: 15,
+  /** Historical artwork */
+  HistoricalArtwork: 16,
 } as const;
 
 /** Maps each endpoint path to the entity it returns. */

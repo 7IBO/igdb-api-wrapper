@@ -34,19 +34,37 @@ export {
   type SyncOptions,
   WithCount,
 } from "./query/query";
-export type { FieldPath, ScalarPath, SelectResult, TimestampKeys } from "./query/types";
+export {
+  SEARCH_GAME_TYPES,
+  SEARCH_KINDS,
+  type SearchAll,
+  type SearchAllOptions,
+  type SearchHit,
+  type SearchKind,
+} from "./query/search-all";
+export type {
+  ExcludePath,
+  ExcludeResult,
+  FieldPath,
+  ScalarPath,
+  SelectResult,
+  TimestampKeys,
+} from "./query/types";
 export {
   type ArrayFilter,
   and,
   type BooleanFilter,
   Condition,
+  type GameFilters,
   type NumberFilter,
   or,
+  type ReleasedInOptions,
   type StringFilter,
   type TimestampFilter,
   toDate,
   toUnix,
   type WhereFields,
+  type WhereRoot,
 } from "./query/where";
 export {
   type EnsureWebhooksOptions,
