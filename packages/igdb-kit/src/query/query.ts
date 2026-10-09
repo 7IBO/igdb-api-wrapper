@@ -47,6 +47,7 @@ import {
   type ReleasesOptions,
   releaseCalendar,
 } from "./releases";
+import { type RemovedRow, removedRows } from "./removed";
 import { Task } from "./task";
 import type { ExcludePath, ExcludeResult, FieldPath, ScalarKeys, SelectResult } from "./types";
 import { type Condition, type NameLookup, throwIfRemoved, type WhereRoot, whereProxy } from "./where";
@@ -480,6 +481,24 @@ export class Query<N extends EndpointName, R = { id: number }> extends Executabl
       throw new QueryError(`linkedBy() needs a field of ${this.endpoint} that points to games, not ${field}`);
     }
     return this.with({ link: field });
+  }
+
+  /**
+   * The ids among these that IGDB no longer has, for a local copy: `sync({ since })` and webhooks
+   * miss rows deleted while you were not listening. Each comes with the reason and the replacement
+   * of a duplicate from IGDB's `reports`, which cover games, companies and game localizations; most
+   * deletions have no report. Ids are checked 500 per query, batched; the query's fields and `where`
+   * are not used.
+   *
+   * ```ts
+   * const gone = await igdb.games.removed(storedIds);
+   * // [{ id: 422306, reason: "Duplicate", replacement: 399156 }, { id: 202354, reason: "Invalid", replacement: null }]
+   * ```
+   */
+  removed(ids: readonly number[]): Task<RemovedRow[]> {
+    return new Task((execute) =>
+      removedRows((endpoint, state) => new Query(this.runner, endpoint, state), this.endpoint, ids, execute),
+    );
   }
 
   /** Number of entities matching the `where` (and `search`). */

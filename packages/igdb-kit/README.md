@@ -382,6 +382,28 @@ lastSync = startedAt; // next time, only what changed since this run
 
 The first page goes out with the count. The other pages are then requested in parallel, which batching packs into multiqueries: each asks for the matches after a row already read, skipping those the pages in between hold, so pages come back full however the ids are spread. Matches added or removed meanwhile shift the pages: repeated rows are dropped and rows a page skipped past are read again, so none is missed. A day of changes on `games` (about 33,000) takes 8 requests and 3 seconds, all 73,000 companies with `*` 26 requests and about 11 seconds, and the 133,000 rows of one popularity type, crowded into a few stretches of ids, 28 requests and 7 seconds. At most `concurrency` pages (40 by default, about 64 MB) are requested or waiting to be read, so a slow consumer does not fill the memory. With `since` (a `Date`, a date string or Unix seconds), only entities whose `updated_at` is newer come back. Sync requests run at `background` priority, so interactive queries pass first. Pair it with webhooks to stay up to date between runs.
 
+### A local copy: deletions and the schema
+
+`sync({ since })` and webhooks miss rows deleted while you were not listening. `removed(ids)` checks stored ids against IGDB, 500 per query, and gives the reason and the replacement of a duplicate from IGDB's reports (games, companies and game localizations; most deletions have no report):
+
+```ts
+const gone = await igdb.games.removed(storedIds);
+// [{ id: 422306, reason: "Duplicate", replacement: 399156 }, { id: 202354, reason: "Invalid", replacement: null }]
+```
+
+`igdb-kit/schema` describes every endpoint as data, with no request, to generate the tables and indexes of a local copy or to declare a tool's input and output:
+
+```ts
+import { endpointNames, endpointSchema, jsonSchema } from "igdb-kit/schema";
+
+const games = endpointSchema("games");
+games.fields; // [{ name: "id", type: "integer" }, { name: "platforms", type: "relation", array: true, endpoint: "platforms", description }, ...]
+games.linkedFrom; // [{ endpoint: "release_dates", field: "game", array: false }, ...]: where a copy needs an index
+jsonSchema("games"); // JSON Schema (draft 2020-12) of a row, relations as ids
+```
+
+A field's `type` is `string`, `integer`, `number`, `boolean`, `timestamp` (Unix seconds) or `relation` (with its `endpoint`); `array` marks lists, and `values` the names of an integer that holds one of a few values. Fields IGDB replaced are left out, and those it deprecated but still fills are marked `deprecated`.
+
 ### Images
 
 ```ts
@@ -650,8 +672,8 @@ The same rules hold across the library:
 
 - **Names.** IGDB's data keeps IGDB's names, in snake_case: endpoints, fields and the rows they return (`release_dates`, `first_release_date`). What igdb-kit adds is in camelCase: methods, options and computed objects (`findByGames()`, `includeWorldwide`, `minimumAge`). A row meant to be stored keeps IGDB's columns, such as `calculated_at` in `popularitySnapshot()`.
 - **Methods.** An endpoint only has the methods that work on it. `igdb.games` is a `GamesQuery`, with `popular()`, `weightedPopular()`, `releases()`, `findByExternalIds()`, `family()`, `series()` and `catalog()`; the 24 endpoints whose rows point to games, such as `release_dates` or `characters`, are `GameLinkedQuery`s, with `findByGames()`; the others are plain `Query`s. Every query has `findBy()`. `QueryOf<"release_dates">` names the type of an endpoint, and `select()`, `where()` and the other builder methods keep it.
-- **Placement.** A method that returns an endpoint's rows is on that endpoint, even when it reads others along the way (`igdb.games.popular()`, `igdb.release_dates.findByGames()`). The rest is on the client (`igdb.batch()`, `igdb.searchAll()`, `igdb.expand()`, `igdb.popularitySnapshot()`). Helpers that send no request are in `igdb-kit/game`, and server pieces in `igdb-kit/proxy`, `igdb-kit/redis` and `igdb-kit/webhooks`.
-- **Laziness.** Nothing is sent before it is awaited or executed: queries, views, and the `Task` returned by the methods that take several requests (`findByIds()`, `findByGames()`, `findBy()`, `findByExternalIds()`, `popular()`, `weightedPopular()`, `releases()`, `family()`, `series()`, `catalog()`, `searchAll()`, `expand()`). All of them go in `batch()`, and request options (`signal`, `priority`, `batch`) go to their `execute()`. A task is typed as a promise and sends its requests once, however many times it is awaited; `execute()` sends them again. `iterate()`, `sync()` and `popularitySnapshot()`, read with `for await`, take the request options among their own. `batch()`, `raw()` and the `webhooks` methods send at once.
+- **Placement.** A method that returns an endpoint's rows is on that endpoint, even when it reads others along the way (`igdb.games.popular()`, `igdb.release_dates.findByGames()`). The rest is on the client (`igdb.batch()`, `igdb.searchAll()`, `igdb.expand()`, `igdb.popularitySnapshot()`). Helpers that send no request are in `igdb-kit/game`, the schema as data in `igdb-kit/schema`, and server pieces in `igdb-kit/proxy`, `igdb-kit/redis` and `igdb-kit/webhooks`.
+- **Laziness.** Nothing is sent before it is awaited or executed: queries, views, and the `Task` returned by the methods that take several requests (`findByIds()`, `findByGames()`, `findBy()`, `findByExternalIds()`, `removed()`, `popular()`, `weightedPopular()`, `releases()`, `family()`, `series()`, `catalog()`, `searchAll()`, `expand()`). All of them go in `batch()`, and request options (`signal`, `priority`, `batch`) go to their `execute()`. A task is typed as a promise and sends its requests once, however many times it is awaited; `execute()` sends them again. `iterate()`, `sync()` and `popularitySnapshot()`, read with `for await`, take the request options among their own. `batch()`, `raw()` and the `webhooks` methods send at once.
 - **Options.** `limit` is the number of results (10 by default, 500 at most; `popularitySnapshot()` takes it per metric), `offset` skips results, `pageSize` is the number of rows of a page read by `iterate()`, `concurrency` the pages `sync()` requests at once, and `maxRows` caps the rows read: a method that ranks (`popular()`, `weightedPopular()`, `searchAll()`) returns the best it found within it, and `releases()`, which lists everything, throws rather than return part of the list. Options that filter on ids have plural names and take one id or several (`platforms`, `regions`, `statuses`, `gameTypes`, `types`); `releaseDate()` takes one `platform` and one `region`, since they choose the date to show rather than filter. A boolean that widens a filter starts with `include` (`includeWorldwide`, `includeEditions`).
 - **Dates.** A date argument takes a `Date`, a `"YYYY-MM-DD"` or ISO string, or Unix seconds (`DateInput`), and a number in milliseconds such as `Date.now()` throws a `QueryError`. Rows keep IGDB's Unix seconds, and computed objects give `Date`s (`start` and `end` of a release).
 - **Missing values.** A row leaves out the fields IGDB leaves out. A computed object has all its keys, with `null` where there is no value, so that it survives `JSON.stringify` and Next.js props, and a lookup that finds nothing returns `null` (`first()`, `findById()`, `releaseDate()`). `imageUrl()` is the exception: it returns `undefined` without an image, which `<img src>` accepts.

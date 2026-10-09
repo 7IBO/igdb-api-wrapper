@@ -72,6 +72,7 @@ export type {
   ReleasePrecision,
   ReleasesOptions,
 } from "./query/releases";
+export type { RemovedRow } from "./query/removed";
 export {
   MAIN_GAME_TYPES,
   SEARCH_GAME_TYPES,

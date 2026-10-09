@@ -1006,6 +1006,15 @@ describe.skipIf(!clientId || !clientSecret)("real IGDB API", () => {
     );
   }, 15_000);
 
+  test("removed() finds deleted ids, with the replacement of a duplicate", async () => {
+    // Game 422306 was removed as a duplicate of 399156 (IGDB report 1731).
+    const gone = await igdb.games.removed([1942, 422306, 999_999_999]);
+    expect(gone.map((row) => row.id)).toEqual([422306, 999_999_999]);
+    expect(gone[0]?.reason).toBe("Duplicate");
+    expect(typeof gone[0]?.replacement).toBe("number");
+    expect(gone[1]).toEqual({ id: 999_999_999, reason: null, replacement: null });
+  });
+
   test("expand() caches reference tables and drops ids of deleted rows", async () => {
     const counted = countingClient();
     const games = await counted.igdb.games.select("name", "platforms").findByIds([1942, 1020]);
