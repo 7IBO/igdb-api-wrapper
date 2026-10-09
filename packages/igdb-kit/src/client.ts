@@ -3,7 +3,7 @@ import { type CacheStore, cacheKey, memoryCache, parseResponse, serializeRespons
 import { TokenProvider, type TokenStore } from "./core/auth";
 import { IGDBError, QueryError } from "./core/errors";
 import { type Limiter, type LocalLimiterOptions, sharedLimiter } from "./core/limiter";
-import { Transport, type TransportHooks } from "./core/transport";
+import { blocksOf, reportRequest, Transport, type TransportHooks } from "./core/transport";
 import { type EndpointName, endpoints, type Game, PopularityType } from "./generated/schema";
 import { gameLink } from "./links/by-game";
 import { type Expanded, expand, type IdKeys } from "./links/expand";
@@ -190,7 +190,20 @@ export function createIGDB(options: IGDBClientOptions): IGDBClient {
     const store = cache;
     const key = await cacheKey(path, body);
     const hit = await store.get(key).catch(() => undefined);
-    if (hit) return parseResponse(hit);
+    if (hit) {
+      const response = parseResponse(hit);
+      reportRequest(options.hooks, {
+        path,
+        method: "POST",
+        status: 200,
+        durationMs: 0,
+        bytes: response.bytes ?? new TextEncoder().encode(hit).length,
+        attempt: 1,
+        blocks: blocksOf(path, body),
+        cached: true,
+      });
+      return response;
+    }
     const response = await send();
     await store.set(key, serializeResponse(response), ttlMs).catch(() => {});
     return response;

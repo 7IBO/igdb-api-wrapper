@@ -93,14 +93,14 @@ export const AgeRatingContentDescriptionCategoryEnum = {
 } as const;
 export type AgeRatingContentDescriptionCategoryEnum = (typeof AgeRatingContentDescriptionCategoryEnum)[keyof typeof AgeRatingContentDescriptionCategoryEnum];
 
-/** @deprecated Legacy enum, replaced by a reference table in the API. */
+/** Values of `game_version_features.category`. */
 export const GameVersionFeatureCategoryEnum = {
   BOOLEAN: 0,
   DESCRIPTION: 1,
 } as const;
 export type GameVersionFeatureCategoryEnum = (typeof GameVersionFeatureCategoryEnum)[keyof typeof GameVersionFeatureCategoryEnum];
 
-/** @deprecated Legacy enum, replaced by a reference table in the API. */
+/** Values of `game_version_feature_values.included_feature`. */
 export const GameVersionFeatureValueIncludedFeatureEnum = {
   NOT_INCLUDED: 0,
   INCLUDED: 1,

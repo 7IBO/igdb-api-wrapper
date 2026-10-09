@@ -1,4 +1,5 @@
-import type { EndpointName } from "../generated/schema";
+import { QueryError } from "../core/errors";
+import { type EndpointName, entities } from "../generated/schema";
 import { type ExecuteOptions, MAX_LIMIT, type Query, toId } from "../query/query";
 import type { Prettify } from "../query/types";
 
@@ -77,6 +78,9 @@ export async function expand<T extends object, K extends IdKeys<T>, N extends En
   target: Query<N, E>,
   options?: ExecuteOptions,
 ): Promise<Expanded<T, K, E>[]> {
+  if (valueFields().has(key)) {
+    throw new QueryError(`expand() replaces ids of a relation, and ${key} holds values in IGDB's rows`);
+  }
   const ids = new Set<number>();
   for (const row of rows) for (const id of idsOf(row[key])) ids.add(toId(id));
   const found = await load(target as never as Query<EndpointName, E>, [...ids], options);
@@ -93,6 +97,24 @@ export async function expand<T extends object, K extends IdKeys<T>, N extends En
     }
     return copy as Expanded<T, K, E>;
   });
+}
+
+let values: Set<string> | undefined;
+
+/**
+ * Fields that hold values in every IGDB entity that has them, never ids of a relation: `tags`,
+ * `hypes`, `country`, `first_release_date`... `..._id` fields such as `game_id` are ids. Keys of your
+ * own rows that IGDB does not have are accepted.
+ */
+function valueFields(): Set<string> {
+  if (values) return values;
+  const relations = new Set<string>();
+  const scalars = new Set<string>();
+  for (const fields of Object.values(entities)) {
+    for (const [field, type] of Object.entries(fields)) (type === 0 ? scalars : relations).add(field);
+  }
+  values = new Set([...scalars].filter((field) => !relations.has(field) && !field.endsWith("_id")));
+  return values;
 }
 
 /** Ids in a value: a number, an array of numbers, or objects already expanded. */

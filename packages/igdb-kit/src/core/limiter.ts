@@ -158,17 +158,36 @@ export class LocalLimiter implements Limiter {
   }
 }
 
-const registry = new Map<string, LocalLimiter>();
+const registry = new Map<string, { limiter: LocalLimiter; settings: string; warned: boolean }>();
+
+/** The options that change how a limiter behaves, comparable as a string. */
+function settingsOf(options: LocalLimiterOptions | undefined): string {
+  const { now: _, ...rest } = options ?? {};
+  return JSON.stringify(
+    Object.entries(rest)
+      .filter(([, value]) => value !== undefined)
+      .sort(),
+  );
+}
 
 /**
  * The limiter shared by every client created with the same client id in this process. IGDB counts the
- * quota per client id, so two clients must not each get 4 requests per second.
+ * quota per client id, so two clients must not each get 4 requests per second. The first options
+ * apply: a later client that passes other options gets a console warning, once, and the same limiter.
  */
 export function sharedLimiter(clientId: string, options?: LocalLimiterOptions): LocalLimiter {
-  let limiter = registry.get(clientId);
-  if (!limiter) {
-    limiter = new LocalLimiter(options);
-    registry.set(clientId, limiter);
+  const entry = registry.get(clientId);
+  if (!entry) {
+    const limiter = new LocalLimiter(options);
+    registry.set(clientId, { limiter, settings: settingsOf(options), warned: false });
+    return limiter;
   }
-  return limiter;
+  if (options !== undefined && !entry.warned && settingsOf(options) !== entry.settings) {
+    entry.warned = true;
+    console.warn(
+      "igdb-kit: a client with the same client id already set the rate limiter, so these limiter options are ignored. " +
+        "IGDB counts the quota per client id: pass the same options to every client, or one Limiter to all of them.",
+    );
+  }
+  return entry.limiter;
 }

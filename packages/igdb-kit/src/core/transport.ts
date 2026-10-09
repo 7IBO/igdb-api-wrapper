@@ -4,11 +4,52 @@ import { errorFromResponse, IGDBError, type IGDBErrorOptions, NetworkError, Rate
 import type { Limiter } from "./limiter";
 import { backoffDelay, sleep } from "./util";
 
+/** One request, as `hooks.onRequest` reports it. */
+export interface RequestLog {
+  /** The path requested: `games`, `games/count`, `multiquery`, `webhooks`... */
+  path: string;
+  method: "GET" | "POST" | "DELETE";
+  /** The HTTP status, or 0 when no answer came (network error, timeout, abort). */
+  status: number;
+  /** From sending the request to reading the whole response, in milliseconds; 0 from the cache. */
+  durationMs: number;
+  /** Size of the response body. */
+  bytes: number;
+  /** 1 for the first try, then 2, 3... for retries. */
+  attempt: number;
+  /** Queries in a multiquery, 1 otherwise. */
+  blocks: number;
+  /** True when the response came from the client's cache, with no request to IGDB. */
+  cached: boolean;
+}
+
 export interface TransportHooks {
+  /**
+   * A request ended, with a response or an error, or a response came from the cache: for logs and
+   * metrics. Called once per try, so a retried request reports each one. An error thrown here is
+   * ignored.
+   */
+  onRequest?: (info: RequestLog) => void;
   /** A request is about to be retried after a 429, a 5xx or a network error. */
   onRetry?: (info: { path: string; attempt: number; delayMs: number; reason: unknown }) => void;
   /** IGDB answered 429. */
   onRateLimited?: (info: { path: string }) => void;
+}
+
+/** @internal Calls `hooks.onRequest`, ignoring what it throws: a log must not fail a request. */
+export function reportRequest(hooks: TransportHooks | undefined, info: RequestLog): void {
+  try {
+    hooks?.onRequest?.(info);
+  } catch {
+    // ignored
+  }
+}
+
+/** @internal Queries in a request body: one per line of a multiquery. */
+export function blocksOf(path: string, body: string | undefined): number {
+  return path === "multiquery" && body
+    ? body.split("\n").filter((line) => line.startsWith("query ")).length
+    : 1;
 }
 
 export interface TransportOptions {
@@ -59,6 +100,18 @@ export class Transport {
     for (let attempt = 0; ; attempt++) {
       signal?.throwIfAborted();
       const release = await this.options.limiter.acquire({ signal, priority });
+      const started = Date.now();
+      const report = (status: number, bytes: number) =>
+        reportRequest(this.options.hooks, {
+          path,
+          method,
+          status,
+          durationMs: Date.now() - started,
+          bytes,
+          attempt: attempt + 1,
+          blocks: blocksOf(path, body),
+          cached: false,
+        });
       let status: number;
       let text: string;
       let bytes: number;
@@ -86,6 +139,7 @@ export class Transport {
         text = new TextDecoder().decode(buffer);
       } catch (error) {
         release();
+        if (!(error instanceof IGDBError)) report(0, 0);
         if (signal?.aborted) throw signal.reason;
         if (error instanceof IGDBError) throw error; // from the token provider
         if (!(await this.backoff(path, attempt, deadline, error, signal))) {
@@ -98,6 +152,7 @@ export class Transport {
         continue;
       }
       release();
+      report(status, bytes);
 
       if (status >= 200 && status < 300) {
         const count = headers.get("x-count");

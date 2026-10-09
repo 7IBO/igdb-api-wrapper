@@ -258,17 +258,38 @@ for (const [name, fields] of messages) {
 }
 const isRemoved = (message: string, field: string) => removed.get(message)?.has(field) ?? false;
 
-// Enums: a const object for values plus a union type. Every proto enum is a deprecated legacy enum;
-// only those still used by a kept field are emitted.
+// Enums: a const object for values plus a union type, for those still used by a kept field. Most
+// proto enums are legacy ones that IGDB replaced with reference tables.
 const usedEnums = new Set(
   [...messages].flatMap(([name, fields]) =>
     fields.filter((f) => enums.has(f.type) && !isRemoved(name, f.name)).map((f) => f.type),
   ),
 );
+// An enum is deprecated when every field holding it is: `game_version_features.category` still is
+// one, while `age_rating_content_descriptions.category` gave way to a reference table.
+const enumUses = new Map<string, { message: string; field: string; deprecated: boolean }[]>();
+for (const [name, fields] of messages) {
+  for (const f of fields) {
+    if (!enums.has(f.type) || isRemoved(name, f.name)) continue;
+    const uses = enumUses.get(f.type) ?? [];
+    uses.push({ message: name, field: f.name, deprecated: f.deprecated });
+    enumUses.set(f.type, uses);
+  }
+}
 for (const e of enums.values()) {
   if (!usedEnums.has(e.name)) continue;
   const typeName = e.name;
-  out += jsdoc(["@deprecated Legacy enum, replaced by a reference table in the API."], "");
+  const uses = enumUses.get(e.name) ?? [];
+  out += jsdoc(
+    uses.every((use) => use.deprecated)
+      ? ["@deprecated Legacy enum, replaced by a reference table in the API."]
+      : [
+          `Values of ${uses
+            .map((use) => `\`${endpointOf.get(use.message) ?? use.message}.${use.field}\``)
+            .join(", ")}.`,
+        ],
+    "",
+  );
   out += `export const ${typeName} = {\n${e.values.map((v) => `  ${v.name}: ${v.value},`).join("\n")}\n} as const;\n`;
   out += `export type ${typeName} = (typeof ${typeName})[keyof typeof ${typeName}];\n\n`;
 }
