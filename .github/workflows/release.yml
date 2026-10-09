@@ -1,8 +1,8 @@
 name: Release
 
 # On main: opens a "Version packages" PR from pending changesets. Merging that PR publishes to npm
-# with provenance, through npm trusted publishing (no token stored in the repository), then creates
-# the GitHub release of each new version from its CHANGELOG.md section.
+# with provenance, through npm trusted publishing (no token stored in the repository). Every push then
+# syncs the GitHub releases with the CHANGELOG.md sections: one release per published version.
 on:
   push:
     branches: [main]
@@ -19,8 +19,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0 # sync-releases.ts tags each version on the commit that set it
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.4.2
@@ -40,10 +38,21 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           NPM_CONFIG_PROVENANCE: "true"
-      # changesets/action only creates releases from "New tag:" lines, which changeset 3 no longer prints.
-      # With pending changesets the action leaves the Version packages branch checked out: skip then.
+
+  # changesets/action only creates releases from "New tag:" lines, which changeset 3 no longer prints.
+  # A job of its own reads the changelogs of the pushed commit, never the Version packages branch the
+  # action leaves checked out, so it runs on every push: missing releases appear without a new version.
+  github-releases:
+    needs: release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # sync-releases.ts tags each version on the commit that set it
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.2
       - name: GitHub releases from the changelogs
-        if: steps.changesets.outputs.hasChangesets == 'false'
         run: bun scripts/sync-releases.ts
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

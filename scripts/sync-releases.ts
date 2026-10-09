@@ -1,8 +1,9 @@
 // Keeps one GitHub release per version of each package in sync with its CHANGELOG.md: the release is
 // tagged `<name>@<version>` on the commit that set that version in package.json, and its notes are
 // the version's changelog section. Missing releases are created (oldest first, so the newest stays
-// "Latest") and edited notes are updated. Run on main by release.yml, after publishing; needs GH_TOKEN
-// and the full git history. `--dry-run` prints what it would do without calling GitHub.
+// "Latest") and edited notes are updated. Run by release.yml on each push to main, once the release
+// job is done; needs GH_TOKEN and the full git history. `--dry-run` prints what it would do without
+// calling GitHub.
 import { execFileSync } from "node:child_process";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
