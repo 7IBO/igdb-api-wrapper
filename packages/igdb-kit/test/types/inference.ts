@@ -174,3 +174,19 @@ const bySteamId = await igdb.games.select("name").findByExternalIds(ExternalGame
 expectType<Equal<typeof bySteamId, Map<string, { id: number; name?: string }>>>();
 // @ts-expect-error only on games
 igdb.platforms.findByExternalIds(ExternalGameSource.Steam, ["1"]);
+
+// Webhook deliveries narrow by endpoint and operation.
+import { webhookHandler } from "../../src/webhooks";
+
+webhookHandler<"games" | "platforms">({
+  secret: "s",
+  onEvent: (event) => {
+    if (event.endpoint === "games" && event.operation !== "delete") {
+      expectType<Equal<typeof event.data.name, string | undefined>>();
+      expectType<Equal<typeof event.data.cover, number | undefined>>();
+    }
+    if (event.operation === "delete") expectType<Equal<typeof event.data, { id: number }>>();
+    // @ts-expect-error not subscribed to this endpoint
+    if (event.endpoint === "genres") return;
+  },
+});
