@@ -137,9 +137,44 @@ describe("popular()", () => {
     );
   });
 
+  test("the query's limit and offset page the ranking; the deprecated limit option still works", async () => {
+    const mock = api();
+    const igdb = testClient(mock.fetch);
+    const second = await igdb.games.select("name").limit(3).offset(2).popular(PopularityType.IGDBVisits);
+    expect(second.map((t) => t.game.id)).toEqual([3, 4, 5]);
+    // The games before the page are ranked too.
+    expect(mock.calls[0]?.body).toBe(
+      "fields game_id,value; where popularity_type = 1; sort value desc; limit 15; offset 0;",
+    );
+    expect(await igdb.games.popular(PopularityType.IGDBVisits)).toHaveLength(10);
+    const old = await igdb.games.limit(5).popular(PopularityType.IGDBVisits, { limit: 2 });
+    expect(old.map((t) => t.game.id)).toEqual([1, 2]);
+
+    const none = api();
+    expect(await testClient(none.fetch).games.limit(0).popular(PopularityType.IGDBVisits)).toEqual([]);
+    expect(none.calls).toHaveLength(0);
+  });
+
+  test("an offset pages the exact ranking of few games", async () => {
+    const mock = api();
+    const igdb = testClient(mock.fetch);
+    const page = await igdb.games
+      .where((g) => g.platforms.any(508))
+      .limit(10)
+      .offset(40)
+      .popular(PopularityType.IGDBVisits, { maxRows: 500 });
+    expect(page.map((t) => t.game.id)).toEqual(Array.from({ length: 10 }, (_, i) => (i + 41) * 13));
+    const own = mock.calls.flatMap((c) => c.body.split("\n")).filter((b) => b.includes("game_id = ("));
+    expect(own.every((b) => b.includes("limit 50;"))).toBe(true);
+  });
+
   test("validates its input", async () => {
     const igdb = testClient(api().fetch);
-    await expect(igdb.games.popular(PopularityType.IGDBVisits, { limit: 0 })).rejects.toThrow(QueryError);
+    await expect(igdb.games.popular(PopularityType.IGDBVisits, { limit: 501 })).rejects.toThrow(QueryError);
+    await expect(igdb.games.popular(PopularityType.IGDBVisits, { limit: 1.5 })).rejects.toThrow(QueryError);
+    await expect(igdb.games.sort("rating", "desc").popular(PopularityType.IGDBVisits)).rejects.toThrow(
+      /remove sort\(\)/,
+    );
     await expect(igdb.games.search("zelda").popular(PopularityType.IGDBVisits)).rejects.toThrow(/search/);
     // @ts-expect-error only on games
     await expect(igdb.platforms.popular(PopularityType.IGDBVisits)).rejects.toThrow(/only on games/);

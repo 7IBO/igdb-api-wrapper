@@ -31,6 +31,7 @@ export { type GameLinkedEndpoint, gameLink } from "./links/by-game";
 export { type Expanded, type IdKeys, REFERENCE_ENDPOINTS, REFERENCE_TTL_MS } from "./links/expand";
 export { defineSelection, type ResultOf, type Selection } from "./links/selection";
 export { type NoGameFields, View, type ViewLinks, type ViewRow } from "./links/view";
+export { type DateInput, toDate, toUnix } from "./query/dates";
 export type {
   PopularitySnapshotOptions,
   PopularitySnapshotRow,
@@ -84,8 +85,6 @@ export {
   type ReleasedInOptions,
   type StringFilter,
   type TimestampFilter,
-  toDate,
-  toUnix,
   type WhereFields,
   type WhereRoot,
 } from "./query/where";

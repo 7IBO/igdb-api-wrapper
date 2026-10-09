@@ -252,10 +252,22 @@ describe("releases()", () => {
     await expect(huge.games.releases({ from: "2026-01-01", to: "2027-01-01" })).rejects.toThrow(/maxRows/);
   });
 
+  test("the query's limit and offset page the entries; sort throws", async () => {
+    const igdb = testClient(api(rows).fetch);
+    const october = { from: "2026-10-01", to: "2026-11-01" };
+    expect((await igdb.games.limit(2).offset(1).releases(october)).map((e) => e.game.id)).toEqual([
+      600, 413754,
+    ]);
+    expect((await igdb.games.offset(3).releases(october)).map((e) => e.game.id)).toEqual([900]);
+    expect(await igdb.games.limit(0).releases(october)).toEqual([]);
+    await expect(igdb.games.sort("name").releases(october)).rejects.toThrow(/remove sort\(\)/);
+  });
+
   test("validates its input", async () => {
     const igdb = testClient(api(rows).fetch);
     await expect(igdb.games.releases({ from: "2026-11-01", to: "2026-10-01" })).rejects.toThrow(/after/);
     await expect(igdb.games.releases({ from: "soon", to: "2026-10-01" })).rejects.toThrow(QueryError);
+    await expect(igdb.games.releases({ from: Date.now(), to: "2027-10-01" })).rejects.toThrow(/milliseconds/);
     await expect(
       igdb.games.releases({ from: "2026-10-01", to: "2026-11-01", platforms: [] }),
     ).rejects.toThrow(/platforms/);
@@ -370,5 +382,8 @@ describe("toCalendarRelease()", () => {
       to: new Date("2026-10-31T12:00:00Z"),
     });
     expect(mock.calls[0]?.body).toContain("date >= 1790812800 & date < 1793491200");
+    // Unix seconds, rounded to UTC days too.
+    await igdb.games.releases({ from: 1790812800 + 3600, to: 1793491200 - 3600 });
+    expect(mock.calls[1]?.body).toContain("date >= 1790812800 & date < 1793491200");
   });
 });

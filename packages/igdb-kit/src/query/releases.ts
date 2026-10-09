@@ -1,5 +1,6 @@
 import { QueryError } from "../core/errors";
 import type { EndpointName } from "../generated/schema";
+import { type DateInput, dateMillis } from "./dates";
 import type { ExecuteOptions, Query } from "./query";
 
 /** IGDB's maximum `limit`: rows are read this many at a time. */
@@ -45,12 +46,13 @@ export interface ReleaseCalendarEntry<R> {
 
 export interface ReleasesOptions extends ExecuteOptions {
   /**
-   * Start of the window, inclusive: a `Date` or a `"YYYY-MM-DD"` string. Release dates are calendar
-   * days stored at 00:00 UTC, so the window is in UTC days: `from` is rounded down to its UTC day.
+   * Start of the window, inclusive: a `Date`, a `"YYYY-MM-DD"` string or Unix seconds. Release dates
+   * are calendar days stored at 00:00 UTC, so the window is in UTC days: `from` is rounded down to its
+   * UTC day.
    */
-  from: Date | string;
+  from: DateInput;
   /** End of the window, exclusive, rounded up to a UTC day: `"2026-11-01"` ends with October 31st. */
-  to: Date | string;
+  to: DateInput;
   /** Only releases on these platforms (`Platform` ids). */
   platforms?: readonly number[] | undefined;
   /** Only releases in these regions (`ReleaseDateRegion` ids), plus worldwide ones unless `includeWorldwide` is false. */
@@ -307,12 +309,8 @@ function byDate(a: CalendarRelease, b: CalendarRelease): number {
   return (at === bt ? 0 : at < bt ? -1 : 1) || ORDER[a.precision] - ORDER[b.precision] || a.id - b.id;
 }
 
-function utcDay(value: Date | string, name: string, round: (x: number) => number): number {
-  const time = (typeof value === "string" ? new Date(value) : value).getTime?.();
-  if (time === undefined || !Number.isFinite(time)) {
-    throw new QueryError(`${name} must be a Date or a "YYYY-MM-DD" string, got ${String(value)}`);
-  }
-  return round(time / DAY_MS) * DAY_MS;
+function utcDay(value: DateInput, name: string, round: (x: number) => number): number {
+  return round(dateMillis(value, `releases() ${name}`) / DAY_MS) * DAY_MS;
 }
 
 function periodStart(time: number, unit: "month" | "quarter" | "year"): number {

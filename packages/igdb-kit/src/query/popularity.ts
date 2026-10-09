@@ -15,7 +15,10 @@ export const FEW_GAMES = 10_000;
 export type PopularityWeights = Readonly<Partial<Record<number, number>>>;
 
 export interface WeightedPopularOptions extends ExecuteOptions {
-  /** Number of games to return, 1 to 500. Defaults to 10. */
+  /**
+   * @deprecated Use the query's `limit()`, with `offset()` for the next pages:
+   * `igdb.games.limit(20).weightedPopular(weights)`. Number of games to return, 0 to 500.
+   */
   limit?: number;
   /**
    * Stop after reading this many rows of each type, even if the ranking is not settled. Defaults to
@@ -137,10 +140,8 @@ export async function weightedPopular<R>(
   /** The games the caller's `where` matches (`gameIds()`); `undefined` without a `where`. */
   matching?: Query<EndpointName, { id: number }>,
 ): Promise<WeightedPopular<R>[]> {
+  // The games to rank: the query's offset and limit, which the caller checked.
   const { limit = 10, maxRows = 5000, ...execute } = options;
-  if (!Number.isInteger(limit) || limit < 1 || limit > PAGE) {
-    throw new QueryError(`limit must be an integer between 1 and ${PAGE}, got ${limit}`);
-  }
   if (!Number.isInteger(maxRows) || maxRows < 1) throw new QueryError(`maxRows must be a positive integer`);
   const weightOf = new Map<number, number>();
   for (const [key, weight] of Object.entries(weights)) {

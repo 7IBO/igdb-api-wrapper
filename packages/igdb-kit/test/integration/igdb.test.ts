@@ -176,27 +176,25 @@ describe.skipIf(!clientId || !clientSecret)("real IGDB API", () => {
       expect(toDate(r.date ?? 0).getTime()).toBeGreaterThanOrEqual(now.getTime() - 1000);
   });
 
-  test("popular() returns games by PopScore, filtered by the query", async () => {
-    const top = await igdb.games
-      .select("name", "game_type")
-      .where((g) => g.game_type.eq(GameType.MainGame))
-      .popular(PopularityType.IGDBPlaying, { limit: 5 });
-    expect(top).toHaveLength(5);
+  test("popular() returns games by PopScore, filtered by the query and paged by its limit and offset", async () => {
+    const main = igdb.games.select("name", "game_type").where((g) => g.game_type.eq(GameType.MainGame));
+    const top = await main.limit(10).popular(PopularityType.IGDBPlaying);
+    expect(top).toHaveLength(10);
     expect(top.every((t) => t.game.game_type === GameType.MainGame && typeof t.game.name === "string")).toBe(
       true,
     );
     const values = top.map((t) => t.value);
     expect(values).toEqual([...values].sort((a, b) => b - a));
+    const second = await main.limit(5).offset(5).popular(PopularityType.IGDBPlaying);
+    expect(second.map((t) => t.game.id)).toEqual(top.slice(5).map((t) => t.game.id));
   });
 
   test("weightedPopular() mixes types scaled to 0..1, with null for a missing row", async () => {
     const top = await igdb.games
       .select("name")
       .where((g) => g.game_type.eq(GameType.MainGame))
-      .weightedPopular(
-        { [PopularityType.IGDBWantToPlay]: 0.5, [PopularityType.Steam24hrPeakPlayers]: 0.5 },
-        { limit: 20 },
-      );
+      .limit(20)
+      .weightedPopular({ [PopularityType.IGDBWantToPlay]: 0.5, [PopularityType.Steam24hrPeakPlayers]: 0.5 });
     expect(top).toHaveLength(20);
     const scores = top.map((t) => t.score);
     expect(scores).toEqual([...scores].sort((a, b) => b - a));
@@ -214,7 +212,7 @@ describe.skipIf(!clientId || !clientSecret)("real IGDB API", () => {
     // Games released only on Switch 2: about 120, rare among the most visited.
     const only = (client: typeof igdb) =>
       client.games.where((g) => g.platforms.exactly(Platform.NintendoSwitch2));
-    const top = await only(counting.igdb).popular(PopularityType.IGDBVisits, { limit: 20 });
+    const top = await only(counting.igdb).limit(20).popular(PopularityType.IGDBVisits);
     expect(top).toHaveLength(20);
     expect(counting.requests).toBeLessThanOrEqual(5);
     // The same values from every row of those games.
