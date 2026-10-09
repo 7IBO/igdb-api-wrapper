@@ -30,8 +30,10 @@ import {
 } from "../../src";
 import {
   ageRating,
+  alternativeTitles,
   companies,
   languages,
+  localizedCover,
   localizedName,
   parentGame,
   releaseDate,
@@ -657,8 +659,10 @@ describe.skipIf(!clientId || !clientSecret)("real IGDB API", () => {
           "age_ratings.organization",
           "age_ratings.rating_category",
           "age_ratings.rating_content_descriptions.description",
+          "cover.image_id",
           "game_localizations.name",
           "game_localizations.region",
+          "game_localizations.cover.image_id",
           "alternative_names.name",
           "alternative_names.comment",
           "language_supports.language.locale",
@@ -692,6 +696,12 @@ describe.skipIf(!clientId || !clientSecret)("real IGDB API", () => {
     expect(new Set(links.map((l) => `${l.store} ${l.url}`)).size).toBe(links.length);
     expect(ageRating(witcher, AgeRatingOrganization.PEGI)).toMatchObject({ label: "18", minimumAge: 18 });
     expect(localizedName(witcher, "ja-JP")?.source).toBe("localization");
+    expect(localizedName(witcher, "pl-PL")).toMatchObject({ source: "alternative_name", language: "pl" });
+    expect(localizedCover(witcher, "en-US")).toMatchObject({
+      source: "cover",
+      image_id: witcher.cover?.image_id,
+    });
+    expect(alternativeTitles(witcher).find((t) => t.language === "zh-Hans")?.name).toMatch(/\p{Script=Han}/u);
     expect(languages(witcher).find((l) => l.language.locale === "en-US")?.audio).toBe(true);
     expect(parentGame(erdtree)).toMatchObject({
       relation: "expansion",
@@ -721,10 +731,11 @@ describe.skipIf(!clientId || !clientSecret)("real IGDB API", () => {
       );
     }
     for (const region of regions) {
-      const game = { name: "x", game_localizations: [{ id: 1, name: "y", region: region.id }] };
-      expect(
-        localizedName(game, region.identifier === "EU" ? "fr-FR" : (region.identifier ?? ""))?.source,
-      ).toBe("localization");
+      const cover = { id: 1, image_id: "y" };
+      const game = { name: "x", cover, game_localizations: [{ id: 1, name: "y", region: region.id, cover }] };
+      const locale = region.identifier === "EU" ? "fr-FR" : (region.identifier ?? "");
+      expect(localizedName(game, locale)?.source).toBe("localization");
+      expect(localizedCover(game, locale)?.source).toBe("localization");
     }
   });
 

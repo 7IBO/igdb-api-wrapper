@@ -540,13 +540,17 @@ igdbProxy({ igdb, endpoints: ["gamez"] });
 
 // igdb-kit/game: helpers require the fields they read and accept any richer selection.
 import {
+  type AlternativeNameKind,
   ageRating,
+  alternativeTitles,
   companies,
   languages,
+  localizedCover,
   localizedName,
   multiplayer,
   parentGame,
   releaseDate,
+  type resolveLocale,
   type Store,
   storeLinks,
   type storeOf,
@@ -627,6 +631,34 @@ ageRating(descriptorIds, 2);
 localizedName(await igdb.games.select("name", "alternative_names.name").findByIdOrThrow(1), "ja");
 // @ts-expect-error multiplayer_modes is not expanded
 multiplayer(await igdb.games.select("multiplayer_modes").findByIdOrThrow(1));
+
+const localized = await igdb.games
+  .select(
+    "name",
+    "cover.image_id",
+    "cover.width",
+    "game_localizations.region",
+    "game_localizations.cover.image_id",
+    "alternative_names.name",
+    "alternative_names.comment",
+    "alternative_names.game",
+  )
+  .findByIdOrThrow(1942);
+expectType<Equal<ReturnType<typeof localizedCover>, import("../../src/game").LocalizedCover | null>>();
+localizedCover(localized, "ja-JP");
+const noRegionalCovers = await igdb.games
+  .select("cover.image_id", "game_localizations.region")
+  .findByIdOrThrow(1);
+// @ts-expect-error the localizations' covers are not selected
+localizedCover(noRegionalCovers, "ja");
+const title = alternativeTitles(localized)[0];
+if (title) {
+  expectType<Equal<typeof title.row, { id: number; name?: string; comment?: string; game?: number }>>();
+  expectType<Equal<typeof title.kind, AlternativeNameKind>>();
+}
+// @ts-expect-error alternative_names.comment is not selected
+alternativeTitles(await igdb.games.select("alternative_names.name").findByIdOrThrow(1));
+expectType<Equal<ReturnType<typeof resolveLocale>["languages"], number[]>>();
 
 const ttb = await igdb.game_time_to_beats.select("hastily", "normally", "completely", "count").first();
 timeToBeat(ttb);
