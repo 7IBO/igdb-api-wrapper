@@ -29,6 +29,24 @@ jobs:
       - run: bun run build
       - run: bun run --filter igdb-kit lint:package
 
+  redis:
+    name: Redis adapters
+    runs-on: ubuntu-latest
+    services:
+      redis:
+        image: redis:7
+        ports: ["6379:6379"]
+        options: --health-cmd "redis-cli ping" --health-interval 2s --health-timeout 2s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.2
+      - run: bun install --frozen-lockfile
+      - run: bun run --filter igdb-kit test:redis
+        env:
+          REDIS_URL: redis://localhost:6379
+
   types:
     name: Type tests on TypeScript ${{ matrix.ts }}
     runs-on: ubuntu-latest
@@ -73,6 +91,10 @@ jobs:
         run: |
           node --input-type=module -e "import { createIGDB } from './dist/index.js'; const q = createIGDB({ clientId: 'a', clientSecret: 'b' }).games.select('name').where((g) => g.rating.gt(1)); if (q.toApicalypse() !== 'fields name; where rating > 1;') process.exit(1)"
           node -e "const { createIGDB } = require('./dist/index.cjs'); createIGDB({ clientId: 'a', clientSecret: 'b' }).games.limit(1).toApicalypse()"
+          node --input-type=module -e "import { redisCache } from 'igdb-kit/redis'; if (typeof redisCache !== 'function') process.exit(1)"
+          node -e "const { redisLimiter } = require('igdb-kit/redis'); if (typeof redisLimiter !== 'function') process.exit(1)"
+          node --input-type=module -e "import { webhookHandler } from 'igdb-kit/webhooks'; if (typeof webhookHandler !== 'function') process.exit(1)"
+          node -e "const { parseWebhook } = require('igdb-kit/webhooks'); if (typeof parseWebhook !== 'function') process.exit(1)"
 
   integration:
     name: Integration tests (real IGDB API)

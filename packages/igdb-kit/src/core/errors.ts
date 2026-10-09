@@ -80,7 +80,7 @@ export class QueueFullError extends IGDBError {
 export function errorFromResponse(
   status: number,
   bodyText: string,
-  context: { endpoint?: string; query?: string } = {},
+  context: { endpoint?: string | undefined; query?: string | undefined } = {},
 ): IGDBError {
   let parsed: unknown;
   try {

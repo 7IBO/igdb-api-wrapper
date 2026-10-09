@@ -39,7 +39,18 @@ export class Transport {
     this.baseUrl = (options.baseUrl ?? "https://api.igdb.com/v4").replace(/\/$/, "");
   }
 
-  async send(path: string, body: string, options: ExecuteOptions = {}): Promise<RawResponse> {
+  /** Sends an Apicalypse query. */
+  send(path: string, body: string, options: ExecuteOptions = {}): Promise<RawResponse> {
+    return this.request("POST", path, { body, contentType: "text/plain" }, options);
+  }
+
+  /** Sends any IGDB request (the webhooks API uses GET, DELETE and form bodies). */
+  async request(
+    method: "GET" | "POST" | "DELETE",
+    path: string,
+    { body, contentType }: { body?: string | undefined; contentType?: string | undefined },
+    options: ExecuteOptions = {},
+  ): Promise<RawResponse> {
     const { signal, priority } = options;
     const deadline = Date.now() + (this.options.retryTimeoutMs ?? 30_000);
     let renewedToken = false;
@@ -55,14 +66,14 @@ export class Transport {
         token = await this.options.tokens.getToken(signal);
         const attemptSignal = AbortSignal.timeout(this.options.attemptTimeoutMs ?? 30_000);
         const res = await this.fetchFn(`${this.baseUrl}/${path}`, {
-          method: "POST",
+          method,
           headers: {
             "Client-ID": this.options.clientId,
             Authorization: `Bearer ${token}`,
             Accept: "application/json",
-            "Content-Type": "text/plain",
+            ...(contentType ? { "Content-Type": contentType } : {}),
           },
-          body,
+          ...(body === undefined ? {} : { body }),
           signal: signal ? AbortSignal.any([signal, attemptSignal]) : attemptSignal,
         });
         status = res.status;
@@ -85,7 +96,7 @@ export class Transport {
       if (status >= 200 && status < 300) {
         const count = headers.get("x-count");
         return {
-          data: JSON.parse(text),
+          data: parseBody(text, headers),
           total: count === null ? undefined : Number(count),
           bytes: text.length,
         };
@@ -127,6 +138,12 @@ export class Transport {
     await sleep(delayMs, signal);
     return true;
   }
+}
+
+function parseBody(text: string, headers: Headers): unknown {
+  // Webhook tests answer in plain text.
+  if (headers.get("content-type")?.startsWith("text/plain") && !/^\s*[[{]/.test(text)) return text;
+  return JSON.parse(text);
 }
 
 function errorMessage(error: unknown): string {
