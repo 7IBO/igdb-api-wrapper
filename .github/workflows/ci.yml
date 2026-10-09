@@ -104,6 +104,8 @@ jobs:
           node -e "const { formatPlaytime } = require('igdb-kit/game'); if (formatPlaytime(7200, { locale: 'en-US' }) !== '2 hr') process.exit(1)"
           node --input-type=module -e "import { videoLinks } from 'igdb-kit/game'; import { imageSrcSet } from 'igdb-kit'; if (videoLinks({ videos: [{ id: 1, video_id: 'D1mDo1CEMuE', name: 'Launch Trailer' }] })[0].kind !== 'trailer' || !imageSrcSet('co1wyy', 'thumb').endsWith(' 2x')) process.exit(1)"
           node -e "const { eventTime, countryName } = require('igdb-kit/game'); if (eventTime({ start_time: 0, time_zone: 'PST' }, { locale: 'en' }).timeZone !== 'America/Los_Angeles' || countryName(250, 'en') !== 'France') process.exit(1)"
+          node --input-type=module -e "import { endpointSchema, jsonSchema } from 'igdb-kit/schema'; if (endpointSchema('games').fields.find((f) => f.name === 'platforms').endpoint !== 'platforms' || jsonSchema('games').required[0] !== 'id') process.exit(1)"
+          node -e "const { endpointSchema } = require('igdb-kit/schema'); if (!endpointSchema('games').linkedFrom.some((l) => l.endpoint === 'release_dates' && l.field === 'game')) process.exit(1)"
           node -e "const { createLabels } = require('igdb-kit/i18n'); const { ja } = require('igdb-kit/i18n/ja'); const { label } = createLabels([ja]); if (label('genres', 12, 'ja-JP') !== ja.labels.genres[12] || label('genres', 12, 'en') !== 'Role-playing (RPG)') process.exit(1)"
 
   integration:

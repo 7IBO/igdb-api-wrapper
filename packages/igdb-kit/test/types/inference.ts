@@ -7,6 +7,7 @@ import {
   type CompanyRole,
   createIGDB,
   defineSelection,
+  type EndpointName,
   ExternalGameSource,
   type GameLinkedEndpoint,
   type GameLinkedQuery,
@@ -892,3 +893,15 @@ fromSoftware[0]?.roles satisfies CompanyRole[] | undefined;
 igdb.games.catalog(1012, { roles: ["designer"] });
 // @ts-expect-error family() is a games method
 igdb.platforms.family(6);
+
+// Deletions and the schema as data.
+const gone = await igdb.games.removed([1942]);
+expectType<Equal<typeof gone, { id: number; reason: string | null; replacement: number | null }[]>>();
+
+import { endpointSchema, type FieldSchema, jsonSchema } from "../../src/schema";
+
+endpointSchema("games").fields satisfies FieldSchema[];
+endpointSchema("games").linkedFrom[0]?.endpoint satisfies EndpointName | undefined;
+jsonSchema("release_dates") satisfies Record<string, unknown>;
+// @ts-expect-error not an endpoint
+endpointSchema("game");

@@ -8,6 +8,7 @@ export default defineConfig({
     proxy: "src/proxy/index.ts",
     game: "src/game/index.ts",
     i18n: "src/i18n/index.ts",
+    schema: "src/schema/index.ts",
     "i18n/fr": "src/i18n/fr.ts",
     "i18n/de": "src/i18n/de.ts",
     "i18n/es": "src/i18n/es.ts",
