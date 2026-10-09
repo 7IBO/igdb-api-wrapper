@@ -12,6 +12,7 @@ import {
   type GamesQuery,
   GameType,
   Genre,
+  imageSrcSet,
   type Language,
   MAIN_GAME_TYPES,
   Platform,
@@ -695,6 +696,114 @@ expectType<Equal<ReturnType<typeof artworkType>, number | null>>();
 for (const artwork of artworks) artworkType(artwork);
 // @ts-expect-error artwork_type is not selected
 artworkType(await igdb.artworks.select("image_type").findByIdOrThrow(1));
+
+// Grouping helpers.
+import {
+  bestImage,
+  externalId,
+  externalIds,
+  franchisesOf,
+  groupByParent,
+  platformVersions,
+  relatedGameFields,
+  relatedGames,
+  videoLinks,
+  websiteLinks,
+} from "../../src/game";
+
+const relatedIds = await igdb.games.select("name", ...relatedGameFields()).findByIdOrThrow(1942);
+expectType<Equal<ReturnType<typeof relatedGames<typeof relatedIds>>["dlcs"], number[]>>();
+const relatedNamed = await igdb.games
+  .select(...relatedGameFields("name", "cover.image_id"))
+  .findByIdOrThrow(1942);
+const related = relatedGames(relatedNamed);
+expectType<
+  Equal<typeof related.remakes, { id: number; name?: string; cover?: { id: number; image_id?: string } }[]>
+>();
+if (related.parent) related.parent.game satisfies { id: number; name?: string };
+expectType<
+  Equal<
+    ResultOf<ReturnType<typeof relatedGameFields<"name">>>["ports"],
+    { id: number; name?: string }[] | undefined
+  >
+>();
+// @ts-expect-error not a field of games
+relatedGameFields("nam");
+// @ts-expect-error dlcs, ports... are not selected
+relatedGames(page);
+
+const catalog = await igdb.games.select("name", "game_type", "parent_game", "version_parent").limit(10);
+const { groups, missingParents } = groupByParent(catalog, { relations: ["edition", "remaster"] });
+groups[0]?.members[0]?.game.name satisfies string | undefined;
+missingParents satisfies number[];
+// @ts-expect-error version_parent is not selected
+groupByParent(await igdb.games.select("game_type", "parent_game").limit(1));
+// @ts-expect-error not a relation
+groupByParent(catalog, { relations: ["sequel"] });
+
+const franchises = franchisesOf(await igdb.games.select("franchise", "franchises.name").findByIdOrThrow(1));
+franchises.main satisfies number | { id: number; name?: string } | null;
+// @ts-expect-error franchise is not selected
+franchisesOf(await igdb.games.select("franchises").findByIdOrThrow(1));
+
+const linked = await igdb.games
+  .select(
+    "external_games.external_game_source",
+    "external_games.uid",
+    "websites.type",
+    "websites.url",
+    "videos.video_id",
+    "videos.name",
+  )
+  .findByIdOrThrow(1942);
+externalId(linked, ExternalGameSource.Steam) satisfies string | null;
+externalIds(linked)[0]?.url satisfies string | null | undefined;
+websiteLinks(linked, { kinds: ["official", "social"] });
+videoLinks(linked)[0]?.kind satisfies "trailer" | "gameplay" | "teaser" | "intro" | "other" | undefined;
+// @ts-expect-error external_games.uid is not selected
+externalIds(await igdb.games.select("external_games.external_game_source").findByIdOrThrow(1));
+// @ts-expect-error websites.type is not selected
+websiteLinks(page);
+// @ts-expect-error not a kind
+websiteLinks(linked, { kinds: ["blog"] });
+// @ts-expect-error videos.name is not selected
+videoLinks(await igdb.games.select("videos.video_id").findByIdOrThrow(1));
+
+bestImage(page)?.image_id satisfies string | undefined;
+bestImage(
+  await igdb.games
+    .select("artworks.image_id", "artworks.image_type", "artworks.artwork_type", "screenshots.image_id")
+    .findByIdOrThrow(1),
+  { prefer: "background" },
+);
+// @ts-expect-error the artworks' types are not selected
+bestImage(await igdb.games.select("cover.image_id", "artworks.image_id").findByIdOrThrow(1));
+// @ts-expect-error no image is selected
+bestImage(datesOnly);
+// @ts-expect-error not a preference
+bestImage(page, { prefer: "logo" });
+imageSrcSet(page.cover?.image_id, "cover_big") satisfies string | undefined;
+imageSrcSet("co1wyy", "cover_big") satisfies string;
+
+const consoles = await igdb.platforms
+  .select(
+    "name",
+    "versions.name",
+    "versions.platform_version_release_dates.date",
+    "versions.platform_version_release_dates.date_format",
+    "versions.platform_version_release_dates.release_region",
+  )
+  .findByIdOrThrow(48);
+const version = platformVersions(consoles, { locale: "ja-JP" })[0];
+if (version) {
+  version.version.name satisfies string | undefined;
+  version.release?.row.date satisfies number | undefined;
+}
+const versionDates = await igdb.platforms
+  .select("versions.platform_version_release_dates.date")
+  .findByIdOrThrow(48);
+// @ts-expect-error the versions' release regions are not selected
+platformVersions(versionDates);
 
 // igdb-kit/i18n: tables and ids are checked, rows of any selection are accepted.
 import { createLabels, type LabelDictionary } from "../../src/i18n";

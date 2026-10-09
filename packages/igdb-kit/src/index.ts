@@ -25,6 +25,7 @@ export {
   artworkType,
   type ImageSize,
   type ImageUrlOptions,
+  imageSrcSet,
   imageUrl,
 } from "./images";
 export { type GameLinkedEndpoint, gameLink } from "./links/by-game";

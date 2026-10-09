@@ -15,6 +15,7 @@ import {
   type GameLinkedQuery,
   GameType,
   gameLink,
+  ImageType,
   Language,
   MAIN_GAME_TYPES,
   NotFoundError,
@@ -32,17 +33,27 @@ import {
 import {
   ageRating,
   alternativeTitles,
+  bestImage,
   companies,
   eventTime,
+  externalId,
+  externalIds,
   formatReleaseDate,
+  franchisesOf,
+  groupByParent,
   languages,
   localizedCover,
   localizedName,
   parentGame,
+  platformVersions,
+  relatedGameFields,
+  relatedGames,
   releaseDate,
   storeLinks,
   supportsLanguage,
   timeToBeat,
+  videoLinks,
+  websiteLinks,
 } from "../../src/game";
 import { en, type LabelTable } from "../../src/i18n";
 import { igdbProxy } from "../../src/proxy";
@@ -747,6 +758,66 @@ describe.skipIf(!clientId || !clientSecret)("real IGDB API", () => {
       expect(localizedName(game, locale)?.source).toBe("localization");
       expect(localizedCover(game, locale)?.source).toBe("localization");
     }
+  });
+
+  test("grouping helpers read real games and platforms", async () => {
+    const { games, nintendoSwitch, websiteTypes } = await igdb.batch({
+      games: igdb.games
+        .select(
+          "name",
+          ...relatedGameFields("name"),
+          "franchise",
+          "franchises.name",
+          "external_games.external_game_source",
+          "external_games.uid",
+          "websites.type",
+          "websites.url",
+          "videos.video_id",
+          "videos.name",
+          "cover.image_id",
+          "artworks.image_id",
+          "artworks.image_type",
+          "artworks.artwork_type",
+          "artworks.width",
+          "artworks.height",
+          "screenshots.image_id",
+        )
+        .where((g) => g.id.in(1942, 22439, 119133)),
+      nintendoSwitch: igdb.platforms
+        .select(
+          "versions.name",
+          "versions.platform_version_release_dates.date",
+          "versions.platform_version_release_dates.date_format",
+          "versions.platform_version_release_dates.release_region",
+        )
+        .findById(Platform.NintendoSwitch),
+      websiteTypes: igdb.website_types.select("type").limit(500),
+    });
+    const witcher3 = games.find((g) => g.id === 1942);
+    const goty = games.find((g) => g.id === 22439);
+    const eldenRing = games.find((g) => g.id === 119133);
+    if (!witcher3 || !goty || !eldenRing || !nintendoSwitch) throw new Error("missing rows");
+
+    expect(relatedGames(witcher3).expansions.map((g) => g.name)).toContain(
+      "The Witcher 3: Wild Hunt - Blood and Wine",
+    );
+    expect(relatedGames(goty).parent).toMatchObject({ relation: "edition", game: { id: 1942 } });
+    expect(groupByParent([goty, witcher3, eldenRing]).groups.map((g) => g.members.length)).toEqual([1, 0]);
+    expect(franchisesOf(witcher3).main).toEqual({ id: 452, name: "The Witcher" });
+    expect(externalId(witcher3, ExternalGameSource.Steam)).toBe("292030");
+    expect(externalIds(witcher3, ExternalGameSource.GOG).length).toBeGreaterThanOrEqual(2);
+    expect(websiteLinks(witcher3)[0]?.kind).toBe("official");
+    expect(videoLinks(eldenRing).some((v) => v.kind === "trailer")).toBe(true);
+    expect(bestImage(witcher3)?.source).toBe("cover");
+    const banner = bestImage(eldenRing, { prefer: "background" });
+    expect(banner?.ratio).toBeGreaterThan(1);
+    expect([ImageType.GameLogoBlack, ImageType.GameLogoColor, ImageType.GameLogoWhite]).not.toContain(
+      banner?.type as never,
+    );
+    expect(platformVersions(nintendoSwitch, { locale: "fr-FR" })[0]?.release?.year).toBe(2017);
+    // Every website type has a kind.
+    const websites = websiteTypes.map((t) => ({ id: t.id, type: t.id, url: `https://example.com/${t.id}` }));
+    expect(websiteLinks({ websites }).filter((l) => l.kind === "other")).toEqual([]);
   });
 
   test("igdb-kit/i18n has a label for every row of the tables it translates", async () => {
