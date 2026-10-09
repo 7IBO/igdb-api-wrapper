@@ -11,7 +11,7 @@ import {
   Platform,
   PopularityType,
   ReleaseDateRegion,
-  type ReleaseDateStatus,
+  ReleaseDateStatus,
   type ResultOf,
   type SearchHit,
 } from "../../src";
@@ -270,6 +270,60 @@ const popular = await igdb.games.select("name").popular(PopularityType.IGDBPlayi
 expectType<Equal<typeof popular, { game: { id: number; name?: string }; value: number }[]>>();
 // @ts-expect-error only on games
 igdb.platforms.popular(PopularityType.IGDBPlaying);
+
+// weightedPopular() keeps the selection, adds the score and each type's value (null: no row).
+const weighted = await igdb.games
+  .select("name")
+  .weightedPopular({ [PopularityType.IGDBWantToPlay]: 0.6, [PopularityType.IGDBPlaying]: 0.4 });
+expectType<
+  Equal<
+    typeof weighted,
+    { game: { id: number; name?: string }; score: number; values: Record<number, number | null> }[]
+  >
+>();
+// @ts-expect-error only on games
+igdb.platforms.weightedPopular({ [PopularityType.IGDBPlaying]: 1 });
+
+// popularitySnapshot() yields rows ready to store.
+for await (const rows of igdb.popularitySnapshot({ top: 100 })) {
+  expectType<
+    Equal<
+      (typeof rows)[number],
+      {
+        game_id: number;
+        popularity_type: number;
+        value: number;
+        rank: number;
+        calculated_at: number | null;
+        external_popularity_source: number | null;
+      }
+    >
+  >();
+}
+
+// releases() keeps the selection of the games and types each release.
+const calendar = await igdb.games.select("name", "cover.image_id").releases({
+  from: "2026-10-01",
+  to: new Date("2026-11-01"),
+  statuses: [ReleaseDateStatus.FullRelease, null],
+});
+expectType<
+  Equal<
+    (typeof calendar)[number]["game"],
+    { id: number; name?: string; cover?: { id: number; image_id?: string } }
+  >
+>();
+expectType<
+  Equal<(typeof calendar)[number]["release"]["precision"], "day" | "month" | "quarter" | "year" | "tbd">
+>();
+expectType<Equal<(typeof calendar)[number]["release"]["start"], Date | null>>();
+expectType<Equal<(typeof calendar)[number]["release"]["status"], number | null>>();
+// @ts-expect-error not a precision
+igdb.games.releases({ from: "2026-10-01", to: "2026-11-01", precision: ["week"] });
+// @ts-expect-error a window is required
+igdb.games.releases({ from: "2026-10-01" });
+// @ts-expect-error only on games
+igdb.platforms.releases({ from: "2026-10-01", to: "2026-11-01" });
 
 // findByExternalIds() maps store ids to games with the selection; only on games.
 const bySteamId = await igdb.games.select("name").findByExternalIds(ExternalGameSource.Steam, ["292030"]);

@@ -196,6 +196,56 @@ const trending = await igdb.games
 
 The metrics are `IGDBVisits`, `IGDBWantToPlay`, `IGDBPlaying` and `IGDBPlayed`, plus Steam (`Steam24hrPeakPlayers`, `SteamGlobalTopSellers`, `SteamMostWishlistedUpcoming`…) and `Twitch24hrHoursWatched`. Popularity rows are read 500 at a time until enough games pass the filter, up to `maxRows` (5000 by default).
 
+`weightedPopular()` ranks by several metrics at once. Their scales differ by orders of magnitude (IGDB visits top at 0.005, Steam peak players at 0.19), so each is divided by its top value before weighting:
+
+```ts
+const top = await igdb.games
+  .select("name")
+  .weightedPopular(
+    { [PopularityType.IGDBWantToPlay]: 0.5, [PopularityType.Steam24hrPeakPlayers]: 0.5 },
+    { limit: 20 },
+  );
+// { game, score, values: { 2: 0.0019, 5: null } }[]
+```
+
+`values` holds each metric's raw value, and `null` when IGDB has no row for the game: a third of the 500 most played games have no Steam row, which is not the same as a measured 0. Such a game scores 0 for that metric. Negative weights lower a score (`SteamNegativeReviews: -0.2`). Each round reads 500 rows per positively weighted metric, then the other metrics and the games of the new ids, in about 2 multiqueries; it stops as soon as no unread game can enter the top, usually after one round.
+
+IGDB keeps only the latest value of each game and metric, so a trend needs your own history. `popularitySnapshot()` returns rows ready to store, one ranked array per metric:
+
+```ts
+for await (const rows of igdb.popularitySnapshot({ top: 1000 })) {
+  await db.insertPopularity(rows); // { game_id, popularity_type, value, rank, calculated_at, external_popularity_source }[]
+}
+```
+
+Key the history on `game_id`, `popularity_type` and `calculated_at`: each metric is recomputed on its own schedule (IGDB's daily, Steam's and Twitch's on other days), so running a snapshot twice the same day stores nothing new. `top` reads the 1000 most popular rows of each of the 11 metrics in 3 requests; without it, every row (about 700,000) is read with an id cursor per metric, the metrics' pages packed together: about 280 multiqueries, a bit over a minute at the default rate limit. `types` picks the metrics.
+
+### Release calendar
+
+`releases()` lists the games released in a window, one entry per game however many platforms, regions and statuses it has there:
+
+```ts
+import { Platform, ReleaseDateRegion, ReleaseDateStatus } from "igdb-kit";
+
+const october = await igdb.games
+  .select("name", "cover.image_id")
+  .where((g) => g.game_type.eq(GameType.MainGame))
+  .releases({
+    from: "2026-10-01",
+    to: "2026-11-01",                          // exclusive
+    platforms: [Platform.PlayStation5, Platform.PCMicrosoftWindows],
+    regions: [ReleaseDateRegion.Europe],       // worldwide releases count too
+  });
+// { game, release, releases }[], by date
+// release: { precision: "day", start: Date, end: Date, human: "Oct 20, 2026", platform, region, status }
+```
+
+`release` is the game's most precise release in the window, then the earliest; `releases` lists them all. IGDB dates are not all days: `precision` is `"day"`, `"month"` (`Oct 2026`), `"quarter"` (`Q4 2026`), `"year"` or `"tbd"`, and `start` and `end` bound the period. A month, quarter or year is in the window when its whole period is, so `Q4 2026` is in October to December but not in October alone; `match: "overlap"` includes every period that overlaps the window. TBD dates are left out unless `precision` includes `"tbd"`, whatever the window.
+
+Release dates are calendar days at 00:00 UTC, so the window is in UTC days: pass `"YYYY-MM-DD"` strings rather than local midnights. By default Offline and Cancelled dates are left out, and dates without a status, more than half of them, are kept. `statuses: [ReleaseDateStatus.FullRelease, null]` picks statuses, `null` standing for "no status".
+
+A window costs one count, `ceil(dates / 500)` pages read in parallel and `ceil(games / 500)` for the games, packed into multiqueries: a month of upcoming releases (1,700 dates, 1,000 games) takes 3 HTTP requests. Above `maxRows` dates (10,000 by default), it throws instead: page through long periods month by month.
+
 ### Data linked to games
 
 Many endpoints point to games without the game pointing back: time to beat and popularity carry a `game_id`, and characters, events, collections and franchises list their `games`. `byGame()` fetches them for a list of games, grouped by game id. It works on every endpoint with a `game`, `game_id` or `games` field (`GameLinkedEndpoint`), such as `release_dates`, `websites`, `language_supports`, `external_games` or `involved_companies`:

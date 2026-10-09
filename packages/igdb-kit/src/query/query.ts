@@ -8,6 +8,20 @@ import {
   type SearchableEndpoint,
 } from "../generated/schema";
 import { byGame, type GameLinkedEndpoint } from "../links/by-game";
+import {
+  type PopularityRow,
+  type PopularityWeights,
+  type WeightedPopular,
+  type WeightedPopularOptions,
+  weightedPopular,
+} from "./popularity";
+import {
+  RELEASE_FIELDS,
+  type ReleaseCalendarEntry,
+  type ReleaseRow,
+  type ReleasesOptions,
+  releaseCalendar,
+} from "./releases";
 import type { ExcludePath, ExcludeResult, FieldPath, ScalarKeys, SelectResult } from "./types";
 import { type Condition, throwIfRemoved, type WhereRoot, whereProxy } from "./where";
 
@@ -421,6 +435,56 @@ export class Query<N extends EndpointName, R = { id: number }> extends Executabl
       if (page.length < pageSize) break;
     }
     return results;
+  }
+
+  /**
+   * The most popular games by a weighted mix of PopScore types, such as `{ [PopularityType.IGDBWantToPlay]:
+   * 0.6, [PopularityType.IGDBPlaying]: 0.4 }`. Each type is scaled by its top value before weighting;
+   * a game without a row in a type scores 0 there and gets `null` in `values`. Negative weights lower
+   * a score. The fields and `where` of this query apply to the games. Each round reads 500 rows per
+   * positively weighted type, then the other types and the games of the new ids (about 3 multiqueries
+   * per round); it stops once no unread game can enter the top `limit`. Only on `games`.
+   */
+  async weightedPopular(
+    ...[weights, options = {}]: N extends "games"
+      ? [weights: PopularityWeights, options?: WeightedPopularOptions]
+      : [notGames: "weightedPopular() is only on games"]
+  ): Promise<WeightedPopular<R>[]> {
+    if (this.endpoint !== "games") throw new QueryError("weightedPopular() is only on games");
+    if (this.state.search) throw new QueryError("weightedPopular() cannot be combined with search");
+    const rows = new Query<EndpointName, PopularityRow>(this.runner, "popularity_primitives", {
+      fields: ["game_id", "popularity_type", "value"],
+      sort: { field: "value", direction: "desc" },
+    });
+    return weightedPopular(
+      rows,
+      (ids, execute) => this.with({ sort: undefined, offset: undefined }).findByIds(ids, execute),
+      weights as PopularityWeights,
+      options as WeightedPopularOptions,
+    );
+  }
+
+  /**
+   * The release calendar of a window: one entry per game released in it, with its most precise
+   * release and every release in the window (platforms, regions, statuses). Imprecise dates (`Q4
+   * 2026`) are labeled by `precision` and included when their period overlaps the window. The fields
+   * and `where` of this query apply to the games. Costs 1 + `ceil(dates / 500)` requests, batched,
+   * plus `ceil(games / 500)`. Only on `games`.
+   */
+  async releases(
+    ...[options]: N extends "games" ? [options: ReleasesOptions] : [notGames: "releases() is only on games"]
+  ): Promise<ReleaseCalendarEntry<R>[]> {
+    if (this.endpoint !== "games") throw new QueryError("releases() is only on games");
+    if (this.state.search) throw new QueryError("releases() cannot be combined with search");
+    const dates = new Query<EndpointName, ReleaseRow>(this.runner, "release_dates", {
+      fields: RELEASE_FIELDS,
+      sort: { field: "id", direction: "asc" },
+    });
+    return releaseCalendar(
+      dates,
+      (ids, execute) => this.with({ sort: undefined, offset: undefined }).findByIds(ids, execute),
+      options as ReleasesOptions,
+    );
   }
 
   /**

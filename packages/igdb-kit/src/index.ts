@@ -25,6 +25,13 @@ export { type GameLinkedEndpoint, gameLink } from "./links/by-game";
 export { type Expanded, type IdKeys, REFERENCE_ENDPOINTS, REFERENCE_TTL_MS } from "./links/expand";
 export { defineSelection, type ResultOf, type Selection } from "./links/selection";
 export { type NoGameFields, View, type ViewLinks, type ViewRow } from "./links/view";
+export type {
+  PopularitySnapshotOptions,
+  PopularitySnapshotRow,
+  PopularityWeights,
+  WeightedPopular,
+  WeightedPopularOptions,
+} from "./query/popularity";
 export {
   Count,
   Executable,
@@ -38,6 +45,12 @@ export {
   type SyncOptions,
   WithCount,
 } from "./query/query";
+export type {
+  CalendarRelease,
+  ReleaseCalendarEntry,
+  ReleasePrecision,
+  ReleasesOptions,
+} from "./query/releases";
 export {
   SEARCH_GAME_TYPES,
   SEARCH_KINDS,
