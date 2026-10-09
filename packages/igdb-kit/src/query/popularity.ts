@@ -171,7 +171,9 @@ export async function weightedPopular<R>(
     const pages = await Promise.all(
       chunk(ids, lookupSize).map(async (ids) => {
         const rows: PopularityRow[] = [];
-        const query = primitives.where(`game_id = (${ids.join(",")}) & popularity_type = (${typeList})`);
+        const query = primitives
+          .with({ sort: undefined })
+          .where(`game_id = (${ids.join(",")}) & popularity_type = (${typeList})`);
         for await (const row of query.iterate({ ...execute, pageSize: PAGE })) rows.push(row);
         return rows;
       }),

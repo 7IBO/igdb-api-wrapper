@@ -62,7 +62,7 @@ export async function cacheKey(path: string, body: string): Promise<string> {
 }
 
 export function serializeResponse(response: RawResponse): string {
-  return JSON.stringify({ data: response.data, total: response.total });
+  return JSON.stringify({ data: response.data, total: response.total, bytes: response.bytes });
 }
 
 export function parseResponse(value: string): RawResponse {

@@ -18,7 +18,7 @@ export {
   type Priority,
   sharedLimiter,
 } from "./core/limiter";
-export type { TransportHooks } from "./core/transport";
+export type { RequestLog, TransportHooks } from "./core/transport";
 export * from "./generated/schema";
 export {
   type ArtworkTypeFields,

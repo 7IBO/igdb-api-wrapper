@@ -433,6 +433,17 @@ describe("expand()", () => {
     expect(await igdb.expand(rows.slice(0, 0), "platforms", igdb.platforms)).toEqual([]);
     expect(mock.calls).toHaveLength(2);
   });
+
+  test("rejects keys that hold values, and accepts ids under keys of your own", async () => {
+    const mock = fakeIgdb({ platforms });
+    const igdb = testClient(mock.fetch);
+    const games = [{ id: 1, tags: [1, 268435462], hypes: 12, platform_ids: [6] }];
+    await expect(igdb.expand(games, "tags", igdb.platforms).execute()).rejects.toThrow(/holds values/);
+    await expect(igdb.expand(games, "hypes", igdb.platforms).execute()).rejects.toThrow(QueryError);
+    const mine = await igdb.expand(games, "platform_ids", igdb.platforms.select("name"));
+    expect(mine[0]?.platform_ids).toEqual([{ id: 6, name: "PC" }]);
+    expect(mock.calls).toHaveLength(1);
+  });
 });
 
 describe("defineSelection()", () => {

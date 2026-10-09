@@ -7,6 +7,7 @@ import {
   PayloadTooLargeError,
   QueryError,
   RateLimitError,
+  type RequestLog,
 } from "../../src";
 import { apicalypseError, mockFetch, testClient } from "./helpers";
 
@@ -71,6 +72,49 @@ describe("transport", () => {
     });
     expect(await testClient(mock.fetch).games.limit(1)).toEqual([{ id: 1 }]);
     expect(mock.calls).toHaveLength(3);
+  });
+
+  test("hooks.onRequest reports every try, multiquery blocks and cache hits, and its errors are ignored", async () => {
+    const statuses = [503, 200];
+    const mock = mockFetch(() => {
+      const status = statuses.shift() ?? 200;
+      return status === 200 ? Response.json([{ id: 1 }]) : Response.json({ message: "down" }, { status });
+    });
+    const logs: RequestLog[] = [];
+    const client = testClient(mock.fetch, {
+      hooks: {
+        onRequest: (log) => {
+          logs.push(log);
+          throw new Error("a broken logger");
+        },
+      },
+    });
+    await client.games.select("name").limit(1).cache(60_000);
+    await client.games.select("name").limit(1).cache(60_000);
+    await client.batch({ a: client.games.limit(1), b: client.platforms.limit(1) });
+    const fields = logs.map(({ durationMs, ...log }) => {
+      expect(durationMs).toBeGreaterThanOrEqual(0);
+      return log;
+    });
+    expect(fields).toEqual([
+      { path: "games", method: "POST", status: 503, bytes: 18, attempt: 1, blocks: 1, cached: false },
+      { path: "games", method: "POST", status: 200, bytes: 10, attempt: 2, blocks: 1, cached: false },
+      { path: "games", method: "POST", status: 200, bytes: 10, attempt: 1, blocks: 1, cached: true },
+      { path: "multiquery", method: "POST", status: 200, bytes: 69, attempt: 1, blocks: 2, cached: false },
+    ]);
+  });
+
+  test("hooks.onRequest reports a request that got no answer with status 0", async () => {
+    const logs: RequestLog[] = [];
+    const broken = mockFetch(() => {
+      throw new TypeError("fetch failed");
+    });
+    const client = testClient(broken.fetch, {
+      retryTimeoutMs: 1,
+      hooks: { onRequest: (log) => logs.push(log) },
+    });
+    await expect(client.games.limit(1).execute()).rejects.toBeInstanceOf(NetworkError);
+    expect(logs.map((log) => [log.status, log.bytes, log.attempt])).toEqual([[0, 0, 1]]);
   });
 
   test("429 past the retry budget throws RateLimitError", async () => {

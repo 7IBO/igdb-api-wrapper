@@ -501,6 +501,7 @@ export class Query<N extends EndpointName, R = { id: number }> extends Executabl
    * added meanwhile, and fast at any depth unlike `offset`.
    */
   async *iterate(options: ExecuteOptions & { pageSize?: number } = {}): AsyncGenerator<R, void, undefined> {
+    this.idOrder("iterate()");
     const { pageSize = MAX_LIMIT } = options;
     if (!Number.isInteger(pageSize) || pageSize < 1 || pageSize > MAX_LIMIT) {
       throw new QueryError(`pageSize must be an integer between 1 and ${MAX_LIMIT}, got ${pageSize}`);
@@ -525,6 +526,7 @@ export class Query<N extends EndpointName, R = { id: number }> extends Executabl
       ("updated_at" extends keyof Endpoints[N] ? { since?: DateInput } : { since?: never }) = {},
   ): AsyncGenerator<R[], void, undefined> {
     if (this.state.search) throw new QueryError("sync() cannot be combined with search");
+    this.idOrder("sync()");
     const { concurrency = 40, cursorThreshold = 0, since: _, ...execute } = options;
     const executeOptions: ExecuteOptions = { ...execute, priority: execute.priority ?? "background" };
     let query: Query<N, R> = this.with({
@@ -703,6 +705,14 @@ export class Query<N extends EndpointName, R = { id: number }> extends Executabl
       if (more) yield* query.cursorPages({ ...executeOptions, after: last });
     } finally {
       stopped = true;
+    }
+  }
+
+  /** Throws when the query sorts on anything but the id: the method reads in id order. */
+  private idOrder(method: string): void {
+    const { sort } = this.state;
+    if (sort && (sort.field !== "id" || sort.direction !== "asc")) {
+      throw new QueryError(`${method} reads in id order: remove sort(), then sort the rows you read`);
     }
   }
 

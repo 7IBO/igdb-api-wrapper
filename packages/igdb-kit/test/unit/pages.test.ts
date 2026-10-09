@@ -102,6 +102,13 @@ describe("pages sized in bytes", () => {
     expect(outage.calls).toHaveLength(1);
   });
 
+  test("iterate and sync refuse a sort other than the id", async () => {
+    const igdb = testClient(mockFetch(() => Response.json([])).fetch);
+    await expect(igdb.games.sort("name").iterate().next()).rejects.toThrow(/id order: remove sort\(\)/);
+    await expect(igdb.games.sort("id", "desc").sync().next()).rejects.toThrow(QueryError);
+    expect(await igdb.games.sort("id").iterate().next()).toEqual({ done: true, value: undefined });
+  });
+
   test("iterate refuses a pageSize outside 1 to 500", async () => {
     const igdb = testClient(games(10).fetch);
     for (const pageSize of [0, 501, 1.5]) {

@@ -163,7 +163,7 @@ await igdb.games.select("name").search("zelda").limit(5); // searchable endpoint
 await igdb.games.select("name").catch(() => []);         // a query is a promise: then, catch, finally
 ```
 
-`findByIds()`, `iterate()` and `sync()` size their pages by weight: 500 rows of a light selection, fewer of a heavy one, so that a page stays near `maxBatchBytes` (4 MB). A game with its media, companies, release dates and websites expanded weighs about 20 KB, so such pages hold about 200 games. The weight of a row starts from a cautious guess and is learned from each response. A page IGDB refuses for its size (above 10 MB, or not built within 29 seconds) is asked again in halves. `iterate({ pageSize })` caps the page at 1 to 500 rows. A query with your own `limit` is never split: lower its `limit` if IGDB answers that the response is too large.
+`findByIds()`, `iterate()` and `sync()` size their pages by weight: 500 rows of a light selection, fewer of a heavy one, so that a page stays near `maxBatchBytes` (4 MB). A game with its media, companies, release dates and websites expanded weighs about 20 KB, so such pages hold about 200 games. The weight of a row starts from a cautious guess and is learned from each response. A page IGDB refuses for its size (above 10 MB, or not built within 29 seconds) is asked again in halves. `iterate({ pageSize })` caps the page at 1 to 500 rows. `iterate()` and `sync()` read in id order and throw on any other `sort()`: sort the rows once read. A query with your own `limit` is never split: lower its `limit` if IGDB answers that the response is too large.
 
 ### Searching everything
 
@@ -275,7 +275,7 @@ timeToBeat.get(1020); // []: no time to beat, the case for most games
 const firstDates = await igdb.release_dates.select("date", "platform").sort("date").limit(1).findByGames(ids);
 ```
 
-Every requested id is in the map, with an empty array when nothing points to the game. The query's `where` applies, and its `sort` and `limit` apply to each game's rows. Every row comes back, not just the first 10. A row linked to several of the games, such as a character, is listed under each of them. Ids are sent 500 per query and pages of 500 rows are read until the end, all batched. A page that comes back full is split using the count, so the 9,000 language rows of 500 games take about 9 requests instead of 18 one after the other.
+Every requested id is in the map, with an empty array when nothing points to the game. Regional covers have no `game` (their game localization points to them), so `covers.findByGames()` returns the main cover only. The query's `where` applies, and its `sort` and `limit` apply to each game's rows. Every row comes back, not just the first 10. A row linked to several of the games, such as a character, is listed under each of them. Ids are sent 500 per query and pages of 500 rows are read until the end, all batched. A page that comes back full is split using the count, so the 9,000 language rows of 500 games take about 9 requests instead of 18 one after the other.
 
 `findBy(field, ids)` does the same through any relation or `..._id` field, on every endpoint. Most of IGDB's links have no field back (95 of 153): a game's editions point to it with `version_parent` while it lists none of them, mods and updates point to it with `parent_game`, and a bundle's content points to it with `bundles`:
 
@@ -351,7 +351,7 @@ const withPlatforms = await igdb.expand(games, "platforms", igdb.platforms.selec
 // platforms?: { id: number; name?: string; abbreviation?: string }[]
 ```
 
-Each entity is one shared object across rows. Ids of rows that no longer exist are dropped: an event can list a deleted game. Reference tables are loaded whole and kept a day in the client's cache, so expanding them again costs no request. These tables are `platforms`, `genres`, `themes`, `game_modes`, `player_perspectives`, `languages`, `regions`, `game_types`, `release_date_statuses` and the others in `REFERENCE_ENDPOINTS`. Change the duration with the target's `cache(ttlMs)`, or fetch by id with `cache(false)`.
+Each entity is one shared object across rows. Ids of rows that no longer exist are dropped: an event can list a deleted game. Reference tables are loaded whole and kept a day in the client's cache, so expanding them again costs no request. These tables are `platforms`, `genres`, `themes`, `game_modes`, `player_perspectives`, `languages`, `regions`, `game_types`, `release_date_statuses` and the others in `REFERENCE_ENDPOINTS`. Change the duration with the target's `cache(ttlMs)`, or fetch by id with `cache(false)`. A key that IGDB fills with values rather than ids (`tags`, `hypes`, `first_release_date`) throws; keys of your own rows are accepted.
 
 ### Reusable selections
 
@@ -619,7 +619,7 @@ createIGDB({
   clientId,
   clientSecret,               // or accessToken: a token you manage (never renewed)
   tokenStore,                 // { get, set, delete, lock? }; default in memory
-  limiter,                    // LocalLimiterOptions or your own Limiter; default shared per clientId
+  limiter,                    // LocalLimiterOptions or your own Limiter; shared per clientId, first options win
   retryTimeoutMs: 30_000,
   attemptTimeoutMs: 30_000,
   autoBatch: true,            // group concurrent queries into multiqueries
@@ -628,7 +628,17 @@ createIGDB({
   maxBodyBytes: 32_000,       // largest multiquery body; 16_384 with proxyUrl, like igdbProxy
   cache,                      // CacheStore for cache()d queries; default in memory
   cacheTtlMs,                 // cache every query this long; default only cache()d ones
-  hooks: { onRetry, onRateLimited, onTokenRefresh },
+  hooks: { onRequest, onRetry, onRateLimited, onTokenRefresh },
+});
+```
+
+`hooks.onRequest` is called after every request, for logs and metrics: `{ path, method, status, durationMs, bytes, attempt, blocks, cached }`, where `status` is 0 when no answer came, `attempt` counts retries from 1, `blocks` is the number of queries in a multiquery and `cached` marks a response read from the cache. What it throws is ignored.
+
+```ts
+const igdb = createIGDB({
+  clientId,
+  clientSecret,
+  hooks: { onRequest: (r) => console.log(`${r.path} ${r.status} ${r.durationMs} ms ${r.bytes} B${r.cached ? " cached" : ""}`) },
 });
 ```
 

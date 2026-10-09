@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, spyOn, test } from "bun:test";
 import { LocalLimiter, QueueFullError, sharedLimiter } from "../../src";
 
 const tick = (ms = 0) => new Promise((r) => setTimeout(r, ms));
@@ -95,5 +95,21 @@ describe("LocalLimiter", () => {
   test("clients with the same client id share one limiter", () => {
     expect(sharedLimiter("abc")).toBe(sharedLimiter("abc"));
     expect(sharedLimiter("abc")).not.toBe(sharedLimiter("def"));
+  });
+
+  test("other options for a shared limiter are ignored with one warning", () => {
+    const warn = spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      const first = sharedLimiter("ghi", { maxConcurrent: 4 });
+      expect(sharedLimiter("ghi", { maxConcurrent: 4, now: () => 0 })).toBe(first);
+      expect(sharedLimiter("ghi")).toBe(first);
+      expect(warn).not.toHaveBeenCalled();
+      expect(sharedLimiter("ghi", { maxConcurrent: 2 })).toBe(first);
+      expect(sharedLimiter("ghi", { requestsPerSecond: 2 })).toBe(first);
+      expect(warn).toHaveBeenCalledTimes(1);
+      expect(String(warn.mock.calls[0]?.[0])).toContain("limiter options are ignored");
+    } finally {
+      warn.mockRestore();
+    }
   });
 });
