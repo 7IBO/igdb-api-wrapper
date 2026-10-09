@@ -237,6 +237,49 @@ export class Query<N extends EndpointName, R = { id: number }> extends Executabl
   }
 
   /**
+   * The games behind store ids, such as Steam app ids: `findByExternalIds(ExternalGameSource.Steam,
+   * ["292030"])`. Returns a map from each found id to its game, with the selected fields; ids IGDB
+   * does not know, or whose game this query's `where` excludes, are missing. Only on `games`.
+   */
+  async findByExternalIds(
+    ...[source, uids, options]: N extends "games"
+      ? [source: number, uids: readonly (string | number)[], options?: ExecuteOptions]
+      : [notGames: "findByExternalIds() is only on games"]
+  ): Promise<Map<string, R>> {
+    if (this.endpoint !== "games") throw new QueryError("findByExternalIds() is only on games");
+    const unique = [...new Set((uids as readonly (string | number)[]).map(String))];
+    // One uid can have several rows (per platform or edition), so ask for fewer uids than rows.
+    const chunkSize = 100;
+    const rows = new Query<EndpointName, { uid?: string; game?: number }>(this.runner, "external_games", {
+      fields: ["uid", "game"],
+    });
+    const gameOf = new Map<string, number>();
+    await Promise.all(
+      Array.from({ length: Math.ceil(unique.length / chunkSize) }, async (_, i) => {
+        const chunk = unique.slice(i * chunkSize, (i + 1) * chunkSize);
+        const filter = rows.where(
+          `external_game_source = ${toId(source as number)} & uid = (${chunk.map((uid) => JSON.stringify(uid)).join(",")})`,
+        );
+        for await (const row of filter.iterate({ ...options, pageSize: MAX_LIMIT })) {
+          if (row.uid !== undefined && row.game !== undefined && !gameOf.has(row.uid))
+            gameOf.set(row.uid, row.game);
+        }
+      }),
+    );
+    const games = await this.with({ sort: undefined, offset: undefined }).findByIds(
+      [...gameOf.values()],
+      options,
+    );
+    const byId = new Map(games.map((game) => [(game as { id: number }).id, game]));
+    const result = new Map<string, R>();
+    for (const uid of unique) {
+      const game = byId.get(gameOf.get(uid) ?? -1);
+      if (game !== undefined) result.set(uid, game);
+    }
+    return result;
+  }
+
+  /**
    * The most popular games for one PopScore metric (`PopularityType.IGDBPlaying`,
    * `PopularityType.Steam24hrPeakPlayers`…), most popular first, each with its score. The selected
    * fields and the `where` of this query apply to the games: popularity rows are read 500 at a time
