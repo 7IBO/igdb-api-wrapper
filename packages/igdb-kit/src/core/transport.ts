@@ -12,8 +12,9 @@ export interface TransportHooks {
 }
 
 export interface TransportOptions {
-  clientId: string;
-  tokens: TokenProvider;
+  /** Absent when requests go through your own proxy, which adds the credentials. */
+  clientId?: string | undefined;
+  tokens?: TokenProvider | undefined;
   limiter: Limiter;
   fetch?: typeof fetch | undefined;
   baseUrl?: string | undefined;
@@ -61,15 +62,15 @@ export class Transport {
       let status: number;
       let text: string;
       let headers: Headers;
-      let token: string;
+      let token: string | undefined;
       try {
-        token = await this.options.tokens.getToken(signal);
+        token = await this.options.tokens?.getToken(signal);
         const attemptSignal = AbortSignal.timeout(this.options.attemptTimeoutMs ?? 30_000);
         const res = await this.fetchFn(`${this.baseUrl}/${path}`, {
           method,
           headers: {
-            "Client-ID": this.options.clientId,
-            Authorization: `Bearer ${token}`,
+            ...(this.options.clientId ? { "Client-ID": this.options.clientId } : {}),
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
             Accept: "application/json",
             ...(contentType ? { "Content-Type": contentType } : {}),
           },
@@ -103,7 +104,7 @@ export class Transport {
       }
 
       const error = errorFromResponse(status, text, { endpoint: path, query: body });
-      if (status === 401 && !renewedToken && this.options.tokens.canRefresh) {
+      if (status === 401 && !renewedToken && token && this.options.tokens?.canRefresh) {
         renewedToken = true;
         await this.options.tokens.invalidate(token, signal);
         continue;

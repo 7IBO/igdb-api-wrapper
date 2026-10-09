@@ -1,5 +1,5 @@
 // Runs against the real IGDB API. Skipped unless TWITCH_CLIENT_ID and TWITCH_CLIENT_SECRET are set.
-// Uses about 25 requests. The webhook test registers webhooks on example.com and removes them.
+// Uses about 30 requests. The webhook test registers webhooks on example.com and removes them.
 import { describe, expect, test } from "bun:test";
 import {
   and,
@@ -13,6 +13,7 @@ import {
   TierError,
   toDate,
 } from "../../src";
+import { igdbProxy } from "../../src/proxy";
 
 const clientId = process.env.TWITCH_CLIENT_ID;
 const clientSecret = process.env.TWITCH_CLIENT_SECRET;
@@ -179,5 +180,38 @@ describe.skipIf(!clientId || !clientSecret)("real IGDB API", () => {
     }
     const after = await igdb.webhooks.list();
     expect(after.some((l) => hooks.some((h) => h.id === l.id))).toBe(false);
+  });
+
+  test("a browser client queries through igdbProxy", async () => {
+    const handler = igdbProxy({ igdb, endpoints: ["games", "platforms"], maxLimit: 20 });
+    const browser = createIGDB({
+      proxyUrl: "/api/igdb",
+      fetch: (async (input: string | URL | Request, init?: RequestInit) =>
+        handler(new Request(new URL(String(input), "https://app.example"), init))) as typeof fetch,
+    });
+    const [witcher, ps5] = await Promise.all([
+      browser.games.select("name").findById(1942),
+      browser.platforms.select("name").findById(Platform.PlayStation5),
+    ]);
+    expect(witcher?.name).toBe("The Witcher 3: Wild Hunt");
+    expect(ps5?.name).toBe("PlayStation 5");
+    const { total } = await browser.games
+      .select("name")
+      .where((g) => g.game_type.eq(GameType.MainGame))
+      .withCount();
+    expect(total).toBeGreaterThan(100_000);
+    expect(
+      await browser.genres
+        .select("name")
+        .execute()
+        .catch((e) => e),
+    ).toBeInstanceOf(QueryError);
+    expect(
+      await browser.games
+        .select("name")
+        .limit(21)
+        .execute()
+        .catch((e) => e),
+    ).toBeInstanceOf(QueryError);
   });
 });

@@ -4,7 +4,7 @@
 [![CI](https://github.com/7IBO/igdb-kit/actions/workflows/ci.yml/badge.svg)](https://github.com/7IBO/igdb-kit/actions/workflows/ci.yml)
 [![license](https://img.shields.io/npm/l/igdb-kit)](https://github.com/7IBO/igdb-kit/blob/main/LICENSE)
 
-A fully typed [IGDB](https://api-docs.igdb.com/) API client for Node.js and Bun.
+A fully typed [IGDB](https://api-docs.igdb.com/) API client for Node.js and Bun, and for the browser through your own proxy.
 
 - **Exact result types.** The type of every response is inferred from the fields you select: nested objects for expanded relations, ids for the others, and every field except `id` is optional because IGDB omits empty fields.
 - **Generated from the official schema.** Entities come from IGDB's `igdbapi.proto`, merged with the API docs for descriptions and `@deprecated` notices. Fields IGDB replaced, such as `category`, are left out because they are empty or no longer updated. All 84 endpoints are included, `executables`, `logos` and the tier-restricted `content_safety_*` ones among them.
@@ -262,6 +262,31 @@ Bun.serve({ routes: { "/igdb": { POST: handler } } }); // or Hono: app.post("/ig
 
 It answers 401 on a wrong secret and 500 when `onEvent` throws, so IGDB retries. With Express, use `parseWebhook({ headers: req.headers, body: req.body, url: req.url }, secret)`. `igdb.webhooks` also has `register`, `list`, `get`, `delete` and `test`.
 
+### In the browser: proxy
+
+IGDB does not allow CORS, and your client secret must stay on the server. `igdbProxy` forwards the browser's queries through your server's client, with its credentials, rate limit, retries and cache:
+
+```ts
+// Server: a catch-all route, e.g. app/api/igdb/[...path]/route.ts in Next.js
+import { igdbProxy } from "igdb-kit/proxy";
+
+export const POST = igdbProxy({
+  igdb,                                   // your server-side createIGDB() client
+  endpoints: ["games", "covers", "platforms", "genres"], // default: all
+  maxLimit: 50,                           // default 500
+  authorize: (request) => request.headers.has("cookie"), // optional
+  cacheTtlMs: 5 * 60_000,                 // optional, uses the client's cache
+});
+```
+
+```ts
+// Browser: the same typed API, no credentials
+const igdb = createIGDB({ proxyUrl: "/api/igdb" });
+const games = await igdb.games.select("name", "cover.image_id").search("zelda").limit(10);
+```
+
+The last path segment names the endpoint (`games`, `games/count`, `multiquery`), so batching keeps working. Only Apicalypse reads are forwarded, never the webhooks API. A refused query (endpoint not allowed, `limit` above `maxLimit`, `authorize` returning false) throws a `QueryError` in the browser. For another origin, pass `allowOrigin`; `cacheControl` sets the `Cache-Control` header of answers.
+
 ### Errors
 
 All errors extend `IGDBError` and carry `status`, `details` (IGDB's own error entries) and the `query` that failed.
@@ -302,7 +327,7 @@ Requests can be marked `priority: "background"` so they wait behind `interactive
 
 ## Compatibility
 
-Node.js 20 or later, and Bun. ESM and CommonJS. Types are tested on TypeScript 5.9, 6.0 and 7.0.
+Node.js 20 or later, and Bun; browsers through `igdb-kit/proxy`. ESM and CommonJS. Types are tested on TypeScript 5.9, 6.0 and 7.0.
 
 ## Development
 

@@ -192,3 +192,17 @@ webhookHandler<"games" | "platforms">({
     if (event.endpoint === "genres") return;
   },
 });
+
+// A proxy client takes no credentials; a direct client needs a client id.
+const viaProxy = createIGDB({ proxyUrl: "/api/igdb" });
+expectType<Equal<typeof viaProxy, typeof igdb>>();
+// @ts-expect-error credentials stay on the server
+createIGDB({ proxyUrl: "/api/igdb", clientSecret: "s" });
+// @ts-expect-error a client id is required without a proxy
+createIGDB({ clientSecret: "s" });
+
+import { igdbProxy } from "../../src/proxy";
+
+igdbProxy({ igdb, endpoints: ["games", "covers"] });
+// @ts-expect-error unknown endpoint
+igdbProxy({ igdb, endpoints: ["gamez"] });
