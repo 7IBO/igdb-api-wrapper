@@ -105,6 +105,36 @@ const { top, total, ps5 } = await igdb.batch({
 
 Some queries are always sent alone: `search` queries (IGDB returns an empty multiquery when one block searches), `withCount()` (the total comes from a header multiquery does not have), and any query run with `execute({ batch: false })`. Set `autoBatch: false` to turn automatic grouping off; `batch()` still groups.
 
+### Webhooks
+
+IGDB can POST every created, updated or deleted entity to your server. Register at startup: it is idempotent, and it reactivates webhooks IGDB turned off after 5 failed deliveries.
+
+```ts
+await igdb.webhooks.ensure({
+  url: "https://example.com/igdb",
+  secret: process.env.IGDB_WEBHOOK_SECRET!,
+  endpoints: ["games", "platforms"], // create, update and delete for each
+});
+```
+
+Then handle deliveries. `webhookHandler` checks the `X-Secret` header and types each event by endpoint and operation:
+
+```ts
+import { webhookHandler } from "igdb-kit/webhooks";
+
+const handler = webhookHandler<"games" | "platforms">({
+  secret: process.env.IGDB_WEBHOOK_SECRET!,
+  onEvent: async (event) => {
+    if (event.operation === "delete") return db.remove(event.endpoint, event.data.id);
+    if (event.endpoint === "games") await db.saveGame(event.data); // every field, relations as ids
+  },
+});
+
+Bun.serve({ routes: { "/igdb": { POST: handler } } }); // or Hono: app.post("/igdb", (c) => handler(c.req.raw))
+```
+
+It answers 401 on a wrong secret and 500 when `onEvent` throws, so IGDB retries. With Express, use `parseWebhook({ headers: req.headers, body: req.body, url: req.url }, secret)`. `igdb.webhooks` also has `register`, `list`, `get`, `delete` and `test`.
+
 ### Errors
 
 All errors extend `IGDBError` and carry `status`, `details` (IGDB's own error entries) and the `query` that failed.

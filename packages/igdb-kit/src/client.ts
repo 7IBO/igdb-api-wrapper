@@ -12,6 +12,7 @@ import {
   type QueryRunner,
   type RawResponse,
 } from "./query/query";
+import { Webhooks } from "./webhooks/api";
 
 export interface IGDBClientOptions extends BatcherOptions {
   /** Twitch application client id. */
@@ -48,6 +49,8 @@ export type IGDBClient = { readonly [K in EndpointName]: Query<K> } & {
    * each result under its key with its own type. Works even when `autoBatch` is off.
    */
   batch<T extends BatchInput>(queries: T, options?: Omit<ExecuteOptions, "batch">): Promise<BatchResult<T>>;
+  /** Registers, lists and removes your app's webhooks. */
+  webhooks: Webhooks;
   /** Sends a raw Apicalypse body to a path (`games`, `games/count`, `multiquery`). */
   raw<T = unknown>(path: string, body: string, options?: ExecuteOptions): Promise<T>;
 };
@@ -98,6 +101,14 @@ export function createIGDB(options: IGDBClientOptions): IGDBClient {
       );
       return Object.fromEntries(keys.map((key, i) => [key, results[i]]));
     },
+    webhooks: new Webhooks((method, path, body, requestOptions) =>
+      transport.request(
+        method,
+        path,
+        { body, contentType: body === undefined ? undefined : "application/x-www-form-urlencoded" },
+        requestOptions,
+      ),
+    ),
     raw: async (path: string, body: string, runOptions?: ExecuteOptions) =>
       (await transport.send(path, body, runOptions)).data,
   };
