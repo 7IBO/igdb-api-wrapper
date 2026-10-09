@@ -116,12 +116,12 @@ export interface ReleaseDateOptions {
   /** `Platform` id. Only rows of that platform are considered. */
   platform?: number | undefined;
   /**
-   * Statuses to consider: `ReleaseDateStatus` ids, `null` standing for "no status". Default: all,
-   * ranked full release (or no status) first, then compatibility releases, early and advanced access,
-   * beta and alpha, and offline or cancelled last. The names of {@link ReleaseStatus} are accepted
-   * for one more version.
+   * Statuses to consider: `ReleaseDateStatus` ids, one or several, `null` standing for "no status".
+   * Default: all, ranked full release (or no status) first, then compatibility releases, early and
+   * advanced access, beta and alpha, and offline or cancelled last. The names of {@link ReleaseStatus}
+   * are accepted for one more version.
    */
-  statuses?: readonly (number | null | ReleaseStatus)[] | undefined;
+  statuses?: number | readonly (number | null | ReleaseStatus)[] | undefined;
   /** Use another region when neither the requested one nor worldwide has a row. Default true. */
   fallback?: boolean | undefined;
 }
@@ -173,10 +173,11 @@ export function releasesByPlatform<G extends object>(
 
 function pick(rows: readonly ReleaseDateRow[], options: ReleaseDateOptions): GameRelease | null {
   const region = options.region ?? (options.locale === undefined ? undefined : regionOf(options.locale));
+  const statuses = typeof options.statuses === "number" ? [options.statuses] : options.statuses;
   const ranked = rows
     .filter((row) => options.platform === undefined || idOf(row.platform) === options.platform)
     .map((row) => rank(row, region))
-    .filter((r) => !options.statuses || options.statuses.some((s) => statusIs(r.release.status, s)))
+    .filter((r) => !statuses || statuses.some((s) => statusIs(r.release.status, s)))
     .filter((r) => r.applies || (region !== undefined && options.fallback !== false));
   const best = ranked.sort(compare)[0];
   if (!best) return null;

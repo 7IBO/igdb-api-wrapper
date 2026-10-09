@@ -91,11 +91,11 @@ describe("gameLink()", () => {
   });
 });
 
-describe("byGame()", () => {
+describe("findByGames()", () => {
   test("groups rows by game, with an empty list for games nothing points to", async () => {
     const mock = fakeIgdb({ release_dates: releaseDates });
     const igdb = testClient(mock.fetch);
-    const byGame = await igdb.release_dates.select("date").byGame([10, 20, 30, 10]);
+    const byGame = await igdb.release_dates.select("date").findByGames([10, 20, 30, 10]);
     expect([...byGame]).toEqual([
       [
         10,
@@ -120,7 +120,7 @@ describe("byGame()", () => {
     const byGame = await igdb.release_dates
       .select("game", "platform")
       .where((r) => r.platform.in(6, 48))
-      .byGame([10]);
+      .findByGames([10]);
     expect(byGame.get(10)).toEqual([
       { id: 1, game: 10, platform: 6 },
       { id: 2, game: 10, platform: 48 },
@@ -128,9 +128,19 @@ describe("byGame()", () => {
     expect(mock.calls[0]?.body).toContain("where ((platform = (6,48)) & (game = (10))) & (id > -1);");
   });
 
+  test("byGame() is a deprecated alias with the same result", async () => {
+    const mock = fakeIgdb({ release_dates: releaseDates });
+    const igdb = testClient(mock.fetch);
+    const query = igdb.release_dates.select("date");
+    const renamed = await query.findByGames([10, 20]);
+    const deprecated = await query.byGame([10, 20]);
+    expect([...deprecated]).toEqual([...renamed]);
+    expect(mock.calls[1]?.body).toBe(mock.calls[0]?.body);
+  });
+
   test("a row linked to several games is the same object under each", async () => {
     const igdb = testClient(fakeIgdb({ characters }).fetch);
-    const byGame = await igdb.characters.select("name").byGame([10, 20]);
+    const byGame = await igdb.characters.select("name").findByGames([10, 20]);
     expect(byGame.get(10)).toEqual([
       { id: 1, name: "Geralt" },
       { id: 2, name: "Ciri" },
@@ -143,7 +153,7 @@ describe("byGame()", () => {
     const mock = fakeIgdb({ release_dates: releaseDates });
     const igdb = testClient(mock.fetch);
     const query = igdb.release_dates.select("date");
-    const [a, b] = await Promise.all([query.byGame([10, 20]), query.byGame([10, 20])]);
+    const [a, b] = await Promise.all([query.findByGames([10, 20]), query.findByGames([10, 20])]);
     const expected: [number, { id: number; date?: number }[]][] = [
       [10, [{ id: 1, date: 300 }, { id: 2, date: 100 }, { id: 5 }]],
       [20, [{ id: 3, date: 200 }]],
@@ -159,9 +169,9 @@ describe("byGame()", () => {
       games: (c.games as number[] | undefined)?.map((id) => ({ id, name: `game ${id}` })),
     }));
     const igdb = testClient(fakeIgdb({ characters: expanded, game_time_to_beats: timeToBeats }).fetch);
-    const chars = await igdb.characters.select("games.name").byGame([30]);
+    const chars = await igdb.characters.select("games.name").findByGames([30]);
     expect(chars.get(30)?.map((c) => c.id)).toEqual([1]);
-    const ttb = await igdb.game_time_to_beats.select("normally").byGame([10, 11]);
+    const ttb = await igdb.game_time_to_beats.select("normally").findByGames([10, 11]);
     expect([...ttb]).toEqual([
       [10, [{ id: 7, normally: 254778 }]],
       [11, []], // no time to beat: the usual case
@@ -170,12 +180,12 @@ describe("byGame()", () => {
 
   test("sorts and limits each game's rows", async () => {
     const igdb = testClient(fakeIgdb({ release_dates: releaseDates }).fetch);
-    const first = await igdb.release_dates.select("date").sort("date", "asc").limit(2).byGame([10]);
+    const first = await igdb.release_dates.select("date").sort("date", "asc").limit(2).findByGames([10]);
     expect(first.get(10)).toEqual([
       { id: 2, date: 100 },
       { id: 1, date: 300 },
     ]);
-    const all = await igdb.release_dates.select("date").sort("date", "desc").byGame([10]);
+    const all = await igdb.release_dates.select("date").sort("date", "desc").findByGames([10]);
     expect(all.get(10)?.map((r) => r.id)).toEqual([1, 2, 5]); // rows without the field last
   });
 
@@ -183,7 +193,7 @@ describe("byGame()", () => {
     const rows = Array.from({ length: 1200 }, (_, i) => ({ id: i + 1, game: 10 }));
     const mock = fakeIgdb({ screenshots: rows });
     const igdb = testClient(mock.fetch);
-    const byGame = await igdb.screenshots.byGame([10]);
+    const byGame = await igdb.screenshots.findByGames([10]);
     expect(byGame.get(10)).toHaveLength(1200);
     expect(mock.calls.map((c) => c.body.match(/id > (-?\d+)/)?.[1])).toEqual(["-1", "500", "1000"]);
   });
@@ -194,7 +204,7 @@ describe("byGame()", () => {
     const mock = fakeIgdb({ language_supports: rows });
     const igdb = testClient(mock.fetch);
     const ids = Array.from({ length: 100 }, (_, i) => i + 1);
-    const byGame = await igdb.language_supports.byGame(ids);
+    const byGame = await igdb.language_supports.findByGames(ids);
     expect([...byGame.values()].every((group) => group.length === 30)).toBe(true);
     expect(new Set([...byGame.values()].flat().map((r) => r.id)).size).toBe(3000);
     // First page, count, then 8 parts of 13 games (~390 rows each) read in parallel, in multiqueries.
@@ -206,7 +216,7 @@ describe("byGame()", () => {
     const mock = fakeIgdb({ game_time_to_beats: timeToBeats });
     const igdb = testClient(mock.fetch);
     const ids = Array.from({ length: 1200 }, (_, i) => i + 1);
-    const byGame = await igdb.game_time_to_beats.byGame(ids);
+    const byGame = await igdb.game_time_to_beats.findByGames(ids);
     expect(byGame.size).toBe(1200);
     expect(mock.calls).toHaveLength(1);
     expect(mock.calls[0]?.body.split("\n")).toHaveLength(3);
@@ -222,7 +232,7 @@ describe("byGame()", () => {
       return fake.fetch(call.url, { method: "POST", body: call.body });
     });
     const igdb = testClient(mock.fetch);
-    const byGame = await igdb.screenshots.byGame([1, 2, 3, 4]);
+    const byGame = await igdb.screenshots.findByGames([1, 2, 3, 4]);
     expect([...byGame.values()].map((group) => group.length)).toEqual([120, 120, 120, 120]);
     expect(new Set([...byGame.values()].flat().map((r) => r.id)).size).toBe(480);
     // 4 games, then 2 + 2, then 1 game at a time, with smaller pages until they pass.
@@ -238,12 +248,12 @@ describe("byGame()", () => {
 
   test("rejects what it cannot do", async () => {
     const igdb = testClient(fakeIgdb({}).fetch);
-    expect(await igdb.characters.byGame([])).toEqual(new Map());
-    await expect(igdb.characters.search("geralt").byGame([1])).rejects.toThrow(/search/);
-    await expect(igdb.release_dates.offset(5).byGame([1])).rejects.toThrow(/offset/);
-    await expect(igdb.release_dates.byGame([-1])).rejects.toThrow(QueryError);
+    expect(await igdb.characters.findByGames([])).toEqual(new Map());
+    await expect(igdb.characters.search("geralt").findByGames([1])).rejects.toThrow(/search/);
+    await expect(igdb.release_dates.offset(5).findByGames([1])).rejects.toThrow(/offset/);
+    await expect(igdb.release_dates.findByGames([-1])).rejects.toThrow(QueryError);
     // @ts-expect-error genres do not point to games
-    await expect(igdb.genres.byGame([1])).rejects.toThrow(/linked to games/);
+    await expect(igdb.genres.findByGames([1])).rejects.toThrow(/linked to games/);
   });
 });
 

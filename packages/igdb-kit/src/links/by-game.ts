@@ -15,7 +15,7 @@ type GameLinkKey<E> = {
 }[keyof E];
 
 /**
- * Endpoints whose rows point to games, which `byGame()` and views can group by game: through a
+ * Endpoints whose rows point to games, which `findByGames()` and views can group by game: through a
  * `game` relation (`release_dates`, `websites`, `language_supports`…), a `games` array (`characters`,
  * `events`, `collections`, `franchises`) or a `game_id` number (`game_time_to_beats`,
  * `popularity_primitives`). `search` is left out: it only answers with a search term.
@@ -52,18 +52,18 @@ type Row = Record<string, unknown> & { id: number };
  * single game with more rows than a page is read with an id cursor. A page IGDB finds too heavy is
  * split in two by its ids, or read with smaller pages for a single game.
  */
-export async function byGame<R>(
+export async function findByGames<R>(
   query: Query<EndpointName, R>,
   gameIds: readonly number[],
   options: ExecuteOptions = {},
 ): Promise<Map<number, R[]>> {
   const link = gameLink(query.endpoint);
   if (link === undefined)
-    throw new QueryError(`byGame() needs an endpoint linked to games, not ${query.endpoint}`);
+    throw new QueryError(`findByGames() needs an endpoint linked to games, not ${query.endpoint}`);
   const { fields, search, offset, sort, limit } = query.state;
-  if (search !== undefined) throw new QueryError("byGame() cannot be combined with search");
+  if (search !== undefined) throw new QueryError("findByGames() cannot be combined with search");
   if (offset !== undefined)
-    throw new QueryError("byGame() cannot be combined with offset: use limit, per game");
+    throw new QueryError("findByGames() cannot be combined with offset: use limit, per game");
 
   const ids = [...new Set(gameIds.map(toId))];
   const result = new Map<number, R[]>(ids.map((id) => [id, []]));

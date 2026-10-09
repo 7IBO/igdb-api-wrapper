@@ -60,7 +60,7 @@ describe("searchAll", () => {
     await igdb.searchAll("witcher", {
       kinds: ["game"],
       gameTypes: "all",
-      editions: true,
+      includeEditions: true,
       order: "igdb",
       limit: 3,
     });
@@ -71,6 +71,15 @@ describe("searchAll", () => {
     expect(calls[2]?.body).toContain(
       "where (game != null & game.game_type = (5) & game.version_parent = null);",
     );
+    // One game type id, and the deprecated `editions`.
+    await igdb.searchAll("witcher", {
+      kinds: ["game"],
+      gameTypes: GameType.Mod,
+      editions: true,
+      order: "igdb",
+    });
+    expect(calls[3]?.body).toContain("where (game != null & game.game_type = (5));");
+    await expect(igdb.searchAll("witcher", { gameTypes: [] })).rejects.toThrow(QueryError);
   });
 
   test("ranks by name match, then ratings, then shorter names, and drops rows without an entity", async () => {

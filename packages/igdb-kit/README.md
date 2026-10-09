@@ -172,7 +172,7 @@ for (const hit of hits) {
 }
 ```
 
-IGDB returns the most recently indexed matches first, so last week's mods come before the original (153 of the 381 game matches for "zelda" are mods). `searchAll` leaves out mods, DLCs, bundles, packs, updates and editions by default (`gameTypes`, `editions`), reads every match (500 per request, up to `maxRows`, 2000 by default) and ranks them: exact name, then names starting with the term, then names containing its words, then alternative names; ties go to the most rated games. `order: "igdb"` keeps IGDB's order in a single request. Companies are not in the search index, and rows pointing to deleted entities or to people are dropped. `alternative_name` holds every alternative name joined into one string.
+IGDB returns the most recently indexed matches first, so last week's mods come before the original (153 of the 381 game matches for "zelda" are mods). `searchAll` leaves out mods, DLCs, bundles, packs, updates and editions by default (`gameTypes`, whose default is `MAIN_GAME_TYPES`, and `includeEditions`), reads every match (500 per request, up to `maxRows`, 2000 by default) and ranks them: exact name, then names starting with the term, then names containing its words, then alternative names; ties go to the most rated games. `order: "igdb"` keeps IGDB's order in a single request. Companies are not in the search index, and rows pointing to deleted entities or to people are dropped. `alternative_name` holds every alternative name joined into one string.
 
 `findByExternalIds()` finds games from their id on Steam, GOG, Epic, Xbox, PlayStation Store… (`ExternalGameSource`), for example to match a Steam library:
 
@@ -218,12 +218,12 @@ const top = await igdb.games
 IGDB keeps only the latest value of each game and metric, so a trend needs your own history. `popularitySnapshot()` returns rows ready to store, one ranked array per metric:
 
 ```ts
-for await (const rows of igdb.popularitySnapshot({ top: 1000 })) {
+for await (const rows of igdb.popularitySnapshot({ limit: 1000 })) {
   await db.insertPopularity(rows); // { game_id, popularity_type, value, rank, calculated_at, external_popularity_source }[]
 }
 ```
 
-Key the history on `game_id`, `popularity_type` and `calculated_at`: each metric is recomputed on its own schedule (IGDB's daily, Steam's and Twitch's on other days), so running a snapshot twice the same day stores nothing new. `top` reads the 1000 most popular rows of each of the 11 metrics in 3 requests; without it, every row (about 700,000) is read in id order: the metrics are counted, then each one's pages are requested at once, two metrics at a time, for about 145 multiqueries and 40 seconds at the default rate limit. Three metrics are held in memory at most. `types` picks the metrics.
+Key the history on `game_id`, `popularity_type` and `calculated_at`: each metric is recomputed on its own schedule (IGDB's daily, Steam's and Twitch's on other days), so running a snapshot twice the same day stores nothing new. `limit` reads the 1000 most popular rows of each of the 11 metrics in 3 requests; without it, every row (about 700,000) is read in id order: the metrics are counted, then each one's pages are requested at once, two metrics at a time, for about 145 multiqueries and 40 seconds at the default rate limit. Three metrics are held in memory at most. `types` picks the metrics.
 
 ### Release calendar
 
@@ -253,14 +253,14 @@ A window costs one count, `ceil(dates / 500)` pages read in parallel and `ceil(g
 
 ### Data linked to games
 
-Many endpoints point to games without the game pointing back: time to beat and popularity carry a `game_id`, and characters, events, collections and franchises list their `games`. `byGame()` fetches them for a list of games, grouped by game id. It works on every endpoint with a `game`, `game_id` or `games` field (`GameLinkedEndpoint`), such as `release_dates`, `websites`, `language_supports`, `external_games` or `involved_companies`:
+Many endpoints point to games without the game pointing back: time to beat and popularity carry a `game_id`, and characters, events, collections and franchises list their `games`. `findByGames()` fetches them for a list of games, grouped by game id. It works on every endpoint with a `game`, `game_id` or `games` field (`GameLinkedEndpoint`), such as `release_dates`, `websites`, `language_supports`, `external_games` or `involved_companies`:
 
 ```ts
-const timeToBeat = await igdb.game_time_to_beats.select("normally").byGame([1942, 1020]);
+const timeToBeat = await igdb.game_time_to_beats.select("normally").findByGames([1942, 1020]);
 timeToBeat.get(1942); // [{ id: 432, normally: 254778 }]: seconds, about 71 h
 timeToBeat.get(1020); // []: no time to beat, the case for most games
 
-const firstDates = await igdb.release_dates.select("date", "platform").sort("date").limit(1).byGame(ids);
+const firstDates = await igdb.release_dates.select("date", "platform").sort("date").limit(1).findByGames(ids);
 ```
 
 Every requested id is in the map, with an empty array when nothing points to the game. The query's `where` applies, and its `sort` and `limit` apply to each game's rows. Every row comes back, not just the first 10. A row linked to several of the games, such as a character, is listed under each of them. Ids are sent 500 per query and pages of 500 rows are read until the end, all batched. A page that comes back full is split using the count, so the 9,000 language rows of 500 games take about 9 requests instead of 18 one after the other.
@@ -532,6 +532,20 @@ createIGDB({
 ```
 
 Requests can be marked `priority: "background"` so they wait behind `interactive` ones, for example during a sync.
+
+## Conventions
+
+The same rules hold across the library:
+
+- **Names.** IGDB's data keeps IGDB's names, in snake_case: endpoints, fields and the rows they return (`release_dates`, `first_release_date`). What igdb-kit adds is in camelCase: methods, options and computed objects (`findByGames()`, `includeWorldwide`, `minimumAge`). A row meant to be stored keeps IGDB's columns, such as `calculated_at` in `popularitySnapshot()`.
+- **Placement.** A method that returns an endpoint's rows is on that endpoint, even when it reads others along the way (`igdb.games.popular()`, `igdb.release_dates.findByGames()`). The rest is on the client (`igdb.batch()`, `igdb.searchAll()`, `igdb.expand()`, `igdb.popularitySnapshot()`). Helpers that send no request are in `igdb-kit/game`, and server pieces in `igdb-kit/proxy`, `igdb-kit/redis` and `igdb-kit/webhooks`.
+- **Options.** `limit` is the number of results (10 by default, 500 at most; `popularitySnapshot()` takes it per metric), `offset` skips results, `pageSize` is the number of rows of a page read by `iterate()`, `concurrency` the pages `sync()` requests at once, and `maxRows` caps the rows read: a method that ranks (`popular()`, `weightedPopular()`, `searchAll()`) returns the best it found within it, and `releases()`, which lists everything, throws rather than return part of the list. Options that filter on ids have plural names and take one id or several (`platforms`, `regions`, `statuses`, `gameTypes`, `types`); `releaseDate()` takes one `platform` and one `region`, since they choose the date to show rather than filter. A boolean that widens a filter starts with `include` (`includeWorldwide`, `includeEditions`).
+- **Dates.** A date argument takes a `Date`, a `"YYYY-MM-DD"` or ISO string, or Unix seconds (`DateInput`), and a number in milliseconds such as `Date.now()` throws a `QueryError`. Rows keep IGDB's Unix seconds, and computed objects give `Date`s (`start` and `end` of a release).
+- **Missing values.** A row leaves out the fields IGDB leaves out. A computed object has all its keys, with `null` where there is no value, so that it survives `JSON.stringify` and Next.js props, and a lookup that finds nothing returns `null` (`first()`, `findById()`, `releaseDate()`). `imageUrl()` is the exception: it returns `undefined` without an image, which `<img src>` accepts.
+- **Reference values.** IGDB ids everywhere, in options and in computed objects, read and written with the generated constants (`Platform.NintendoSwitch`, `ReleaseDateStatus.FullRelease`). Strings are for igdb-kit's own notions: `precision`, `match`, `store`, `relation`, `kind`.
+- **Read-only rows.** Identical queries sent at the same time share one response, so treat rows as read-only: igdb-kit never changes a row it received.
+- **Errors.** A `QueryError` for anything wrong with a query, whether igdb-kit finds it before sending or IGDB rejects the query; a `NotFoundError` for `*OrThrow()` and a company name that matches nothing; a `TypeError` for a wrong argument outside any query, such as something that is not an image id. An `IGDBError` carries the `endpoint` and the `query` it comes from.
+- **Renames.** A renamed method or option keeps working under its old name for one minor version, marked deprecated so that editors strike it through.
 
 ## Compatibility
 

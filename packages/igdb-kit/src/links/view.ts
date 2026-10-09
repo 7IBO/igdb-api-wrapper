@@ -3,7 +3,7 @@ import { entities, type Game } from "../generated/schema";
 import type { ExecuteOptions, Query } from "../query/query";
 import type { Prettify, ScalarKeys } from "../query/types";
 import type { Condition, WhereRoot } from "../query/where";
-import { byGame, gameLink } from "./by-game";
+import { findByGames, gameLink } from "./by-game";
 
 // biome-ignore lint/suspicious/noExplicitAny: the rows of each linked query are typed by ViewRow.
 type AnyQuery = Query<any, any>;
@@ -107,7 +107,7 @@ export class View<R, W extends ViewLinks> implements PromiseLike<ViewRow<R, W>[]
   }
 
   private async load(ids: readonly number[], options: ExecuteOptions): Promise<Map<number, unknown[]>[]> {
-    return Promise.all(Object.values(this.links).map((link) => byGame<unknown>(link, ids, options)));
+    return Promise.all(Object.values(this.links).map((link) => findByGames<unknown>(link, ids, options)));
   }
 
   private attach(games: R[], linked: Map<number, unknown[]>[]): ViewRow<R, W>[] {

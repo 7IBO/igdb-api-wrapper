@@ -7,7 +7,7 @@ import {
   entities,
   type SearchableEndpoint,
 } from "../generated/schema";
-import { byGame, type GameLinkedEndpoint } from "../links/by-game";
+import { findByGames, type GameLinkedEndpoint } from "../links/by-game";
 import { type DateInput, dateSeconds } from "./dates";
 import {
   allIds,
@@ -456,12 +456,21 @@ export class Query<N extends EndpointName, R = { id: number }> extends Executabl
    * no time to beat). A row linked to several of the games is under each of them. Ids are split by
    * 500 and pages of 500 rows are read until the end, sent together so batching packs them.
    */
+  findByGames(
+    ...[gameIds, options]: N extends GameLinkedEndpoint
+      ? [gameIds: readonly number[], options?: ExecuteOptions]
+      : [notLinked: "findByGames() is only on endpoints that point to games"]
+  ): Promise<Map<number, R[]>> {
+    return findByGames<R>(this as never, gameIds as readonly number[], options);
+  }
+
+  /** @deprecated Renamed `findByGames()`, like `findById()` and `findByIds()`; same arguments. */
   byGame(
     ...[gameIds, options]: N extends GameLinkedEndpoint
       ? [gameIds: readonly number[], options?: ExecuteOptions]
-      : [notLinked: "byGame() is only on endpoints that point to games"]
+      : [notLinked: "findByGames() is only on endpoints that point to games"]
   ): Promise<Map<number, R[]>> {
-    return byGame<R>(this as never, gameIds as readonly number[], options);
+    return findByGames<R>(this as never, gameIds as readonly number[], options);
   }
 
   /**

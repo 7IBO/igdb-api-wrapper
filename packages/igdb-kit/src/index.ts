@@ -61,6 +61,7 @@ export type {
   ReleasesOptions,
 } from "./query/releases";
 export {
+  MAIN_GAME_TYPES,
   SEARCH_GAME_TYPES,
   SEARCH_KINDS,
   type SearchAll,
