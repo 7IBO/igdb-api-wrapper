@@ -15,6 +15,13 @@ const docsPath = join(root, "codegen/docs-fields.json");
 const outPath = join(root, "src/generated/schema.ts");
 
 const referencePath = join(root, "codegen/reference-tables.json");
+/**
+ * Deprecated fields that IGDB still fills while their replacement is not: kept in the types, tagged
+ * `@deprecated` with a note, and accepted at runtime. `bun run audit` compares their fill rates.
+ */
+const kept: Record<string, Record<string, { replacement: string; note: string }>> = JSON.parse(
+  readFileSync(join(root, "codegen/kept-deprecated.json"), "utf8"),
+);
 
 /**
  * Small reference tables whose ids people hard-code (`game_type = 0`, `platforms = 48`). Each becomes
@@ -75,6 +82,7 @@ const REFERENCE_TABLES: {
   { name: "CollectionRelationType", endpoint: "collection_relation_types", label: "name" },
   { name: "PlatformFamily", endpoint: "platform_families", label: "name" },
   { name: "ImageType", endpoint: "image_types", label: "name" },
+  { name: "ArtworkType", endpoint: "artwork_types", label: "name" },
 ];
 
 type ReferenceRow = { id: number } & Record<string, string | number>;
@@ -198,13 +206,18 @@ function jsdoc(lines: string[], indent: string): string {
 }
 
 /** Turns "DEPRECATED! Use organization instead" into a TS deprecation tag. */
-function describe(field: ProtoField, doc: { desc: string; type: string } | undefined): string[] {
+function describe(
+  field: ProtoField,
+  doc: { desc: string; type: string } | undefined,
+  keptNote: string | undefined,
+): string[] {
   const lines: string[] = [];
   const desc = doc?.desc?.trim() ?? "";
   const deprecatedInDocs = /^DEPRECATED!?/i.test(desc);
   if (desc && !deprecatedInDocs) lines.push(desc);
   if (field.type === "google.protobuf.Timestamp") lines.push("Unix timestamp in seconds.");
-  if (field.deprecated || deprecatedInDocs) {
+  if (keptNote !== undefined) lines.push(`@deprecated ${keptNote}`);
+  else if (field.deprecated || deprecatedInDocs) {
     const hint = desc.replace(/^DEPRECATED!?\s*/i, "");
     lines.push(`@deprecated${hint ? ` ${hint}` : ""}`);
   }
@@ -227,7 +240,8 @@ function replacementOf(fields: ProtoField[], desc: string): string | undefined {
  * Deprecated fields that IGDB replaced with another field or announced for removal. IGDB still
  * accepts them in queries but leaves them empty or stops updating them (`where category = 0` matches
  * no game), so they are left out of the types and rejected at runtime with their replacement.
- * Deprecated fields without a replacement are kept, tagged `@deprecated`.
+ * Deprecated fields without a replacement are kept, tagged `@deprecated`, and so are the fields of
+ * `codegen/kept-deprecated.json`, which IGDB still fills unlike their replacement.
  */
 const removed = new Map<string, Map<string, string | null>>();
 for (const [name, fields] of messages) {
@@ -235,6 +249,7 @@ for (const [name, fields] of messages) {
   for (const f of fields) {
     const desc = docFields.get(f.name)?.desc ?? "";
     if (!f.deprecated && !/^DEPRECATED/i.test(desc.trim())) continue;
+    if (kept[name]?.[f.name]) continue;
     const replacement = replacementOf(fields, desc);
     if (replacement === undefined && !/to be removed/i.test(desc)) continue;
     if (!removed.has(name)) removed.set(name, new Map());
@@ -298,7 +313,7 @@ for (const [name, fields] of messages) {
       throw new Error(`Unknown proto type ${f.type} on ${name}.${f.name}`);
     }
     if (f.repeated) ts = `${ts}[]`;
-    out += jsdoc(describe(f, docFields.get(f.name)), "  ");
+    out += jsdoc(describe(f, docFields.get(f.name), kept[name]?.[f.name]?.note), "  ");
     out += `  ${f.name}: ${ts};\n`;
     meta.push(`${f.name}:${kind}`);
   }

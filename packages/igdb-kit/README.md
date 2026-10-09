@@ -130,9 +130,9 @@ const upcoming = await igdb.release_dates
 toDate(upcoming[0].date!);                                            // a Date
 ```
 
-`GameType`, `GameStatus`, `GameReleaseFormat`, `Genre`, `Theme`, `GameMode`, `PlayerPerspective`, `Platform`, `PlatformType`, `PlatformFamily`, `ExternalGameSource`, `PopularityType`, `ReleaseDateRegion`, `ReleaseDateStatus`, `DateFormat`, `WebsiteType`, `AgeRatingOrganization`, `AgeRatingCategory`, `Language`, `LanguageSupportType`, `Region` (of `game_localizations`), `CompanyStatus`, `CompanySize`, `CompanyType`, `CollectionType`, `CollectionMembershipType`, `CollectionRelationType`, `NetworkType`, `ImageType`, `CharacterGender` and `CharacterSpecie` are generated from the API. Age ratings repeat across organizations, so their keys start with it: `AgeRatingCategory.PEGI_18`, `AgeRatingCategory.ESRB_M`.
+`GameType`, `GameStatus`, `GameReleaseFormat`, `Genre`, `Theme`, `GameMode`, `PlayerPerspective`, `Platform`, `PlatformType`, `PlatformFamily`, `ExternalGameSource`, `PopularityType`, `ReleaseDateRegion`, `ReleaseDateStatus`, `DateFormat`, `WebsiteType`, `AgeRatingOrganization`, `AgeRatingCategory`, `Language`, `LanguageSupportType`, `Region` (of `game_localizations`), `CompanyStatus`, `CompanySize`, `CompanyType`, `CollectionType`, `CollectionMembershipType`, `CollectionRelationType`, `NetworkType`, `ImageType`, `ArtworkType`, `CharacterGender` and `CharacterSpecie` are generated from the API. Age ratings repeat across organizations, so their keys start with it: `AgeRatingCategory.PEGI_18`, `AgeRatingCategory.ESRB_M`.
 
-IGDB replaced several fields with reference tables: `games.category` became `game_type`, `release_dates.region` became `release_region`, `external_games.category` became `external_game_source`, and so on. IGDB still accepts the old names but leaves them empty or no longer updates them, so `where category = 0` silently matches nothing. igdb-kit leaves them out of the types and throws a `QueryError` that names the replacement.
+IGDB replaced several fields with reference tables: `games.category` became `game_type`, `release_dates.region` became `release_region`, `external_games.category` became `external_game_source`, and so on. IGDB still accepts the old names but leaves them empty or no longer updates them, so `where category = 0` silently matches nothing. igdb-kit leaves them out of the types and throws a `QueryError` that names the replacement. One exception stays, marked deprecated: IGDB still fills `artworks.artwork_type` on 99.5% of artworks, where its replacement `image_type` is on about half (see `artworkType()` below).
 
 Avoid filters three levels deep, such as `involved_companies.company.name`: IGDB takes 10 to 25 seconds and can time out after about 27. Look the id up first, then filter on `involved_companies.company`; `developedBy()` and `publishedBy()` do it for you.
 
@@ -335,6 +335,17 @@ import { imageUrl } from "igdb-kit";
 imageUrl(game.cover?.image_id, "cover_big", { retina: true });
 // https://images.igdb.com/igdb/image/upload/t_cover_big_2x/co1wyy.jpg (undefined if there is no cover)
 imageUrl(game.cover?.url, "cover_big"); // the url field IGDB returns (always t_thumb) works too
+```
+
+`artworkType()` gives the `ImageType` of an artwork. IGDB fills `image_type` on about half of the artworks and the deprecated `artwork_type` on nearly all, numbered differently (8 is "Infographic" in `artwork_types` and "Main cover" in `image_types`), so it reads `image_type` and falls back to `artwork_type` converted:
+
+```ts
+import { artworkType, ImageType } from "igdb-kit";
+
+const artworks = await igdb.artworks
+  .select("image_id", "image_type", "artwork_type")
+  .where((a) => a.game.eq(1942));
+const conceptArt = artworks.filter((a) => artworkType(a) === ImageType.ConceptArt);
 ```
 
 ### Displaying a game: igdb-kit/game

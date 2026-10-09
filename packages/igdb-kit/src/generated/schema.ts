@@ -272,6 +272,11 @@ export interface Artwork {
   width: number;
   /** Hash of the object */
   checksum: string;
+  /**
+   * The artwork type. Deprecated: use image_type instead
+   * @deprecated IGDB replaced it with `image_type` but still fills it on 99.5% of artworks, where `image_type` is on about half, and numbers types differently (8 is "Infographic" here and "Main cover" there): `artworkType()` reads both.
+   */
+  artwork_type: ArtworkType;
   /** The image type categorizing this artwork */
   image_type: ImageType;
 }
@@ -3444,6 +3449,43 @@ export const ImageType = {
   HistoricalArtwork: 16,
 } as const;
 
+/**
+ * Ids of the `artwork_types` reference table, held by `artworks.artwork_type`.
+ * IGDB can add rows at any time: regenerate with `bun run codegen --fetch`.
+ */
+export const ArtworkType = {
+  /** Artwork */
+  Artwork: 1,
+  /** Key art without logo */
+  KeyArtWithoutLogo: 2,
+  /** Key art with logo */
+  KeyArtWithLogo: 3,
+  /** Concept art */
+  ConceptArt: 4,
+  /** Game logo (white) */
+  GameLogoWhite: 5,
+  /** Game logo (black) */
+  GameLogoBlack: 6,
+  /** Game logo (color) */
+  GameLogoColor: 7,
+  /** Infographic */
+  Infographic: 8,
+  /** Alternative cover */
+  AlternativeCover: 9,
+  /** Historical cover */
+  HistoricalCover: 10,
+  /** Square cover */
+  SquareCover: 11,
+  /** Icon */
+  Icon: 12,
+  /** Historical logo */
+  HistoricalLogo: 13,
+  /** Historical icon */
+  HistoricalIcon: 14,
+  /** Historical artwork */
+  HistoricalArtwork: 15,
+} as const;
+
 /** Maps each endpoint path to the entity it returns. */
 export interface Endpoints {
   age_rating_categories: AgeRatingCategory;
@@ -3550,7 +3592,7 @@ export const entities: Record<string, Record<string, 0 | string>> = {
   AgeRatingOrganization: {id:0,name:0,created_at:0,updated_at:0,checksum:0},
   AlternativeName: {id:0,comment:0,game:"Game",name:0,checksum:0},
   Executable: {id:0,game:"Game",name:0,store:0,platform:"Platform",file_path:0,checksum:0},
-  Artwork: {id:0,alpha_channel:0,animated:0,game:"Game",height:0,image_id:0,url:0,width:0,checksum:0,image_type:"ImageType"},
+  Artwork: {id:0,alpha_channel:0,animated:0,game:"Game",height:0,image_id:0,url:0,width:0,checksum:0,artwork_type:"ArtworkType",image_type:"ImageType"},
   ArtworkType: {id:0,slug:0,name:0,created_at:0,updated_at:0,checksum:0},
   Character: {id:0,akas:0,country_name:0,created_at:0,description:0,games:"Game",mug_shot:"CharacterMugShot",name:0,slug:0,updated_at:0,url:0,checksum:0,character_gender:"CharacterGender",character_species:"CharacterSpecie"},
   CharacterGender: {id:0,name:0,created_at:0,updated_at:0,checksum:0},
@@ -3631,7 +3673,6 @@ export const entities: Record<string, Record<string, 0 | string>> = {
 /** Fields IGDB replaced or dropped, with their replacement. They are no longer returned. */
 export const removedFields: Record<string, Record<string, string | null>> = {
   AgeRating: {category:"organization",content_descriptions:"rating_content_descriptions",rating:"rating_category"},
-  Artwork: {artwork_type:"image_type"},
   Character: {gender:"character_gender",species:"character_species"},
   Company: {change_date_category:"change_date_format",start_date_category:"start_date_format"},
   CompanyWebsite: {category:"type"},

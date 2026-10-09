@@ -1,7 +1,10 @@
 // Checks the generated schema against the live API, field by field:
 //   - the type of every returned value matches the proto (string, number, boolean, id, arrays),
 //   - every field the API returns is in the schema (or was removed on purpose),
-//   - which fields are never filled, and which deprecated fields still are.
+//   - which fields are never filled, and which deprecated fields still are,
+//   - how much each replaced field is filled next to its replacement: a replaced field filled more
+//     than its replacement must stay (codegen/kept-deprecated.json), a kept one can go once its
+//     replacement catches up.
 //
 //   TWITCH_CLIENT_ID=… TWITCH_CLIENT_SECRET=… bun run audit > audit.md
 //
@@ -27,6 +30,11 @@ for (const m of proto.matchAll(/^message (\w+) \{([\s\S]*?)^\}/gm)) {
   }
 }
 
+/** Deprecated fields kept because IGDB fills them more than their replacement. */
+const kept: Record<string, Record<string, { replacement: string }>> = JSON.parse(
+  readFileSync(join(import.meta.dir, "../codegen/kept-deprecated.json"), "utf8"),
+);
+
 const kindOf = (v: unknown) => (Array.isArray(v) ? `${v.length ? typeof v[0] : "number"}[]` : typeof v);
 const count = (path: string, where: string) =>
   igdb
@@ -36,6 +44,7 @@ const count = (path: string, where: string) =>
 const errors: string[] = [];
 const never: string[] = [];
 const deprecatedAlive: string[] = [];
+const replacements: string[] = [];
 const skipped: string[] = [];
 let checked = 0;
 
@@ -70,6 +79,31 @@ for (const [endpoint, { entity }] of Object.entries(endpoints)) {
     }
   });
   const removed = removedFields[entity] ?? {};
+  const pairs = [
+    ...Object.entries(removed).flatMap(([field, replacement]) =>
+      replacement ? [{ field, replacement, status: "rejected" }] : [],
+    ),
+    ...Object.entries(kept[entity] ?? {}).map(([field, { replacement }]) => ({
+      field,
+      replacement,
+      status: "kept",
+    })),
+  ];
+  const fills = await Promise.all(
+    pairs.map((p) =>
+      Promise.all([count(endpoint, `${p.field} != null`), count(endpoint, `${p.replacement} != null`)]),
+    ),
+  );
+  pairs.forEach(({ field, replacement, status }, i) => {
+    const [old = 0, current = 0] = fills[i] ?? [];
+    const share = (n: number) => `${((100 * n) / total).toFixed(1)}%`;
+    const line = `\`${endpoint}.${field}\` ${share(old)}, \`${replacement}\` ${share(current)}`;
+    replacements.push(`${line} (${status})`);
+    if (status === "rejected" && old > current)
+      errors.push(`${line}: the replaced field holds more, keep it (codegen/kept-deprecated.json)`);
+    if (status === "kept" && current >= old)
+      errors.push(`${line}: the replacement caught up, drop codegen/kept-deprecated.json's entry`);
+  });
   for (const key of new Set(sample.flatMap((row) => Object.keys(row)))) {
     if (key === "id" || key in (entities[entity] ?? {})) continue;
     if (key in removed)
@@ -91,6 +125,9 @@ ${list(never)}
 
 ### Replaced fields IGDB still returns (rejected by igdb-kit; use the replacement)
 ${list(deprecatedAlive)}
+
+### Replaced fields next to their replacement (share of rows filled)
+${list(replacements)}
 
 ### Skipped endpoints
 ${list(skipped)}

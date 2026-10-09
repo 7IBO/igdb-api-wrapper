@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
   AgeRatingCategory,
+  ArtworkType,
   and,
   CompanySize,
   GameType,
@@ -265,6 +266,13 @@ describe("client-side validation", () => {
     expect(() => igdb.release_dates.sort("region")).toThrow(/use "release_region"/);
     // @ts-expect-error removed without replacement
     expect(() => igdb.games.select("follows")).toThrow('"follows" was dropped by IGDB and is always empty');
+  });
+
+  test("artworks.artwork_type stays: IGDB still fills it, unlike its replacement image_type", () => {
+    const query = igdb.artworks
+      .select("image_type", "artwork_type")
+      .where((a) => a.artwork_type.eq(ArtworkType.ConceptArt));
+    expect(query.toApicalypse()).toBe("fields image_type,artwork_type; where artwork_type = 4;");
   });
 
   test("sort only on scalar fields (IGDB silently ignores bad sorts)", () => {
