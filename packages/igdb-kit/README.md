@@ -105,7 +105,7 @@ igdb.games.where((g) =>
 );
 igdb.games.where((g) => g.supportsLanguage("fr-FR", "audio"));         // a French voice-over
 igdb.games.where((g) => g.mainGames());                                // full games, as a catalog lists them
-igdb.games.where((g) => g.playableTogether({ platform: Platform.NintendoSwitch, players: 4, mode: "local" }));
+igdb.games.where((g) => g.playableTogether({ platforms: Platform.NintendoSwitch, players: 4, mode: "local" }));
 ```
 
 `mainGames()` keeps the `MAIN_GAME_TYPES` (no DLCs, mods, bundles, episodes, packs or updates) without editions, the Erotic theme, and offline, cancelled or rumored games: 312,206 games, 82% of IGDB. Its options are `includeUndated` (default true; false leaves out the 24% without a release date), `includeAdult`, `includeEditions` and `requireCover`. `playableTogether()` reads `multiplayer_modes`, every condition on one row: `players` (default 2), `mode` (`"local"` or `"online"`, default either), `coop` (co-op only) and `platform` (a row without a platform applies to all). Only 5.7% of main games have multiplayer data.

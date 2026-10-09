@@ -592,8 +592,15 @@ describe.skipIf(!clientId || !clientSecret)("real IGDB API", () => {
       ids(witcher.where((g) => g.releasedIn({ platforms: Platform.NintendoSwitch, from: "2021-01-01" }))),
       // 214992: every release date is Cancelled, yet its platforms still list Xbox Series X|S.
       ids(witcher.where((g) => g.releasedIn({ platforms: Platform.XboxSeriesXS }))),
-      // Deprecated names, still accepted.
-      ids(witcher.where((g) => g.releasedIn({ platform: Platform.XboxSeriesXS, includeCancelled: true }))),
+      // Every status, Cancelled included.
+      ids(
+        witcher.where((g) =>
+          g.releasedIn({
+            platforms: Platform.XboxSeriesXS,
+            statuses: [...Object.values(ReleaseDateStatus), null],
+          }),
+        ),
+      ),
       ids(
         witcher.where((g) =>
           g.releasedIn({ platforms: Platform.XboxSeriesXS, statuses: [ReleaseDateStatus.Cancelled] }),
@@ -741,8 +748,8 @@ describe.skipIf(!clientId || !clientSecret)("real IGDB API", () => {
     for (const status of statuses) {
       const row = { id: 1, date: 0, date_format: 0, release_region: 8, platform: 6, status: status.id };
       expect(releaseDate({ release_dates: [row] })?.status).toBe(status.id);
-      // Every status has a name, and so a rank: none is "other".
-      expect(releaseDate({ release_dates: [row] }, { statuses: ["other"] })).toBeNull();
+      // Every status is known, and so ranked.
+      expect((Object.values(ReleaseDateStatus) as number[]).includes(status.id)).toBe(true);
     }
     expect(formats.map((f) => f.id).sort()).toEqual(Object.values(DateFormat).sort());
     for (const category of categories) {
@@ -771,7 +778,7 @@ describe.skipIf(!clientId || !clientSecret)("real IGDB API", () => {
       main: igdb.games.where((g) => g.mainGames()).count(),
       dated: igdb.games.where((g) => g.mainGames({ includeUndated: false })).count(),
       together: igdb.games
-        .where((g) => g.playableTogether({ platform: Platform.NintendoSwitch, players: 4, mode: "local" }))
+        .where((g) => g.playableTogether({ platforms: Platform.NintendoSwitch, players: 4, mode: "local" }))
         .count(),
       rows: igdb.multiplayer_modes
         .where("(platform = 130 | platform = null) & (offlinemax >= 4 | offlinecoopmax >= 4)")

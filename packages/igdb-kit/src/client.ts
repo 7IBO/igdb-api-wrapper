@@ -152,13 +152,6 @@ export type IGDBClient = { readonly [K in EndpointName]: QueryOf<K> } & {
     key: K,
     target: Query<N, E>,
   ): Task<Expanded<T, K, E>[]>;
-  /** @deprecated Pass the options to `execute()`: `igdb.expand(rows, key, target).execute({ signal })`. */
-  expand<T extends object, K extends IdKeys<T>, N extends EndpointName, E>(
-    rows: readonly T[],
-    key: K,
-    target: Query<N, E>,
-    options: ExecuteOptions | undefined,
-  ): Task<Expanded<T, K, E>[]>;
 };
 
 /** Sends a query as is, without batching, through the cache. Used by `igdb-kit/proxy`. */
@@ -240,7 +233,8 @@ export function createIGDB(options: IGDBClientOptions): IGDBClient {
             game_localizations: client.game_localizations as Query<"game_localizations">,
           },
           term,
-          { ...searchOptions, ...execute },
+          searchOptions,
+          execute,
         ),
       ),
     webhooks: new Webhooks((method, path, body, requestOptions) =>
@@ -269,8 +263,8 @@ export function createIGDB(options: IGDBClientOptions): IGDBClient {
       const games = (client.games as GamesQuery).select(...((definition.select ?? []) as never[]));
       return new View(games, definition.with ?? {});
     },
-    expand: (rows: readonly object[], key: never, target: never, expandOptions?: ExecuteOptions) =>
-      new Task((execute) => expand(rows, key, target, { ...expandOptions, ...execute })),
+    expand: (rows: readonly object[], key: never, target: never) =>
+      new Task((execute) => expand(rows, key, target, execute)),
     [forwardKey]: ((path, body, forwardOptions) =>
       cached(path, body, forwardOptions.cacheTtlMs ?? 0, () =>
         transport.send(path, body, { signal: forwardOptions.signal }),

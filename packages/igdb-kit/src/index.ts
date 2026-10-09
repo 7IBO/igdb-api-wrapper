@@ -75,7 +75,6 @@ export type {
 export type { RemovedRow } from "./query/removed";
 export {
   MAIN_GAME_TYPES,
-  SEARCH_GAME_TYPES,
   SEARCH_KINDS,
   type SearchAll,
   type SearchAllOptions,

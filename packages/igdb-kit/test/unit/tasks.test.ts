@@ -74,25 +74,21 @@ describe("tasks", () => {
     });
   });
 
-  test("the deprecated forms still apply their request options, when the task runs", async () => {
+  test("every task applies the request options given to execute()", async () => {
     const mock = mockFetch(empty);
     const igdb = testClient(mock.fetch);
     const aborted = AbortSignal.abort(new Error("stop"));
-    const deprecated = [
-      igdb.games.findByIds([1], { signal: aborted }),
-      igdb.games.findByExternalIds(ExternalGameSource.Steam, ["292030"], { signal: aborted }),
-      igdb.games.popular(PopularityType.IGDBVisits, { signal: aborted }),
-      igdb.games.weightedPopular({ [PopularityType.IGDBVisits]: 1 }, { signal: aborted }),
-      igdb.games.releases({ from: "2026-10-01", to: "2026-11-01", signal: aborted }),
-      igdb.release_dates.findByGames([1], { signal: aborted }),
-      igdb.release_dates.byGame([1], { signal: aborted }),
-      igdb.searchAll("zelda", { signal: aborted }),
-      igdb.expand([{ id: 1, platforms: [6] }], "platforms", igdb.platforms.cache(false), { signal: aborted }),
+    const tasks = [
+      igdb.games.findByIds([1]),
+      igdb.games.findByExternalIds(ExternalGameSource.Steam, ["292030"]),
+      igdb.games.popular(PopularityType.IGDBVisits),
+      igdb.games.weightedPopular({ [PopularityType.IGDBVisits]: 1 }),
+      igdb.games.releases({ from: "2026-10-01", to: "2026-11-01" }),
+      igdb.release_dates.findByGames([1]),
+      igdb.searchAll("zelda"),
+      igdb.expand([{ id: 1, platforms: [6] }], "platforms", igdb.platforms.cache(false)),
     ];
-    for (const task of deprecated) await expect(task.execute()).rejects.toThrow("stop");
-    await expect(igdb.games.popular(PopularityType.IGDBVisits).execute({ signal: aborted })).rejects.toThrow(
-      "stop",
-    );
+    for (const task of tasks) await expect(task.execute({ signal: aborted })).rejects.toThrow("stop");
     expect(mock.calls).toHaveLength(0);
   });
 });

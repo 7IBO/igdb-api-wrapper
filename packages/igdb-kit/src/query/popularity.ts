@@ -1,6 +1,6 @@
 import { QueryError } from "../core/errors";
 import type { EndpointName } from "../generated/schema";
-import type { DeprecatedExecuteOptions, ExecuteOptions, Query } from "./query";
+import type { ExecuteOptions, Query } from "./query";
 
 /** IGDB's maximum `limit`: rows are read this many at a time. */
 const PAGE = 500;
@@ -14,12 +14,7 @@ export const FEW_GAMES = 10_000;
 /** Weight of each PopScore type, by id: `{ [PopularityType.IGDBWantToPlay]: 0.6, [PopularityType.IGDBPlaying]: 0.4 }`. */
 export type PopularityWeights = Readonly<Partial<Record<number, number>>>;
 
-export interface WeightedPopularOptions extends DeprecatedExecuteOptions {
-  /**
-   * @deprecated Use the query's `limit()`, with `offset()` for the next pages:
-   * `igdb.games.limit(20).weightedPopular(weights)`. Number of games to return, 0 to 500.
-   */
-  limit?: number;
+export interface WeightedPopularOptions {
   /**
    * Stop after reading this many rows of each type, even if the ranking is not settled. Defaults to
    * 5000. Does not apply when the first round does not settle the ranking and the `where` matches at
@@ -66,8 +61,6 @@ export interface PopularitySnapshotOptions extends ExecuteOptions {
    * every row.
    */
   limit?: number | undefined;
-  /** @deprecated Use `limit`, which is also per type. */
-  top?: number | undefined;
 }
 
 /** @internal The rows popularity helpers read. */
@@ -141,12 +134,14 @@ export async function weightedPopular<R>(
   /** The games these ids name that pass the caller's filter, with its selected fields. */
   findGames: (ids: number[], options: ExecuteOptions) => Promise<R[]>,
   weights: PopularityWeights,
+  /** The games to rank: the query's offset and limit, which the caller checked. */
+  limit: number,
   options: WeightedPopularOptions,
+  execute: ExecuteOptions,
   /** The games the caller's `where` matches (`gameIds()`); `undefined` without a `where`. */
   matching?: Query<EndpointName, { id: number }>,
 ): Promise<WeightedPopular<R>[]> {
-  // The games to rank: the query's offset and limit, which the caller checked.
-  const { limit = 10, maxRows = 5000, ...execute } = options;
+  const { maxRows = 5000 } = options;
   if (!Number.isInteger(maxRows) || maxRows < 1) throw new QueryError(`maxRows must be a positive integer`);
   const weightOf = new Map<number, number>();
   for (const [key, weight] of Object.entries(weights)) {
@@ -299,7 +294,7 @@ export async function* popularitySnapshot(
   types: readonly number[],
   options: PopularitySnapshotOptions,
 ): AsyncGenerator<PopularitySnapshotRow[], void, undefined> {
-  const { types: _, top, limit = top, ...rest } = options;
+  const { types: _, limit, ...rest } = options;
   const execute: ExecuteOptions = { ...rest, priority: rest.priority ?? "background" };
   if (limit !== undefined && (!Number.isInteger(limit) || limit < 1)) {
     throw new QueryError(`limit must be a positive integer, got ${limit}`);

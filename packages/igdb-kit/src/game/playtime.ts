@@ -47,22 +47,13 @@ export function timeToBeat<R extends object>(
   row: (R & Requires<R, TimeToBeatFields>) | null | undefined,
   options?: TimeToBeatOptions,
 ): Playtime | null;
-/** @deprecated Pass the kinds as an option: `timeToBeat(row, { prefer: ["hastily"] })`. */
-export function timeToBeat<R extends object>(
-  row: (R & Requires<R, TimeToBeatFields>) | null | undefined,
-  prefer: readonly PlaytimeKind[],
-): Playtime | null;
 export function timeToBeat(
   row: TimeToBeatInput | null | undefined,
-  options: TimeToBeatOptions | readonly PlaytimeKind[] = {},
+  options: TimeToBeatOptions = {},
 ): Playtime | null {
   if (!row) return null;
-  const prefer = (Array.isArray(options) ? options : (options as TimeToBeatOptions).prefer) ?? [
-    "normally",
-    "hastily",
-    "completely",
-  ];
-  for (const kind of prefer as readonly PlaytimeKind[]) {
+  const prefer = options.prefer ?? ["normally", "hastily", "completely"];
+  for (const kind of prefer) {
     const seconds = row[kind];
     if (typeof seconds === "number" && seconds > 0) return { seconds, kind, count: row.count ?? null };
   }

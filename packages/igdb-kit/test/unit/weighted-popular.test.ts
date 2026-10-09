@@ -109,8 +109,8 @@ describe("weightedPopular()", () => {
     );
     const mock = api(rows, { filterAbove: 1200 });
     const igdb = testClient(mock.fetch);
-    const query = igdb.games.where((g) => g.game_status.eq(0));
-    const top = await query.weightedPopular({ [PopularityType.IGDBVisits]: 1 }, { limit: 3 });
+    const query = igdb.games.where((g) => g.game_status.eq(0)).limit(3);
+    const top = await query.weightedPopular({ [PopularityType.IGDBVisits]: 1 });
     expect(top.map((t) => t.game.id)).toEqual([1201, 1202, 1203]);
     const scans = (m: typeof mock) =>
       m.calls.flatMap(
@@ -121,7 +121,8 @@ describe("weightedPopular()", () => {
     const capped = api(rows, { filterAbove: 1200 });
     const none = await testClient(capped.fetch)
       .games.where((g) => g.game_status.eq(0))
-      .weightedPopular({ [PopularityType.IGDBVisits]: 1 }, { limit: 3, maxRows: 1000 });
+      .limit(3)
+      .weightedPopular({ [PopularityType.IGDBVisits]: 1 }, { maxRows: 1000 });
     expect(none).toEqual([]);
     expect(scans(capped)).toHaveLength(2);
   });
@@ -140,9 +141,10 @@ describe("weightedPopular()", () => {
     const top = await testClient(mock.fetch)
       .games.select("name")
       .where((g) => g.game_status.eq(0))
+      .limit(3)
       .weightedPopular(
         { [PopularityType.IGDBVisits]: 0.5, [PopularityType.IGDBPlaying]: 0.5 },
-        { limit: 3, maxRows: 500 },
+        { maxRows: 500 },
       );
     // Each type scales to its top over every game: Visits to 0.002 (game 1), Playing to 0.007.
     expect(top.map((t) => t.game.id)).toEqual([1300, 1201, 1202]);
@@ -217,9 +219,6 @@ describe("weightedPopular()", () => {
       [40, 0.25],
     ]);
     expect((await igdb.games.offset(3).weightedPopular(weights)).map((t) => t.game.id)).toEqual([30]);
-    expect((await igdb.games.limit(3).weightedPopular(weights, { limit: 1 })).map((t) => t.game.id)).toEqual([
-      20,
-    ]);
     const calls = mock.calls.length;
     expect(await igdb.games.limit(0).weightedPopular(weights)).toEqual([]);
     expect(mock.calls).toHaveLength(calls);
@@ -245,7 +244,6 @@ describe("weightedPopular()", () => {
     await expect(
       igdb.games.weightedPopular({ [PopularityType.IGDBPlaying]: Number.NaN }).execute(),
     ).rejects.toThrow(QueryError);
-    await expect(igdb.games.weightedPopular({ 3: 1 }, { limit: 501 }).execute()).rejects.toThrow(QueryError);
     await expect(igdb.games.search("zelda").weightedPopular({ 3: 1 }).execute()).rejects.toThrow(/search/);
     // @ts-expect-error only on games
     expect(igdb.platforms.weightedPopular).toBeUndefined();
@@ -348,11 +346,6 @@ describe("popularitySnapshot()", () => {
     const bodies = mock.calls.map((c) => c.body).join("\n");
     expect(bodies).toContain("sort value desc; limit 500; offset 0;");
     expect(bodies).toContain("sort value desc; limit 200; offset 500;");
-    // The deprecated `top` reads the same rows.
-    const again = [];
-    for await (const page of testClient(api(many).fetch).popularitySnapshot({ types: [1], top: 700 }))
-      again.push(page);
-    expect(again).toEqual(pages);
   });
 
   test("defaults to every PopularityType, skips incomplete and duplicate rows, validates limit", async () => {
@@ -372,6 +365,6 @@ describe("popularitySnapshot()", () => {
       ]).map((r) => [r.game_id, r.value]),
     ).toEqual([[1, 0.5]]);
     await expect(igdb.popularitySnapshot({ limit: 0 }).next()).rejects.toThrow(QueryError);
-    await expect(igdb.popularitySnapshot({ top: 1.5 }).next()).rejects.toThrow(QueryError);
+    await expect(igdb.popularitySnapshot({ limit: 1.5 }).next()).rejects.toThrow(QueryError);
   });
 });

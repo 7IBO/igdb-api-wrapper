@@ -29,36 +29,6 @@ export interface ReleaseDatesInput {
 
 export type { ReleaseDetails, ReleasePrecision };
 
-/**
- * @deprecated Statuses are `ReleaseDateStatus` ids now, as everywhere in igdb-kit: `status` is the id
- * (`null` when IGDB has none), and `statuses` takes ids. The names stay accepted in `statuses` for
- * one version.
- */
-export type ReleaseStatus =
-  | "alpha"
-  | "beta"
-  | "early_access"
-  | "offline"
-  | "cancelled"
-  | "full_release"
-  | "advanced_access"
-  | "digital_compatibility"
-  | "next_gen_patch"
-  | "unknown"
-  | "other";
-
-const statusNames: Record<number, ReleaseStatus> = {
-  [ReleaseDateStatus.Alpha]: "alpha",
-  [ReleaseDateStatus.Beta]: "beta",
-  [ReleaseDateStatus.EarlyAccess]: "early_access",
-  [ReleaseDateStatus.Offline]: "offline",
-  [ReleaseDateStatus.Cancelled]: "cancelled",
-  [ReleaseDateStatus.FullRelease]: "full_release",
-  [ReleaseDateStatus.AdvancedAccess]: "advanced_access",
-  [ReleaseDateStatus.DigitalCompatibilityRelease]: "digital_compatibility",
-  [ReleaseDateStatus.NextGenOptimizationPatchRelease]: "next_gen_patch",
-};
-
 // Which statuses make "the" release date of a game, best first. A missing status counts as a full
 // release, as it does for IGDB's own `first_release_date`; a status added to IGDB after this version
 // ranks with the compatibility releases.
@@ -93,14 +63,6 @@ export interface GameRelease<R = ReleaseDateRow> extends ReleaseDetails {
   match: ReleaseMatch;
   /** The `release_dates` row as selected. */
   row: R;
-  /**
-   * @deprecated Use `start`, with `precision`. IGDB's timestamp as a `Date`, `null` when TBD: the
-   * first day of the month for `month`, but the last day of the quarter for `quarter` and December 31
-   * (January 1 on some old rows) for `year`.
-   */
-  date: Date | null;
-  /** @deprecated Use `status`, which is the `ReleaseDateStatus` id now. */
-  statusId: number | null;
 }
 
 export interface ReleaseDateOptions {
@@ -119,10 +81,9 @@ export interface ReleaseDateOptions {
   /**
    * Statuses to consider: `ReleaseDateStatus` ids, one or several, `null` standing for "no status".
    * Default: all, ranked full release (or no status) first, then compatibility releases, early and
-   * advanced access, beta and alpha, and offline or cancelled last. The names of {@link ReleaseStatus}
-   * are accepted for one more version.
+   * advanced access, beta and alpha, and offline or cancelled last.
    */
-  statuses?: number | readonly (number | null | ReleaseStatus)[] | undefined;
+  statuses?: number | readonly (number | null)[] | undefined;
   /** Use another region when neither the requested one nor worldwide has a row. Default true. */
   fallback?: boolean | undefined;
 }
@@ -211,20 +172,14 @@ function pick(rows: readonly ReleaseDateRow[], options: ReleaseDateOptions): Gam
   const ranked = rows
     .filter((row) => options.platform === undefined || idOf(row.platform) === options.platform)
     .map((row) => rank(row, region))
-    .filter((r) => !statuses || statuses.some((s) => statusIs(r.release.status, s)))
+    .filter((r) => !statuses || statuses.includes(r.release.status))
     .filter((r) => r.applies || (region !== undefined && options.fallback !== false));
   const best = ranked.sort(compare)[0];
   if (!best) return null;
   let match: ReleaseMatch = "any_region";
   if (region !== undefined) match = best.exact ? "exact" : best.applies ? "worldwide" : "other_region";
   const { row, release } = best;
-  return {
-    ...release,
-    match,
-    row,
-    date: row.date === undefined ? null : new Date(row.date * 1000),
-    statusId: release.status,
-  };
+  return { ...release, match, row };
 }
 
 interface Ranked {
@@ -262,11 +217,4 @@ const precisionOrder: Record<ReleasePrecision, number> = { day: 0, month: 1, qua
 /** End of the period, so that "2027" sorts after "Q2 2027". TBD sorts last. */
 function endOf(release: ReleaseDetails): number {
   return release.end?.getTime() ?? Number.POSITIVE_INFINITY;
-}
-
-/** Whether a status id (`null`: none) is the one an option names, as an id or by its old name. */
-function statusIs(status: number | null, option: number | null | ReleaseStatus): boolean {
-  if (typeof option !== "string") return status === option;
-  if (status === null) return option === "unknown";
-  return (statusNames[status] ?? "other") === option;
 }

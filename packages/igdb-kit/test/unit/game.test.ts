@@ -58,9 +58,6 @@ describe("releaseDate()", () => {
       match: "any_region",
     });
     expect(release?.start?.getTime()).toBe((fixtures.witcher3.first_release_date ?? 0) * 1000);
-    // Deprecated: the stored timestamp and the status id under their old names.
-    expect(release?.date).toEqual(new Date("2015-05-19T00:00:00Z"));
-    expect(release?.statusId).toBe(ReleaseDateStatus.FullRelease);
   });
 
   test("full release over an earlier early access", () => {
@@ -74,8 +71,6 @@ describe("releaseDate()", () => {
       platform: Platform.PCMicrosoftWindows,
     });
     expect(releaseDate(fixtures.hades, { statuses: ReleaseDateStatus.EarlyAccess })).toEqual(early);
-    // Deprecated: status names.
-    expect(releaseDate(fixtures.hades, { statuses: ["early_access"] })).toEqual(early);
   });
 
   test("full release over advanced access and over compatibility releases", () => {
@@ -98,9 +93,8 @@ describe("releaseDate()", () => {
   });
 
   test("a missing status is unknown (null), not excluded", () => {
-    expect(releaseDate(fixtures.gta5)).toMatchObject({ status: null, statusId: null, year: 2013 });
+    expect(releaseDate(fixtures.gta5)).toMatchObject({ status: null, year: 2013 });
     expect(releaseDate(fixtures.gta5, { statuses: [null] })?.year).toBe(2013);
-    expect(releaseDate(fixtures.gta5, { statuses: ["unknown"] })?.year).toBe(2013);
     expect(releaseDate(fixtures.gta5, { statuses: [ReleaseDateStatus.FullRelease] })).toBeNull();
   });
 
@@ -158,7 +152,6 @@ describe("releaseDate()", () => {
       start: null,
       end: null,
       year: null,
-      date: null,
     });
   });
 
@@ -188,7 +181,7 @@ describe("releaseDate()", () => {
       year: 2027,
       month: null,
     });
-    expect(of(releaseRows.year)?.date).toEqual(new Date("2027-12-31T00:00:00Z"));
+    expect(of(releaseRows.year)?.row.date).toBe(Date.UTC(2027, 11, 31) / 1000);
     expect(of(releaseRows.oldYear)).toMatchObject({ precision: "year", year: 1993 });
     expect(of(releaseRows.before1970)).toMatchObject({ precision: "year", year: 1947 });
     expect(releaseDate(fixtures.mayaTheBee)).toMatchObject({ precision: "year", human: "1999" });
@@ -891,8 +884,6 @@ describe("timeToBeat() and formatPlaytime()", () => {
     expect(timeToBeat(timeToBeatRows.witcher3)).toEqual({ seconds: 254778, kind: "normally", count: 41 });
     expect(timeToBeat(timeToBeatRows.hastilyOnly)).toEqual({ seconds: 154920, kind: "hastily", count: 1 });
     expect(timeToBeat(timeToBeatRows.witcher3, { prefer: ["completely"] })?.seconds).toBe(581483);
-    // Deprecated: the kinds as the second argument.
-    expect(timeToBeat(timeToBeatRows.witcher3, ["completely"])?.seconds).toBe(581483);
     const row = { hastily: undefined, normally: 3600, completely: undefined, count: undefined };
     expect(timeToBeat(row)).toEqual({ seconds: 3600, kind: "normally", count: null });
     expect(timeToBeat(timeToBeatRows.empty)).toBeNull();

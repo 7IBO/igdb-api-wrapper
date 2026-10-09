@@ -234,11 +234,11 @@ describe("game filters", () => {
         `${m}onlinemax >= 2 | ${m}onlinecoop = true | ${m}onlinecoopmax >= 2);`,
     );
     expect(
-      w((g) => g.playableTogether({ platform: Platform.NintendoSwitch, players: 4, mode: "local" })),
+      w((g) => g.playableTogether({ platforms: Platform.NintendoSwitch, players: 4, mode: "local" })),
     ).toBe(
       `where (${m}platform = (130) | ${m}platform = null) & (${m}offlinemax >= 4 | ${m}offlinecoopmax >= 4);`,
     );
-    expect(w((g) => g.playableTogether({ coop: true, mode: "online", platform: [6, 48] }))).toBe(
+    expect(w((g) => g.playableTogether({ coop: true, mode: "online", platforms: [6, 48] }))).toBe(
       `where (${m}platform = (6,48) | ${m}platform = null) & (${m}onlinecoop = true | ${m}onlinecoopmax >= 2);`,
     );
     expect(w((g) => g.playableTogether({ coop: true, players: 3, mode: "local" }))).toBe(
@@ -247,7 +247,7 @@ describe("game filters", () => {
     expect(() => w((g) => g.playableTogether({ players: 0 }))).toThrow(/positive integer/);
     // @ts-expect-error not a mode
     expect(() => w((g) => g.playableTogether({ mode: "lan" }))).toThrow(/local or online/);
-    expect(() => w((g) => g.playableTogether({ platform: [] }))).toThrow(/at least one value/);
+    expect(() => w((g) => g.playableTogether({ platforms: [] }))).toThrow(/at least one value/);
   });
 
   test("eq on text ignores case with caseSensitive: false", () => {
@@ -294,10 +294,6 @@ describe("game filters", () => {
       "where release_dates.status = (6);",
     );
     expect(w((g) => g.releasedIn({ statuses: [null] }))).toBe("where release_dates.status = null;");
-    // The new names win over the deprecated ones.
-    expect(
-      w((g) => g.releasedIn({ platforms: 6, platform: 48, statuses: [6], includeCancelled: true })),
-    ).toBe("where release_dates.platform = (6) & release_dates.status = (6);");
     expect(() => w((g) => g.releasedIn({ platforms: [] }))).toThrow(/platforms must not be empty/);
     expect(() => w((g) => g.releasedIn({ statuses: [-1] }))).toThrow(/Invalid id in statuses/);
   });
@@ -306,8 +302,8 @@ describe("game filters", () => {
     expect(
       w((g) =>
         g.releasedIn({
-          platform: Platform.PlayStation5,
-          region: [ReleaseDateRegion.Europe, ReleaseDateRegion.Japan],
+          platforms: Platform.PlayStation5,
+          regions: [ReleaseDateRegion.Europe, ReleaseDateRegion.Japan],
           from: new Date("2026-01-01T00:00:00Z"),
           to: 1798761600,
         }),
@@ -317,20 +313,20 @@ describe("game filters", () => {
         "release_dates.date >= 1767225600 & release_dates.date < 1798761600 & " +
         "(release_dates.status = null | release_dates.status != (4,5));",
     );
-    expect(
-      w((g) => g.releasedIn({ region: ReleaseDateRegion.Europe, worldwide: false, includeCancelled: true })),
-    ).toBe("where release_dates.release_region = (1);");
+    expect(w((g) => g.releasedIn({ regions: ReleaseDateRegion.Europe, includeWorldwide: false }))).toBe(
+      "where release_dates.release_region = (1) & (release_dates.status = null | release_dates.status != (4,5));",
+    );
     expect(w((g) => g.releasedIn({}))).toBe(
       "where (release_dates.status = null | release_dates.status != (4,5));",
     );
-    expect(w((g) => g.releasedIn({ includeCancelled: true }))).toBe("where release_dates != null;");
-    expect(w((g) => and(g.releasedIn({ platform: 6 }), g.developedBy(908)))).toBe(
+    expect(w((g) => and(g.releasedIn({ platforms: 6 }), g.developedBy(908)))).toBe(
       "where (release_dates.platform = (6) & (release_dates.status = null | release_dates.status != (4,5))) & " +
         "(involved_companies.company = (908) & involved_companies.developer = true);",
     );
     expect(() => w((g) => g.releasedIn({ from: new Date("nope") }))).toThrow(/Invalid Date/);
-    expect(w((g) => g.releasedIn({ from: "2026-01-01", to: "2027-01-01", includeCancelled: true }))).toBe(
-      "where release_dates.date >= 1767225600 & release_dates.date < 1798761600;",
+    expect(w((g) => g.releasedIn({ from: "2026-01-01", to: "2027-01-01" }))).toBe(
+      "where release_dates.date >= 1767225600 & release_dates.date < 1798761600 & " +
+        "(release_dates.status = null | release_dates.status != (4,5));",
     );
     expect(() => w((g) => g.releasedIn({ to: Date.now() }))).toThrow(/releasedIn\(\) to .* milliseconds/);
   });

@@ -240,8 +240,8 @@ igdb.games.where((g) =>
     to: "2030-01-01",
   }),
 );
-// The deprecated names still compile.
-igdb.games.where((g) => g.releasedIn({ platform: 6, region: 1, worldwide: false, includeCancelled: true }));
+// @ts-expect-error the 0.4 names are gone
+igdb.games.where((g) => g.releasedIn({ platform: 6 }));
 // @ts-expect-error statuses are ids
 igdb.games.where((g) => g.releasedIn({ statuses: ["full_release"] }));
 // @ts-expect-error only on games
@@ -251,7 +251,7 @@ igdb.games.where((g) => g.similar_games.developedBy(1));
 
 // mainGames(), playableTogether(), named() and eq() ignoring case.
 igdb.games.where((g) => and(g.mainGames({ includeUndated: false, requireCover: true }), g.rating.gt(80)));
-igdb.games.where((g) => g.playableTogether({ platform: [6, 48], players: 4, mode: "local", coop: true }));
+igdb.games.where((g) => g.playableTogether({ platforms: [6, 48], players: 4, mode: "local", coop: true }));
 // @ts-expect-error not a mode
 igdb.games.where((g) => g.playableTogether({ mode: "lan" }));
 // @ts-expect-error only on games
@@ -298,9 +298,9 @@ expectType<Equal<SearchHit<"platform">["platform"]["id"], number>>();
 igdb.searchAll("mario", { select: { character: ["nope"] } });
 // @ts-expect-error companies are not in the search index
 igdb.searchAll("ubisoft", { kinds: ["company"] });
-// Game types: one id, several, or all; editions are kept with `includeEditions` (`editions` is deprecated).
+// Game types: one id, several, or all; editions are kept with `includeEditions`.
 igdb.searchAll("zelda", { gameTypes: GameType.Mod, includeEditions: true });
-igdb.searchAll("zelda", { gameTypes: MAIN_GAME_TYPES, editions: true });
+igdb.searchAll("zelda", { gameTypes: MAIN_GAME_TYPES });
 igdb.games.where((g) => g.game_type.in(...MAIN_GAME_TYPES));
 
 // New reference constants.
@@ -357,10 +357,12 @@ expectType<Equal<typeof task, Task<{ id: number; name?: string }[]>>>();
 expectType<typeof task extends Promise<{ id: number; name?: string }[]> ? true : false>();
 expectType<Equal<Awaited<ReturnType<typeof task.execute>>, { id: number; name?: string }[]>>();
 expectType<Equal<ReturnType<typeof igdb.games.releases>, Task<ReleaseCalendarEntry<{ id: number }>[]>>>();
-// Deprecated, still accepted: request options as the last argument, or among the method's options.
+// Request options go to execute(), not to the method.
+// @ts-expect-error options as the last argument
 igdb.games.findByIds([1], { signal: AbortSignal.timeout(1000) });
+// @ts-expect-error options among the method's options
 igdb.games.popular(PopularityType.IGDBPlaying, { priority: "background" });
-igdb.searchAll("zelda", { batch: false });
+igdb.games.popular(PopularityType.IGDBPlaying).execute({ priority: "background" });
 
 // popular() keeps the selection and adds the score; only on games.
 const popular = await igdb.games.select("name").popular(PopularityType.IGDBPlaying);
@@ -383,8 +385,7 @@ expectType<
 // @ts-expect-error only on games
 igdb.platforms.weightedPopular({ [PopularityType.IGDBPlaying]: 1 });
 
-// popularitySnapshot() yields rows ready to store; `top` is the deprecated name of `limit`.
-igdb.popularitySnapshot({ types: PopularityType.IGDBVisits, top: 100 });
+// popularitySnapshot() yields rows ready to store.
 for await (const rows of igdb.popularitySnapshot({ types: [PopularityType.IGDBVisits], limit: 100 })) {
   expectType<
     Equal<
@@ -449,9 +450,8 @@ igdb.collections.findByGames([1]);
 igdb.genres.findByGames([1]);
 // @ts-expect-error the search endpoint needs a search term
 igdb.search.findByGames([1]);
-// Deprecated alias, same types.
-const ttbDeprecated = await igdb.game_time_to_beats.select("normally").byGame([1942]);
-expectType<Equal<typeof ttbDeprecated, typeof ttbByGame>>();
+// @ts-expect-error byGame() was renamed findByGames()
+igdb.game_time_to_beats.byGame([1942]);
 // @ts-expect-error genres do not point to games
 igdb.genres.byGame([1]);
 expectType<
@@ -525,7 +525,7 @@ igdb.expand(listed, "name", igdb.platforms);
 const events = await igdb.events.select("name", "games").limit(1);
 const eventGames = await igdb.expand(events, "games", igdb.games.select("name"));
 expectType<Equal<(typeof eventGames)[number]["games"], { id: number; name?: string }[] | undefined>>();
-const expandTask = igdb.expand(listed, "platforms", igdb.platforms, { priority: "background" });
+const expandTask = igdb.expand(listed, "platforms", igdb.platforms);
 expectType<
   Equal<
     typeof expandTask,
