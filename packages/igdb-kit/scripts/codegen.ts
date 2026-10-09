@@ -70,7 +70,7 @@ if (process.argv.includes("--fetch")) {
 }
 
 /** Endpoints that accept `search "..."`, per the "Search" reference section of the docs. */
-const SEARCHABLE = new Set(["characters", "collections", "games", "platforms", "themes"]);
+const SEARCHABLE = new Set(["characters", "collections", "games", "platforms", "search", "themes"]);
 /** Proto wrapper messages that are not entities. */
 const INTERNAL = new Set(["Count", "MultiQueryResult", "MultiQueryResultArray", "TestDummy"]);
 /** Endpoints in the proto but not in the docs. They answer 403 unless your access tier includes them. */

@@ -3186,7 +3186,7 @@ export interface Endpoints {
 export type EndpointName = keyof Endpoints;
 
 /** Endpoints that support `search "..."`. */
-export type SearchableEndpoint = "characters" | "collections" | "games" | "platforms" | "themes";
+export type SearchableEndpoint = "characters" | "collections" | "games" | "platforms" | "search" | "themes";
 
 /**
  * Runtime schema used to validate field paths before a request is sent (an invalid field makes IGDB
@@ -3378,7 +3378,7 @@ export const endpoints: Record<EndpointName, { entity: string; searchable: boole
   report_types: { entity: "ReportType", searchable: false },
   reports: { entity: "Report", searchable: false },
   screenshots: { entity: "Screenshot", searchable: false },
-  search: { entity: "Search", searchable: false },
+  search: { entity: "Search", searchable: true },
   themes: { entity: "Theme", searchable: true },
   website_types: { entity: "WebsiteType", searchable: false },
   websites: { entity: "Website", searchable: false },

@@ -7,7 +7,7 @@ import {
   entities,
   type SearchableEndpoint,
 } from "../generated/schema";
-import type { FieldPath, ScalarPath, SelectResult } from "./types";
+import type { FieldPath, ScalarKeys, SelectResult } from "./types";
 import { type Condition, throwIfRemoved, type WhereFields, whereProxy } from "./where";
 
 /** IGDB rejects `limit` above 500 (with a 403). */
@@ -169,8 +169,13 @@ export class Query<N extends EndpointName, R = { id: number }> extends Executabl
     return this.with({ where });
   }
 
-  /** Sorts on one scalar field. IGDB supports a single sort field and silently ignores unknown ones. */
-  sort<P extends string>(field: ScalarPath<Endpoints[N], P>, direction: "asc" | "desc" = "asc"): this {
+  /**
+   * Sorts on one scalar field of this endpoint. IGDB supports a single sort field and silently
+   * ignores unknown ones and fields of relations (`cover.width`), so those are rejected here.
+   */
+  sort(field: ScalarKeys<Endpoints[N]>, direction: "asc" | "desc" = "asc"): this {
+    if (field.includes("."))
+      throw new QueryError(`IGDB ignores sort on "${field}": sort on a field of ${this.endpoint} itself`);
     validatePath(this.entity, field, true);
     if (this.state.search)
       throw new QueryError("IGDB does not allow sort with search (results are by relevance)");

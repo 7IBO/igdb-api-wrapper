@@ -1,11 +1,12 @@
 // Runs against the real IGDB API. Skipped unless TWITCH_CLIENT_ID and TWITCH_CLIENT_SECRET are set.
-// Uses about 30 requests. The webhook test registers webhooks on example.com and removes them.
+// Uses about 32 requests. The webhook test registers webhooks on example.com and removes them.
 import { describe, expect, test } from "bun:test";
 import {
   and,
   createIGDB,
   ExternalGameSource,
   GameType,
+  or,
   Platform,
   PopularityType,
   QueryError,
@@ -213,5 +214,55 @@ describe.skipIf(!clientId || !clientSecret)("real IGDB API", () => {
         .execute()
         .catch((e) => e),
     ).toBeInstanceOf(QueryError);
+  });
+
+  test("IGDB accepts every filter operator the builder emits", async () => {
+    const results = await igdb.batch({
+      ops: igdb.games
+        .select("name")
+        .where((g) =>
+          and(
+            g.name.eq("Tetris"),
+            g.name.ne("Doom"),
+            g.rating.gt(1),
+            g.rating.gte(1),
+            g.rating.lt(100),
+            g.rating.lte(100),
+            g.id.in(1, 2, 3, 1942),
+            g.id.notIn(4),
+            g.name.notNull(),
+            g.storyline.isNull(),
+          ),
+        ),
+      arrays: igdb.games
+        .select("name")
+        .where((g) =>
+          and(
+            g.platforms.any(6, 48),
+            g.platforms.all(6),
+            g.platforms.none(130),
+            g.themes.exactly(1),
+            g.genres.notNull(),
+          ),
+        ),
+      text: igdb.games
+        .select("name")
+        .where((g) =>
+          or(
+            g.name.startsWith("Witcher"),
+            g.name.endsWith("Hunt", { caseSensitive: true }),
+            g.name.contains("zelda"),
+          ),
+        ),
+      nested: igdb.games.select("name").where((g) => g.release_dates.date.gte(new Date("2020-01-01"))),
+    });
+    expect(Object.values(results).every(Array.isArray)).toBe(true);
+    expect(results.text.length).toBeGreaterThan(0);
+  });
+
+  test("the search endpoint searches several entity types", async () => {
+    const hits = await igdb.search.select("name", "game", "character", "company").search("witcher").limit(20);
+    expect(hits.length).toBeGreaterThan(0);
+    expect(hits.some((h) => typeof h.game === "number")).toBe(true);
   });
 });

@@ -101,9 +101,12 @@ export interface ArrayFilter<T extends Scalar> extends NullFilter {
   all(...values: T[]): Condition;
   /** `field != (a, b)`: contains none of the values. */
   none(...values: T[]): Condition;
-  /** `field = ![a, b]`: does not contain all of the values. */
+  /**
+   * @deprecated IGDB has no "does not contain all" operator: its documented `= ![a, b]` is a syntax
+   * error. Throws a `QueryError`. Use `none()` for "contains none of the values".
+   */
   notAll(...values: T[]): Condition;
-  /** `field = {a, b}`: contains exactly these values. Does not work on ids. */
+  /** `field = {a, b}`: contains exactly these values, ids included. */
   exactly(...values: T[]): Condition;
 }
 
@@ -164,7 +167,11 @@ function filterOps(path: string): Record<string, (...args: never[]) => Condition
     any: (...v: Scalar[]) => c(`= ${list(v, "(", ")")}`),
     all: (...v: Scalar[]) => c(`= ${list(v, "[", "]")}`),
     none: (...v: Scalar[]) => c(`!= ${list(v, "(", ")")}`),
-    notAll: (...v: Scalar[]) => c(`= ${list(v, "![", "]")}`),
+    notAll: (): Condition => {
+      throw new QueryError(
+        `IGDB has no "does not contain all" operator (its "= ![...]" is a syntax error): use none() for "contains none"`,
+      );
+    },
     exactly: (...v: Scalar[]) => c(`= ${list(v, "{", "}")}`),
     startsWith: (v: string, o?: { caseSensitive?: boolean }) => text(v, "", "*", o),
     endsWith: (v: string, o?: { caseSensitive?: boolean }) => text(v, "*", "", o),
