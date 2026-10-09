@@ -1,7 +1,7 @@
 // Runs against the real IGDB API. Skipped unless TWITCH_CLIENT_ID and TWITCH_CLIENT_SECRET are set.
-// Uses about 10 requests.
+// Uses about 15 requests.
 import { describe, expect, test } from "bun:test";
-import { createIGDB, QueryError, TierError } from "../../src";
+import { and, createIGDB, GameType, Platform, QueryError, Theme, TierError } from "../../src";
 
 const clientId = process.env.TWITCH_CLIENT_ID;
 const clientSecret = process.env.TWITCH_CLIENT_SECRET;
@@ -80,5 +80,30 @@ describe.skipIf(!clientId || !clientSecret)("real IGDB API", () => {
     ]);
     expect(results.map((r) => r.status)).toEqual(["fulfilled", "rejected", "fulfilled"]);
     expect((results[1] as PromiseRejectedResult).reason).toBeInstanceOf(QueryError);
+  });
+
+  test("reference constants match the API and filter as documented", async () => {
+    const types = await igdb.game_types.select("type").limit(500);
+    expect(Object.fromEntries(types.map((t) => [t.id, t.type]))).toMatchObject({
+      [GameType.MainGame]: "Main Game",
+      [GameType.Remake]: "Remake",
+    });
+    const games = await igdb.games
+      .select("name", "game_type", "version_parent", "platforms", "themes")
+      .where((g) =>
+        and(
+          g.game_type.in(GameType.MainGame, GameType.Remake),
+          g.version_parent.isNull(),
+          g.platforms.any(Platform.PlayStation5),
+          g.themes.none(Theme.Erotic),
+        ),
+      )
+      .limit(20);
+    expect(games).toHaveLength(20);
+    for (const g of games) {
+      expect([GameType.MainGame, GameType.Remake]).toContain(g.game_type as 0 | 8);
+      expect(g.version_parent).toBeUndefined();
+      expect(g.platforms).toContain(Platform.PlayStation5);
+    }
   });
 });

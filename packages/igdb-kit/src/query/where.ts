@@ -1,5 +1,5 @@
 import { QueryError } from "../core/errors";
-import { entities } from "../generated/schema";
+import { entities, removedFields } from "../generated/schema";
 
 type Scalar = string | number | boolean;
 
@@ -159,6 +159,7 @@ export function whereProxy(entity: string, path: string[] = []): unknown {
       const fields = entities[entity];
       if (path.length > 0 && OPS.has(prop)) return filterOps(path.join("."))[prop];
       if (!fields || !(prop in fields)) {
+        throwIfRemoved(entity, prop, [...path, prop].join("."));
         throw new QueryError(`Unknown field "${[...path, prop].join(".")}" on ${entity}`);
       }
       const target = fields[prop];
@@ -169,4 +170,17 @@ export function whereProxy(entity: string, path: string[] = []): unknown {
 
 function scalarProxy(path: string[]): unknown {
   return filterOps(path.join("."));
+}
+
+/**
+ * IGDB still accepts the fields it replaced, but never returns them, so a filter on one silently
+ * matches nothing (`where category = 0`). Fails with the name of the replacement instead.
+ */
+export function throwIfRemoved(entity: string, field: string, path: string): void {
+  const removed = removedFields[entity];
+  if (!removed || !(field in removed)) return;
+  const replacement = removed[field];
+  throw new QueryError(
+    `"${path}" was removed from ${entity} by IGDB and is always empty${replacement ? `: use "${replacement}" instead` : ""}`,
+  );
 }

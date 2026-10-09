@@ -2,64 +2,6 @@
 /* eslint-disable */
 
 /** @deprecated Legacy enum, replaced by a reference table in the API. */
-export const AgeRatingCategoryEnum = {
-  AGERATING_CATEGORY_NULL: 0,
-  ESRB: 1,
-  PEGI: 2,
-  CERO: 3,
-  USK: 4,
-  GRAC: 5,
-  CLASS_IND: 6,
-  ACB: 7,
-} as const;
-export type AgeRatingCategoryEnum = (typeof AgeRatingCategoryEnum)[keyof typeof AgeRatingCategoryEnum];
-
-/** @deprecated Legacy enum, replaced by a reference table in the API. */
-export const AgeRatingRatingEnum = {
-  AGERATING_RATING_NULL: 0,
-  THREE: 1,
-  SEVEN: 2,
-  TWELVE: 3,
-  SIXTEEN: 4,
-  EIGHTEEN: 5,
-  RP: 6,
-  EC: 7,
-  E: 8,
-  E10: 9,
-  T: 10,
-  M: 11,
-  AO: 12,
-  CERO_A: 13,
-  CERO_B: 14,
-  CERO_C: 15,
-  CERO_D: 16,
-  CERO_Z: 17,
-  USK_0: 18,
-  USK_6: 19,
-  USK_12: 20,
-  USK_16: 21,
-  USK_18: 22,
-  GRAC_ALL: 23,
-  GRAC_TWELVE: 24,
-  GRAC_FIFTEEN: 25,
-  GRAC_EIGHTEEN: 26,
-  GRAC_TESTING: 27,
-  CLASS_IND_L: 28,
-  CLASS_IND_TEN: 29,
-  CLASS_IND_TWELVE: 30,
-  CLASS_IND_FOURTEEN: 31,
-  CLASS_IND_SIXTEEN: 32,
-  CLASS_IND_EIGHTEEN: 33,
-  ACB_G: 34,
-  ACB_PG: 35,
-  ACB_M: 36,
-  ACB_MA15: 37,
-  ACB_R18: 38,
-  ACB_RC: 39,
-} as const;
-export type AgeRatingRatingEnum = (typeof AgeRatingRatingEnum)[keyof typeof AgeRatingRatingEnum];
-
-/** @deprecated Legacy enum, replaced by a reference table in the API. */
 export const AgeRatingContentDescriptionCategoryEnum = {
   AGERATINGCONTENTDESCRIPTION_CATEGORY_NULL: 0,
   ESRB_ALCOHOL_REFERENCE: 1,
@@ -151,129 +93,6 @@ export const AgeRatingContentDescriptionCategoryEnum = {
 export type AgeRatingContentDescriptionCategoryEnum = (typeof AgeRatingContentDescriptionCategoryEnum)[keyof typeof AgeRatingContentDescriptionCategoryEnum];
 
 /** @deprecated Legacy enum, replaced by a reference table in the API. */
-export const GenderGenderEnum = {
-  MALE: 0,
-  FEMALE: 1,
-  OTHER: 2,
-} as const;
-export type GenderGenderEnum = (typeof GenderGenderEnum)[keyof typeof GenderGenderEnum];
-
-/** @deprecated Legacy enum, replaced by a reference table in the API. */
-export const CharacterSpeciesEnum = {
-  CHARACTER_SPECIES_NULL: 0,
-  HUMAN: 1,
-  ALIEN: 2,
-  ANIMAL: 3,
-  ANDROID: 4,
-  UNKNOWN: 5,
-} as const;
-export type CharacterSpeciesEnum = (typeof CharacterSpeciesEnum)[keyof typeof CharacterSpeciesEnum];
-
-/** @deprecated Legacy enum, replaced by a reference table in the API. */
-export const DateFormatChangeDateCategoryEnum = {
-  YYYYMMMMDD: 0,
-  YYYYMMMM: 1,
-  YYYY: 2,
-  YYYYQ1: 3,
-  YYYYQ2: 4,
-  YYYYQ3: 5,
-  YYYYQ4: 6,
-  TBD: 7,
-} as const;
-export type DateFormatChangeDateCategoryEnum = (typeof DateFormatChangeDateCategoryEnum)[keyof typeof DateFormatChangeDateCategoryEnum];
-
-/** @deprecated Legacy enum, replaced by a reference table in the API. */
-export const WebsiteCategoryEnum = {
-  WEBSITE_CATEGORY_NULL: 0,
-  WEBSITE_OFFICIAL: 1,
-  WEBSITE_WIKIA: 2,
-  WEBSITE_WIKIPEDIA: 3,
-  WEBSITE_FACEBOOK: 4,
-  WEBSITE_TWITTER: 5,
-  WEBSITE_TWITCH: 6,
-  WEBSITE_INSTAGRAM: 8,
-  WEBSITE_YOUTUBE: 9,
-  WEBSITE_IPHONE: 10,
-  WEBSITE_IPAD: 11,
-  WEBSITE_ANDROID: 12,
-  WEBSITE_STEAM: 13,
-  WEBSITE_REDDIT: 14,
-  WEBSITE_ITCH: 15,
-  WEBSITE_EPICGAMES: 16,
-  WEBSITE_GOG: 17,
-  WEBSITE_DISCORD: 18,
-  WEBSITE_BLUESKY: 19,
-} as const;
-export type WebsiteCategoryEnum = (typeof WebsiteCategoryEnum)[keyof typeof WebsiteCategoryEnum];
-
-/** @deprecated Legacy enum, replaced by a reference table in the API. */
-export const ExternalGameCategoryEnum = {
-  EXTERNALGAME_CATEGORY_NULL: 0,
-  EXTERNALGAME_STEAM: 1,
-  EXTERNALGAME_GOG: 5,
-  EXTERNALGAME_YOUTUBE: 10,
-  EXTERNALGAME_MICROSOFT: 11,
-  EXTERNALGAME_APPLE: 13,
-  EXTERNALGAME_TWITCH: 14,
-  EXTERNALGAME_ANDROID: 15,
-  EXTERNALGAME_AMAZON_ASIN: 20,
-  EXTERNALGAME_AMAZON_LUNA: 22,
-  EXTERNALGAME_AMAZON_ADG: 23,
-  EXTERNALGAME_EPIC_GAME_STORE: 26,
-  EXTERNALGAME_OCULUS: 28,
-  EXTERNALGAME_UTOMIK: 29,
-  EXTERNALGAME_ITCH_IO: 30,
-  EXTERNALGAME_XBOX_MARKETPLACE: 31,
-  EXTERNALGAME_KARTRIDGE: 32,
-  EXTERNALGAME_PLAYSTATION_STORE_US: 36,
-  EXTERNALGAME_FOCUS_ENTERTAINMENT: 37,
-  EXTERNALGAME_XBOX_GAME_PASS_ULTIMATE_CLOUD: 54,
-  EXTERNALGAME_GAMEJOLT: 55,
-} as const;
-export type ExternalGameCategoryEnum = (typeof ExternalGameCategoryEnum)[keyof typeof ExternalGameCategoryEnum];
-
-/** @deprecated Legacy enum, replaced by a reference table in the API. */
-export const ExternalGameMediaEnum = {
-  EXTERNALGAME_MEDIA_NULL: 0,
-  EXTERNALGAME_DIGITAL: 1,
-  EXTERNALGAME_PHYSICAL: 2,
-} as const;
-export type ExternalGameMediaEnum = (typeof ExternalGameMediaEnum)[keyof typeof ExternalGameMediaEnum];
-
-/** @deprecated Legacy enum, replaced by a reference table in the API. */
-export const GameCategoryEnum = {
-  MAIN_GAME: 0,
-  DLC_ADDON: 1,
-  EXPANSION: 2,
-  BUNDLE: 3,
-  STANDALONE_EXPANSION: 4,
-  MOD: 5,
-  EPISODE: 6,
-  SEASON: 7,
-  REMAKE: 8,
-  REMASTER: 9,
-  EXPANDED_GAME: 10,
-  PORT: 11,
-  FORK: 12,
-  PACK: 13,
-  UPDATE: 14,
-} as const;
-export type GameCategoryEnum = (typeof GameCategoryEnum)[keyof typeof GameCategoryEnum];
-
-/** @deprecated Legacy enum, replaced by a reference table in the API. */
-export const GameStatusEnum = {
-  RELEASED: 0,
-  ALPHA: 2,
-  BETA: 3,
-  EARLY_ACCESS: 4,
-  OFFLINE: 5,
-  CANCELLED: 6,
-  RUMORED: 7,
-  DELISTED: 8,
-} as const;
-export type GameStatusEnum = (typeof GameStatusEnum)[keyof typeof GameStatusEnum];
-
-/** @deprecated Legacy enum, replaced by a reference table in the API. */
 export const GameVersionFeatureCategoryEnum = {
   BOOLEAN: 0,
   DESCRIPTION: 1,
@@ -289,41 +108,6 @@ export const GameVersionFeatureValueIncludedFeatureEnum = {
 export type GameVersionFeatureValueIncludedFeatureEnum = (typeof GameVersionFeatureValueIncludedFeatureEnum)[keyof typeof GameVersionFeatureValueIncludedFeatureEnum];
 
 /** @deprecated Legacy enum, replaced by a reference table in the API. */
-export const PlatformCategoryEnum = {
-  PLATFORM_CATEGORY_NULL: 0,
-  CONSOLE: 1,
-  ARCADE: 2,
-  PLATFORM: 3,
-  OPERATING_SYSTEM: 4,
-  PORTABLE_CONSOLE: 5,
-  COMPUTER: 6,
-} as const;
-export type PlatformCategoryEnum = (typeof PlatformCategoryEnum)[keyof typeof PlatformCategoryEnum];
-
-/** @deprecated Legacy enum, replaced by a reference table in the API. */
-export const RegionRegionEnum = {
-  REGION_REGION_NULL: 0,
-  EUROPE: 1,
-  NORTH_AMERICA: 2,
-  AUSTRALIA: 3,
-  NEW_ZEALAND: 4,
-  JAPAN: 5,
-  CHINA: 6,
-  ASIA: 7,
-  WORLDWIDE: 8,
-  KOREA: 9,
-  BRAZIL: 10,
-} as const;
-export type RegionRegionEnum = (typeof RegionRegionEnum)[keyof typeof RegionRegionEnum];
-
-/** @deprecated Legacy enum, replaced by a reference table in the API. */
-export const PopularitySourcePopularitySourceEnum = {
-  POPULARITYSOURCE_POPULARITY_SOURCE_NULL: 0,
-  IGDB: 121,
-} as const;
-export type PopularitySourcePopularitySourceEnum = (typeof PopularitySourcePopularitySourceEnum)[keyof typeof PopularitySourcePopularitySourceEnum];
-
-/** @deprecated Legacy enum, replaced by a reference table in the API. */
 export const TestDummyEnumTestEnum = {
   TESTDUMMY_ENUM_TEST_NULL: 0,
   ENUM1: 1,
@@ -334,12 +118,6 @@ export type TestDummyEnumTestEnum = (typeof TestDummyEnumTestEnum)[keyof typeof 
 /** Entity of the `age_ratings` endpoint. */
 export interface AgeRating {
   id: number;
-  /** @deprecated Use organization instead */
-  category: AgeRatingCategoryEnum;
-  /** @deprecated Use rating_content_descriptions instead */
-  content_descriptions: AgeRatingContentDescription[];
-  /** @deprecated Use rating_category instead */
-  rating: AgeRatingRatingEnum;
   /** The url for the image of a age rating */
   rating_cover_url: string;
   /** A free text motivating a rating */
@@ -493,11 +271,6 @@ export interface Artwork {
   width: number;
   /** Hash of the object */
   checksum: string;
-  /**
-   * The artwork type. Deprecated: use image_type instead
-   * @deprecated The artwork type. Deprecated: use image_type instead
-   */
-  artwork_type: ArtworkType;
   /** The image type categorizing this artwork */
   image_type: ImageType;
 }
@@ -537,15 +310,11 @@ export interface Character {
   /** A text describing a character */
   description: string;
   games: Game[];
-  /** @deprecated Use character_gender instead */
-  gender: GenderGenderEnum;
   /** An image depicting a character */
   mug_shot: CharacterMugShot;
   name: string;
   /** A url-safe, unique, lower-case version of the name */
   slug: string;
-  /** @deprecated Use character_species instead */
-  species: CharacterSpeciesEnum;
   /**
    * The last date this entry was updated in the IGDB database
    * Unix timestamp in seconds.
@@ -764,8 +533,6 @@ export interface Company {
    * Unix timestamp in seconds.
    */
   change_date: number;
-  /** @deprecated Use change_date_format instead */
-  change_date_category: DateFormatChangeDateCategoryEnum;
   /** The new ID for a company that has gone through a merger or restructuring */
   changed_company_id: Company;
   /** ISO 3166-1 country code */
@@ -793,8 +560,6 @@ export interface Company {
    * Unix timestamp in seconds.
    */
   start_date: number;
-  /** @deprecated Use start_date_format instead */
-  start_date_category: DateFormatChangeDateCategoryEnum;
   /**
    * The last date this entry was updated in the IGDB database
    * Unix timestamp in seconds.
@@ -915,8 +680,6 @@ export interface CompanyTypeHistory {
 /** Entity of the `company_websites` endpoint. */
 export interface CompanyWebsite {
   id: number;
-  /** @deprecated Use type instead */
-  category: WebsiteCategoryEnum;
   trusted: boolean;
   /** The website address (URL) of the item */
   url: string;
@@ -1116,8 +879,6 @@ export interface EventNetwork {
 /** Entity of the `external_games` endpoint. */
 export interface ExternalGame {
   id: number;
-  /** @deprecated Use external_game_source instead */
-  category: ExternalGameCategoryEnum;
   /**
    * Date this was initially added to the IGDB database
    * Unix timestamp in seconds.
@@ -1138,8 +899,6 @@ export interface ExternalGame {
   url: string;
   /** The year in full (2018) */
   year: number;
-  /** @deprecated Use game_release_format instead */
-  media: ExternalGameMediaEnum;
   /** The platform of the external game product. */
   platform: Platform;
   /** The ISO country code of the external game product. */
@@ -1210,10 +969,6 @@ export interface Game {
   artworks: Artwork[];
   /** The bundles this game is a part of */
   bundles: Game[];
-  /** @deprecated Use game_type instead */
-  category: GameCategoryEnum;
-  /** @deprecated Use collections instead */
-  collection: Collection;
   /** The cover of this game */
   cover: Cover;
   /**
@@ -1232,8 +987,6 @@ export interface Game {
    * Unix timestamp in seconds.
    */
   first_release_date: number;
-  /** @deprecated - To be removed */
-  follows: number;
   /** The main franchise */
   franchise: Franchise;
   /** Other franchises the game belongs to */
@@ -1273,8 +1026,6 @@ export interface Game {
   slug: string;
   /** Standalone expansions of this game */
   standalone_expansions: Game[];
-  /** @deprecated Use game_status instead */
-  status: GameStatusEnum;
   /** A short description of a games story */
   storyline: string;
   /** A description of the game */
@@ -1817,8 +1568,6 @@ export interface Platform {
   abbreviation: string;
   /** An alternative name for the platform */
   alternative_name: string;
-  /** @deprecated Use platform_type instead */
-  category: PlatformCategoryEnum;
   /**
    * Date this was initially added to the IGDB database
    * Unix timestamp in seconds.
@@ -1958,8 +1707,6 @@ export interface PlatformVersionCompany {
 /** Entity of the `platform_version_release_dates` endpoint. */
 export interface PlatformVersionReleaseDate {
   id: number;
-  /** @deprecated Use date_format instead */
-  category: DateFormatChangeDateCategoryEnum;
   /**
    * Date this was initially added to the IGDB database
    * Unix timestamp in seconds.
@@ -1976,8 +1723,6 @@ export interface PlatformVersionReleaseDate {
   m: number;
   /** The platform this release date is for */
   platform_version: PlatformVersion;
-  /** @deprecated Use release_region instead */
-  region: RegionRegionEnum;
   /**
    * The last date this entry was updated in the IGDB database
    * Unix timestamp in seconds.
@@ -1996,8 +1741,6 @@ export interface PlatformVersionReleaseDate {
 /** Entity of the `platform_websites` endpoint. */
 export interface PlatformWebsite {
   id: number;
-  /** @deprecated Use type instead */
-  category: WebsiteCategoryEnum;
   trusted: boolean;
   /** The website address (URL) of the item */
   url: string;
@@ -2034,8 +1777,6 @@ export interface PopularityPrimitive {
   id: number;
   game_id: number;
   popularity_type: PopularityType;
-  /** @deprecated Use external_popularity_source instead */
-  popularity_source: PopularitySourcePopularitySourceEnum;
   value: number;
   /** Unix timestamp in seconds. */
   calculated_at: number;
@@ -2057,8 +1798,6 @@ export interface PopularityPrimitive {
 /** Entity of the `popularity_types` endpoint. */
 export interface PopularityType {
   id: number;
-  /** @deprecated Use external_popularity_source instead */
-  popularity_source: PopularitySourcePopularitySourceEnum;
   name: string;
   /**
    * Date this was initially added to the IGDB database
@@ -2100,8 +1839,6 @@ export interface Region {
 /** Entity of the `release_dates` endpoint. */
 export interface ReleaseDate {
   id: number;
-  /** @deprecated Use date_format instead */
-  category: DateFormatChangeDateCategoryEnum;
   /**
    * Date this was initially added to the IGDB database
    * Unix timestamp in seconds.
@@ -2119,8 +1856,6 @@ export interface ReleaseDate {
   m: number;
   /** The platform of the release */
   platform: Platform;
-  /** @deprecated Use release_region instead */
-  region: RegionRegionEnum;
   /**
    * The last date this entry was updated in the IGDB database
    * Unix timestamp in seconds.
@@ -2311,8 +2046,6 @@ export interface Theme {
 /** Entity of the `websites` endpoint. */
 export interface Website {
   id: number;
-  /** @deprecated Use type instead */
-  category: WebsiteCategoryEnum;
   /** The game this website is associated with */
   game: Game;
   trusted: boolean;
@@ -2342,6 +2075,932 @@ export interface WebsiteType {
   /** Hash of the object */
   checksum: string;
 }
+
+/**
+ * Ids of the `game_types` reference table, for filters such as `where(g => g.game_type.eq(...))`.
+ * IGDB can add rows at any time: regenerate with `bun run codegen --fetch`.
+ */
+export const GameType = {
+  /** Main Game */
+  MainGame: 0,
+  /** DLC */
+  DLC: 1,
+  /** Expansion */
+  Expansion: 2,
+  /** Bundle */
+  Bundle: 3,
+  /** Standalone Expansion */
+  StandaloneExpansion: 4,
+  /** Mod */
+  Mod: 5,
+  /** Episode */
+  Episode: 6,
+  /** Season */
+  Season: 7,
+  /** Remake */
+  Remake: 8,
+  /** Remaster */
+  Remaster: 9,
+  /** Expanded Game */
+  ExpandedGame: 10,
+  /** Port */
+  Port: 11,
+  /** Fork */
+  Fork: 12,
+  /** Pack / Addon */
+  PackAddon: 13,
+  /** Update */
+  Update: 14,
+} as const;
+
+/**
+ * Ids of the `game_statuses` reference table, for filters such as `where(g => g.game_type.eq(...))`.
+ * IGDB can add rows at any time: regenerate with `bun run codegen --fetch`.
+ */
+export const GameStatus = {
+  /** Released */
+  Released: 0,
+  /** Alpha */
+  Alpha: 2,
+  /** Beta */
+  Beta: 3,
+  /** Early Access */
+  EarlyAccess: 4,
+  /** Offline */
+  Offline: 5,
+  /** Cancelled */
+  Cancelled: 6,
+  /** Rumored */
+  Rumored: 7,
+  /** Delisted */
+  Delisted: 8,
+} as const;
+
+/**
+ * Ids of the `game_release_formats` reference table, for filters such as `where(g => g.game_type.eq(...))`.
+ * IGDB can add rows at any time: regenerate with `bun run codegen --fetch`.
+ */
+export const GameReleaseFormat = {
+  /** Digital */
+  Digital: 1,
+  /** Physical */
+  Physical: 2,
+} as const;
+
+/**
+ * Ids of the `genres` reference table, for filters such as `where(g => g.game_type.eq(...))`.
+ * IGDB can add rows at any time: regenerate with `bun run codegen --fetch`.
+ */
+export const Genre = {
+  /** Point-and-click */
+  PointAndClick: 2,
+  /** Fighting */
+  Fighting: 4,
+  /** Shooter */
+  Shooter: 5,
+  /** Music */
+  Music: 7,
+  /** Platform */
+  Platform: 8,
+  /** Puzzle */
+  Puzzle: 9,
+  /** Racing */
+  Racing: 10,
+  /** Real Time Strategy (RTS) */
+  RealTimeStrategyRTS: 11,
+  /** Role-playing (RPG) */
+  RolePlayingRPG: 12,
+  /** Simulator */
+  Simulator: 13,
+  /** Sport */
+  Sport: 14,
+  /** Strategy */
+  Strategy: 15,
+  /** Turn-based strategy (TBS) */
+  TurnBasedStrategyTBS: 16,
+  /** Tactical */
+  Tactical: 24,
+  /** Hack and slash/Beat 'em up */
+  HackAndSlashBeatEmUp: 25,
+  /** Quiz/Trivia */
+  QuizTrivia: 26,
+  /** Pinball */
+  Pinball: 30,
+  /** Adventure */
+  Adventure: 31,
+  /** Indie */
+  Indie: 32,
+  /** Arcade */
+  Arcade: 33,
+  /** Visual Novel */
+  VisualNovel: 34,
+  /** Card & Board Game */
+  CardAndBoardGame: 35,
+  /** MOBA */
+  MOBA: 36,
+} as const;
+
+/**
+ * Ids of the `themes` reference table, for filters such as `where(g => g.game_type.eq(...))`.
+ * IGDB can add rows at any time: regenerate with `bun run codegen --fetch`.
+ */
+export const Theme = {
+  /** Action */
+  Action: 1,
+  /** Fantasy */
+  Fantasy: 17,
+  /** Science fiction */
+  ScienceFiction: 18,
+  /** Horror */
+  Horror: 19,
+  /** Thriller */
+  Thriller: 20,
+  /** Survival */
+  Survival: 21,
+  /** Historical */
+  Historical: 22,
+  /** Stealth */
+  Stealth: 23,
+  /** Comedy */
+  Comedy: 27,
+  /** Business */
+  Business: 28,
+  /** Drama */
+  Drama: 31,
+  /** Non-fiction */
+  NonFiction: 32,
+  /** Sandbox */
+  Sandbox: 33,
+  /** Educational */
+  Educational: 34,
+  /** Kids */
+  Kids: 35,
+  /** Open world */
+  OpenWorld: 38,
+  /** Warfare */
+  Warfare: 39,
+  /** Party */
+  Party: 40,
+  /** 4X (explore, expand, exploit, and exterminate) */
+  _4X: 41,
+  /** Erotic */
+  Erotic: 42,
+  /** Mystery */
+  Mystery: 43,
+  /** Romance */
+  Romance: 44,
+} as const;
+
+/**
+ * Ids of the `game_modes` reference table, for filters such as `where(g => g.game_type.eq(...))`.
+ * IGDB can add rows at any time: regenerate with `bun run codegen --fetch`.
+ */
+export const GameMode = {
+  /** Single player */
+  SinglePlayer: 1,
+  /** Multiplayer */
+  Multiplayer: 2,
+  /** Co-operative */
+  CoOperative: 3,
+  /** Split screen */
+  SplitScreen: 4,
+  /** Massively Multiplayer Online (MMO) */
+  MassivelyMultiplayerOnlineMMO: 5,
+  /** Battle Royale */
+  BattleRoyale: 6,
+} as const;
+
+/**
+ * Ids of the `player_perspectives` reference table, for filters such as `where(g => g.game_type.eq(...))`.
+ * IGDB can add rows at any time: regenerate with `bun run codegen --fetch`.
+ */
+export const PlayerPerspective = {
+  /** First person */
+  FirstPerson: 1,
+  /** Third person */
+  ThirdPerson: 2,
+  /** Bird view / Isometric */
+  BirdViewIsometric: 3,
+  /** Side view */
+  SideView: 4,
+  /** Text */
+  Text: 5,
+  /** Auditory */
+  Auditory: 6,
+  /** Virtual Reality */
+  VirtualReality: 7,
+} as const;
+
+/**
+ * Ids of the `platforms` reference table, for filters such as `where(g => g.platforms.any(...))`.
+ * IGDB can add rows at any time: regenerate with `bun run codegen --fetch`.
+ */
+export const Platform = {
+  /** Linux (Linux) */
+  Linux: 3,
+  /** Nintendo 64 (N64) */
+  Nintendo64: 4,
+  /** Wii (Wii) */
+  Wii: 5,
+  /** PC (Microsoft Windows) (PC) */
+  PCMicrosoftWindows: 6,
+  /** PlayStation (PS1) */
+  PlayStation: 7,
+  /** PlayStation 2 (PS2) */
+  PlayStation2: 8,
+  /** PlayStation 3 (PS3) */
+  PlayStation3: 9,
+  /** Xbox (XBOX) */
+  Xbox: 11,
+  /** Xbox 360 (X360) */
+  Xbox360: 12,
+  /** DOS (DOS) */
+  DOS: 13,
+  /** Mac (Mac) */
+  Mac: 14,
+  /** Commodore C64/128/MAX (C64) */
+  CommodoreC64128MAX: 15,
+  /** Amiga (Amiga) */
+  Amiga: 16,
+  /** Nintendo Entertainment System (NES) */
+  NintendoEntertainmentSystem: 18,
+  /** Super Nintendo Entertainment System (SNES) */
+  SuperNintendoEntertainmentSystem: 19,
+  /** Nintendo DS (NDS) */
+  NintendoDS: 20,
+  /** Nintendo GameCube (NGC) */
+  NintendoGameCube: 21,
+  /** Game Boy Color (GBC) */
+  GameBoyColor: 22,
+  /** Dreamcast (DC) */
+  Dreamcast: 23,
+  /** Game Boy Advance (GBA) */
+  GameBoyAdvance: 24,
+  /** Amstrad CPC (ACPC) */
+  AmstradCPC: 25,
+  /** ZX Spectrum (ZXS) */
+  ZXSpectrum: 26,
+  /** MSX (MSX) */
+  MSX: 27,
+  /** Sega Mega Drive/Genesis (Genesis/MegaDrive) */
+  SegaMegaDriveGenesis: 29,
+  /** Sega 32X (Sega32) */
+  Sega32X: 30,
+  /** Sega Saturn (Saturn) */
+  SegaSaturn: 32,
+  /** Game Boy (Game Boy) */
+  GameBoy: 33,
+  /** Android (Android) */
+  Android: 34,
+  /** Sega Game Gear (Game Gear) */
+  SegaGameGear: 35,
+  /** Nintendo 3DS (3DS) */
+  Nintendo3DS: 37,
+  /** PlayStation Portable (PSP) */
+  PlayStationPortable: 38,
+  /** iOS (iOS) */
+  IOS: 39,
+  /** Wii U (WiiU) */
+  WiiU: 41,
+  /** N-Gage (NGage) */
+  NGage: 42,
+  /** Tapwave Zodiac (zod) */
+  TapwaveZodiac: 44,
+  /** PlayStation Vita (Vita) */
+  PlayStationVita: 46,
+  /** Virtual Console (VC) */
+  VirtualConsole: 47,
+  /** PlayStation 4 (PS4) */
+  PlayStation4: 48,
+  /** Xbox One (XONE) */
+  XboxOne: 49,
+  /** 3DO Interactive Multiplayer (3DO) */
+  _3DOInteractiveMultiplayer: 50,
+  /** Family Computer Disk System (fds) */
+  FamilyComputerDiskSystem: 51,
+  /** Arcade (Arcade) */
+  Arcade: 52,
+  /** MSX2 (MSX2) */
+  MSX2: 53,
+  /** Legacy Mobile Device (Mobile) */
+  LegacyMobileDevice: 55,
+  /** WonderSwan (WonderSwan) */
+  WonderSwan: 57,
+  /** Super Famicom (SFAM) */
+  SuperFamicom: 58,
+  /** Atari 2600 (Atari2600) */
+  Atari2600: 59,
+  /** Atari 7800 (Atari7800) */
+  Atari7800: 60,
+  /** Atari Lynx (Lynx) */
+  AtariLynx: 61,
+  /** Atari Jaguar (Jaguar) */
+  AtariJaguar: 62,
+  /** Atari ST/STE (Atari-ST) */
+  AtariSTSTE: 63,
+  /** Sega Master System/Mark III (SMS) */
+  SegaMasterSystemMarkIII: 64,
+  /** Atari 8-bit (Atari8bit) */
+  Atari8Bit: 65,
+  /** Atari 5200 (Atari5200) */
+  Atari5200: 66,
+  /** Intellivision (intellivision) */
+  Intellivision: 67,
+  /** ColecoVision (colecovision) */
+  ColecoVision: 68,
+  /** BBC Microcomputer System (bbcmicro) */
+  BBCMicrocomputerSystem: 69,
+  /** Vectrex (vectrex) */
+  Vectrex: 70,
+  /** Commodore VIC-20 (vic-20) */
+  CommodoreVIC20: 71,
+  /** Ouya (Ouya) */
+  Ouya: 72,
+  /** BlackBerry OS (blackberry) */
+  BlackBerryOS: 73,
+  /** Windows Phone (Win Phone) */
+  WindowsPhone: 74,
+  /** Apple II (Apple][) */
+  AppleII: 75,
+  /** Sharp X1 (x1) */
+  SharpX1: 77,
+  /** Sega CD (Sega CD) */
+  SegaCD: 78,
+  /** Neo Geo MVS (neogeomvs) */
+  NeoGeoMVS: 79,
+  /** Neo Geo AES (neogeoaes) */
+  NeoGeoAES: 80,
+  /** Web browser (browser) */
+  WebBrowser: 82,
+  /** SG-1000 (sg1000) */
+  SG1000: 84,
+  /** Donner Model 30 (donner30) */
+  DonnerModel30: 85,
+  /** TurboGrafx-16/PC Engine (turbografx16) */
+  TurboGrafx16PCEngine: 86,
+  /** Virtual Boy (virtualboy) */
+  VirtualBoy: 87,
+  /** Odyssey (odyssey) */
+  Odyssey: 88,
+  /** Microvision (microvision) */
+  Microvision: 89,
+  /** Commodore PET (cpet) */
+  CommodorePET: 90,
+  /** Bally Astrocade (astrocade) */
+  BallyAstrocade: 91,
+  /** Commodore 16 (C16) */
+  Commodore16: 93,
+  /** Commodore Plus/4 (C+4) */
+  CommodorePlus4: 94,
+  /** PDP-1 (pdp1) */
+  PDP1: 95,
+  /** PDP-10 (pdp10) */
+  PDP10: 96,
+  /** PDP-8 (pdp-8) */
+  PDP8: 97,
+  /** DEC GT40 (gt40) */
+  DECGT40: 98,
+  /** Family Computer (famicom) */
+  FamilyComputer: 99,
+  /** Analogue electronics (analogueelectronics) */
+  AnalogueElectronics: 100,
+  /** Ferranti Nimrod Computer (nimrod) */
+  FerrantiNimrodComputer: 101,
+  /** EDSAC (edsac) */
+  EDSAC: 102,
+  /** PDP-7 (pdp-7) */
+  PDP7: 103,
+  /** HP 2100 (hp2100) */
+  HP2100: 104,
+  /** HP 3000 (hp3000) */
+  HP3000: 105,
+  /** SDS Sigma 7 (sdssigma7) */
+  SDSSigma7: 106,
+  /** Call-A-Computer time-shared mainframe computer system (call-a-computer) */
+  CallAComputerTimeSharedMainframeComputerSystem: 107,
+  /** PDP-11 (pdp11) */
+  PDP11: 108,
+  /** CDC Cyber 70 (cdccyber70) */
+  CDCCyber70: 109,
+  /** PLATO (plato) */
+  PLATO: 110,
+  /** Imlac PDS-1 (imlac-pds1) */
+  ImlacPDS1: 111,
+  /** Microcomputer (microcomputer) */
+  Microcomputer: 112,
+  /** OnLive Game System (OnLive) */
+  OnLiveGameSystem: 113,
+  /** Amiga CD32 (Amiga CD32) */
+  AmigaCD32: 114,
+  /** Apple IIGS */
+  AppleIIGS: 115,
+  /** Acorn Archimedes (Acorn Archimedes) */
+  AcornArchimedes: 116,
+  /** Philips CD-i (Philips CDI) */
+  PhilipsCDI: 117,
+  /** FM Towns */
+  FMTowns: 118,
+  /** Neo Geo Pocket */
+  NeoGeoPocket: 119,
+  /** Neo Geo Pocket Color */
+  NeoGeoPocketColor: 120,
+  /** Sharp X68000 */
+  SharpX68000: 121,
+  /** Nuon */
+  Nuon: 122,
+  /** WonderSwan Color */
+  WonderSwanColor: 123,
+  /** SwanCrystal */
+  SwanCrystal: 124,
+  /** PC-8800 Series */
+  PC8800Series: 125,
+  /** TRS-80 */
+  TRS80: 126,
+  /** Fairchild Channel F */
+  FairchildChannelF: 127,
+  /** PC Engine SuperGrafx (supergrafx) */
+  PCEngineSuperGrafx: 128,
+  /** Texas Instruments TI-99 (ti-99) */
+  TexasInstrumentsTI99: 129,
+  /** Nintendo Switch (Switch) */
+  NintendoSwitch: 130,
+  /** Super NES CD-ROM System */
+  SuperNESCDROMSystem: 131,
+  /** Amazon Fire TV (FireTV) */
+  AmazonFireTV: 132,
+  /** Odyssey 2 / Videopac G7000 */
+  Odyssey2VideopacG7000: 133,
+  /** Acorn Electron (Acorn Electron) */
+  AcornElectron: 134,
+  /** Hyper Neo Geo 64 */
+  HyperNeoGeo64: 135,
+  /** Neo Geo CD */
+  NeoGeoCD: 136,
+  /** New Nintendo 3DS (New 3DS) */
+  NewNintendo3DS: 137,
+  /** VC 4000 */
+  VC4000: 138,
+  /** 1292 Advanced Programmable Video System */
+  _1292AdvancedProgrammableVideoSystem: 139,
+  /** AY-3-8500 */
+  AY38500: 140,
+  /** AY-3-8610 */
+  AY38610: 141,
+  /** PC-50X Family */
+  PC50XFamily: 142,
+  /** AY-3-8760 */
+  AY38760: 143,
+  /** AY-3-8710 */
+  AY38710: 144,
+  /** AY-3-8603 */
+  AY38603: 145,
+  /** AY-3-8605 */
+  AY38605: 146,
+  /** AY-3-8606 */
+  AY38606: 147,
+  /** AY-3-8607 */
+  AY38607: 148,
+  /** PC-9800 Series */
+  PC9800Series: 149,
+  /** Turbografx-16/PC Engine CD */
+  Turbografx16PCEngineCD: 150,
+  /** TRS-80 Color Computer */
+  TRS80ColorComputer: 151,
+  /** FM-7 */
+  FM7: 152,
+  /** Dragon 32/64 */
+  Dragon3264: 153,
+  /** Amstrad PCW (APCW) */
+  AmstradPCW: 154,
+  /** Tatung Einstein */
+  TatungEinstein: 155,
+  /** Thomson MO5 */
+  ThomsonMO5: 156,
+  /** NEC PC-6000 Series */
+  NECPC6000Series: 157,
+  /** Commodore CDTV */
+  CommodoreCDTV: 158,
+  /** Nintendo DSi */
+  NintendoDSi: 159,
+  /** Windows Mixed Reality */
+  WindowsMixedReality: 161,
+  /** Oculus VR (Oculus VR) */
+  OculusVR: 162,
+  /** SteamVR (Steam VR) */
+  SteamVR: 163,
+  /** Daydream */
+  Daydream: 164,
+  /** PlayStation VR (PSVR) */
+  PlayStationVR: 165,
+  /** Pokémon mini */
+  PokemonMini: 166,
+  /** PlayStation 5 (PS5) */
+  PlayStation5: 167,
+  /** Xbox Series X|S (Series X|S) */
+  XboxSeriesXS: 169,
+  /** Google Stadia (Stadia) */
+  GoogleStadia: 170,
+  /** Exidy Sorcerer */
+  ExidySorcerer: 236,
+  /** Sol-20 */
+  Sol20: 237,
+  /** DVD Player */
+  DVDPlayer: 238,
+  /** Blu-ray Player */
+  BluRayPlayer: 239,
+  /** Zeebo */
+  Zeebo: 240,
+  /** PC-FX */
+  PCFX: 274,
+  /** Satellaview */
+  Satellaview: 306,
+  /** Game & Watch (G&W) */
+  GameAndWatch: 307,
+  /** Playdia */
+  Playdia: 308,
+  /** Evercade (Evercade) */
+  Evercade: 309,
+  /** Sega Pico */
+  SegaPico: 339,
+  /** OOParts */
+  OOParts: 372,
+  /** Sinclair ZX81 */
+  SinclairZX81: 373,
+  /** Sharp MZ-2200 */
+  SharpMZ2200: 374,
+  /** Epoch Cassette Vision */
+  EpochCassetteVision: 375,
+  /** Epoch Super Cassette Vision */
+  EpochSuperCassetteVision: 376,
+  /** Plug & Play */
+  PlugAndPlay: 377,
+  /** Gamate (Gamate) */
+  Gamate: 378,
+  /** Game.com */
+  GameCom: 379,
+  /** Casio Loopy */
+  CasioLoopy: 380,
+  /** Playdate (Playdate) */
+  Playdate: 381,
+  /** Intellivision Amico */
+  IntellivisionAmico: 382,
+  /** Oculus Quest */
+  OculusQuest: 384,
+  /** Oculus Rift */
+  OculusRift: 385,
+  /** Meta Quest 2 (Meta Quest 2) */
+  MetaQuest2: 386,
+  /** Oculus Go */
+  OculusGo: 387,
+  /** Gear VR (Gear VR) */
+  GearVR: 388,
+  /** AirConsole */
+  AirConsole: 389,
+  /** PlayStation VR2 (PSVR2) */
+  PlayStationVR2: 390,
+  /** Windows Mobile */
+  WindowsMobile: 405,
+  /** Sinclair QL */
+  SinclairQL: 406,
+  /** HyperScan */
+  HyperScan: 407,
+  /** Mega Duck/Cougar Boy */
+  MegaDuckCougarBoy: 408,
+  /** Legacy Computer */
+  LegacyComputer: 409,
+  /** Atari Jaguar CD */
+  AtariJaguarCD: 410,
+  /** Handheld Electronic LCD (Handheld) */
+  HandheldElectronicLCD: 411,
+  /** Leapster */
+  Leapster: 412,
+  /** Leapster Explorer/LeadPad Explorer */
+  LeapsterExplorerLeadPadExplorer: 413,
+  /** LeapTV */
+  LeapTV: 414,
+  /** Watara/QuickShot Supervision */
+  WataraQuickShotSupervision: 415,
+  /** 64DD (64DD) */
+  _64DD: 416,
+  /** Palm OS */
+  PalmOS: 417,
+  /** Arduboy (Arduboy) */
+  Arduboy: 438,
+  /** V.Smile */
+  VSmile: 439,
+  /** Visual Memory Unit / Visual Memory System */
+  VisualMemoryUnitVisualMemorySystem: 440,
+  /** PocketStation */
+  PocketStation: 441,
+  /** Meta Quest 3 (Meta Quest 3) */
+  MetaQuest3: 471,
+  /** visionOS */
+  VisionOS: 472,
+  /** Arcadia 2001 */
+  Arcadia2001: 473,
+  /** Gizmondo */
+  Gizmondo: 474,
+  /** R-Zone */
+  RZone: 475,
+  /** Apple Pippin */
+  ApplePippin: 476,
+  /** Panasonic Jungle */
+  PanasonicJungle: 477,
+  /** Panasonic M2 */
+  PanasonicM2: 478,
+  /** Terebikko / See 'n Say Video Phone */
+  TerebikkoSeeNSayVideoPhone: 479,
+  /** Super A'Can */
+  SuperACan: 480,
+  /** Tomy Tutor / Pyuta / Grandstand Tutor */
+  TomyTutorPyutaGrandstandTutor: 481,
+  /** Sega CD 32X */
+  SegaCD32X: 482,
+  /** Digiblast */
+  Digiblast: 486,
+  /** LaserActive */
+  LaserActive: 487,
+  /** Uzebox */
+  Uzebox: 504,
+  /** Elektor TV Games Computer */
+  ElektorTVGamesComputer: 505,
+  /** Amstrad GX4000 (GX4000) */
+  AmstradGX4000: 506,
+  /** Advanced Pico Beena */
+  AdvancedPicoBeena: 507,
+  /** Nintendo Switch 2 (Switch 2) */
+  NintendoSwitch2: 508,
+  /** Polymega */
+  Polymega: 509,
+  /** e-Reader / Card-e Reader */
+  EReaderCardEReader: 510,
+} as const;
+
+/**
+ * Ids of the `platform_types` reference table, for filters such as `where(g => g.game_type.eq(...))`.
+ * IGDB can add rows at any time: regenerate with `bun run codegen --fetch`.
+ */
+export const PlatformType = {
+  /** Console */
+  Console: 1,
+  /** Arcade */
+  Arcade: 2,
+  /** Platform */
+  Platform: 3,
+  /** Operating_system */
+  OperatingSystem: 4,
+  /** Portable_console */
+  PortableConsole: 5,
+  /** Computer */
+  Computer: 6,
+} as const;
+
+/**
+ * Ids of the `external_game_sources` reference table, for filters such as `where(g => g.game_type.eq(...))`.
+ * IGDB can add rows at any time: regenerate with `bun run codegen --fetch`.
+ */
+export const ExternalGameSource = {
+  /** Steam */
+  Steam: 1,
+  /** GiantBomb */
+  GiantBomb: 3,
+  /** GOG */
+  GOG: 5,
+  /** Youtube */
+  Youtube: 10,
+  /** Microsoft */
+  Microsoft: 11,
+  /** Apple */
+  Apple: 13,
+  /** Twitch */
+  Twitch: 14,
+  /** Android */
+  Android: 15,
+  /** Amazon */
+  Amazon: 20,
+  /** Amazon Luna */
+  AmazonLuna: 22,
+  /** Amazon ADG */
+  AmazonADG: 23,
+  /** Epic Games Store */
+  EpicGamesStore: 26,
+  /** Oculus */
+  Oculus: 28,
+  /** Utomik */
+  Utomik: 29,
+  /** Itchio */
+  Itchio: 30,
+  /** Xbox Marketplace */
+  XboxMarketplace: 31,
+  /** Kartridge */
+  Kartridge: 32,
+  /** Playstation Store US */
+  PlaystationStoreUS: 36,
+  /** Focus Entertainment */
+  FocusEntertainment: 37,
+  /** Xbox Game Pass Ultimate Cloud */
+  XboxGamePassUltimateCloud: 54,
+  /** GameJolt */
+  GameJolt: 55,
+  /** IGDB */
+  IGDB: 121,
+} as const;
+
+/**
+ * Ids of the `popularity_types` reference table, for filters such as `where(g => g.game_type.eq(...))`.
+ * IGDB can add rows at any time: regenerate with `bun run codegen --fetch`.
+ */
+export const PopularityType = {
+  /** Visits */
+  IGDBVisits: 1,
+  /** Want to Play */
+  IGDBWantToPlay: 2,
+  /** Playing */
+  IGDBPlaying: 3,
+  /** Played */
+  IGDBPlayed: 4,
+  /** 24hr Peak Players */
+  Steam24hrPeakPlayers: 5,
+  /** Postitive Reviews */
+  SteamPositiveReviews: 6,
+  /** Negative Reviews */
+  SteamNegativeReviews: 7,
+  /** Total Reviews */
+  SteamTotalReviews: 8,
+  /** Global Top Sellers */
+  SteamGlobalTopSellers: 9,
+  /** Most Wishlisted Upcoming */
+  SteamMostWishlistedUpcoming: 10,
+  /** 24hr Hours Watched */
+  Twitch24hrHoursWatched: 34,
+} as const;
+
+/**
+ * Ids of the `release_date_regions` reference table, for filters such as `where(g => g.game_type.eq(...))`.
+ * IGDB can add rows at any time: regenerate with `bun run codegen --fetch`.
+ */
+export const ReleaseDateRegion = {
+  /** europe */
+  Europe: 1,
+  /** north_america */
+  NorthAmerica: 2,
+  /** australia */
+  Australia: 3,
+  /** new_zealand */
+  NewZealand: 4,
+  /** japan */
+  Japan: 5,
+  /** china */
+  China: 6,
+  /** asia */
+  Asia: 7,
+  /** worldwide */
+  Worldwide: 8,
+  /** korea */
+  Korea: 9,
+  /** brazil */
+  Brazil: 10,
+} as const;
+
+/**
+ * Ids of the `date_formats` reference table, for filters such as `where(g => g.game_type.eq(...))`.
+ * IGDB can add rows at any time: regenerate with `bun run codegen --fetch`.
+ */
+export const DateFormat = {
+  /** YYYYMMDD */
+  YYYYMMDD: 0,
+  /** YYYYMM */
+  YYYYMM: 1,
+  /** YYYY */
+  YYYY: 2,
+  /** YYYYQ1 */
+  YYYYQ1: 3,
+  /** YYYYQ2 */
+  YYYYQ2: 4,
+  /** YYYYQ3 */
+  YYYYQ3: 5,
+  /** YYYYQ4 */
+  YYYYQ4: 6,
+  /** TBD */
+  TBD: 7,
+} as const;
+
+/**
+ * Ids of the `website_types` reference table, for filters such as `where(g => g.game_type.eq(...))`.
+ * IGDB can add rows at any time: regenerate with `bun run codegen --fetch`.
+ */
+export const WebsiteType = {
+  /** Official Website */
+  OfficialWebsite: 1,
+  /** Community Wiki */
+  CommunityWiki: 2,
+  /** Wikipedia */
+  Wikipedia: 3,
+  /** Facebook */
+  Facebook: 4,
+  /** Twitter */
+  Twitter: 5,
+  /** Twitch */
+  Twitch: 6,
+  /** Instagram */
+  Instagram: 8,
+  /** YouTube */
+  YouTube: 9,
+  /** App Store (iPhone) */
+  AppStoreIPhone: 10,
+  /** App Store (iPad) */
+  AppStoreIPad: 11,
+  /** Google Play */
+  GooglePlay: 12,
+  /** Steam */
+  Steam: 13,
+  /** Subreddit */
+  Subreddit: 14,
+  /** Itch */
+  Itch: 15,
+  /** Epic */
+  Epic: 16,
+  /** GOG */
+  GOG: 17,
+  /** Discord */
+  Discord: 18,
+  /** Bluesky */
+  Bluesky: 19,
+  /** Xbox */
+  Xbox: 22,
+  /** Playstation */
+  Playstation: 23,
+  /** Nintendo */
+  Nintendo: 24,
+  /** Meta */
+  Meta: 25,
+  /** GameJolt */
+  GameJolt: 26,
+} as const;
+
+/**
+ * Ids of the `age_rating_organizations` reference table, for filters such as `where(g => g.game_type.eq(...))`.
+ * IGDB can add rows at any time: regenerate with `bun run codegen --fetch`.
+ */
+export const AgeRatingOrganization = {
+  /** ESRB */
+  ESRB: 1,
+  /** PEGI */
+  PEGI: 2,
+  /** CERO */
+  CERO: 3,
+  /** USK */
+  USK: 4,
+  /** GRAC */
+  GRAC: 5,
+  /** CLASS_IND */
+  CLASSIND: 6,
+  /** ACB */
+  ACB: 7,
+} as const;
+
+/**
+ * Ids of the `language_support_types` reference table, for filters such as `where(g => g.game_type.eq(...))`.
+ * IGDB can add rows at any time: regenerate with `bun run codegen --fetch`.
+ */
+export const LanguageSupportType = {
+  /** Audio */
+  Audio: 1,
+  /** Subtitles */
+  Subtitles: 2,
+  /** Interface */
+  Interface: 3,
+} as const;
+
+/**
+ * Ids of the `character_genders` reference table, for filters such as `where(g => g.game_type.eq(...))`.
+ * IGDB can add rows at any time: regenerate with `bun run codegen --fetch`.
+ */
+export const CharacterGender = {
+  /** Male */
+  Male: 0,
+  /** Female */
+  Female: 1,
+  /** Other */
+  Other: 2,
+} as const;
+
+/**
+ * Ids of the `character_species` reference table, for filters such as `where(g => g.game_type.eq(...))`.
+ * IGDB can add rows at any time: regenerate with `bun run codegen --fetch`.
+ */
+export const CharacterSpecie = {
+  /** Human */
+  Human: 1,
+  /** Alien */
+  Alien: 2,
+  /** Animal */
+  Animal: 3,
+  /** Android */
+  Android: 4,
+  /** Unknown */
+  Unknown: 5,
+} as const;
 
 /** Maps each endpoint path to the entity it returns. */
 export interface Endpoints {
@@ -2441,7 +3100,7 @@ export type SearchableEndpoint = "characters" | "collections" | "games" | "platf
  * reject a whole multiquery). Each field maps to 0 for a scalar or to the target entity name for a relation.
  */
 export const entities: Record<string, Record<string, 0 | string>> = {
-  AgeRating: {id:0,category:0,content_descriptions:"AgeRatingContentDescription",rating:0,rating_cover_url:0,synopsis:0,checksum:0,organization:"AgeRatingOrganization",rating_category:"AgeRatingCategory",rating_content_descriptions:"AgeRatingContentDescriptionV2"},
+  AgeRating: {id:0,rating_cover_url:0,synopsis:0,checksum:0,organization:"AgeRatingOrganization",rating_category:"AgeRatingCategory",rating_content_descriptions:"AgeRatingContentDescriptionV2"},
   AgeRatingCategory: {id:0,rating:0,organization:"AgeRatingOrganization",created_at:0,updated_at:0,checksum:0},
   AgeRatingContentDescription: {id:0,category:0,description:0,checksum:0},
   AgeRatingContentDescriptionType: {id:0,slug:0,name:0,created_at:0,updated_at:0,checksum:0},
@@ -2449,9 +3108,9 @@ export const entities: Record<string, Record<string, 0 | string>> = {
   AgeRatingOrganization: {id:0,name:0,created_at:0,updated_at:0,checksum:0},
   AlternativeName: {id:0,comment:0,game:"Game",name:0,checksum:0},
   Executable: {id:0,game:"Game",name:0,store:0,platform:"Platform",file_path:0,checksum:0},
-  Artwork: {id:0,alpha_channel:0,animated:0,game:"Game",height:0,image_id:0,url:0,width:0,checksum:0,artwork_type:"ArtworkType",image_type:"ImageType"},
+  Artwork: {id:0,alpha_channel:0,animated:0,game:"Game",height:0,image_id:0,url:0,width:0,checksum:0,image_type:"ImageType"},
   ArtworkType: {id:0,slug:0,name:0,created_at:0,updated_at:0,checksum:0},
-  Character: {id:0,akas:0,country_name:0,created_at:0,description:0,games:"Game",gender:0,mug_shot:"CharacterMugShot",name:0,slug:0,species:0,updated_at:0,url:0,checksum:0,character_gender:"CharacterGender",character_species:"CharacterSpecie"},
+  Character: {id:0,akas:0,country_name:0,created_at:0,description:0,games:"Game",mug_shot:"CharacterMugShot",name:0,slug:0,updated_at:0,url:0,checksum:0,character_gender:"CharacterGender",character_species:"CharacterSpecie"},
   CharacterGender: {id:0,name:0,created_at:0,updated_at:0,checksum:0},
   CharacterMugShot: {id:0,alpha_channel:0,animated:0,height:0,image_id:0,url:0,width:0,checksum:0},
   CharacterSpecie: {id:0,name:0,created_at:0,updated_at:0,checksum:0},
@@ -2461,13 +3120,13 @@ export const entities: Record<string, Record<string, 0 | string>> = {
   CollectionRelation: {id:0,child_collection:"Collection",parent_collection:"Collection",type:"CollectionRelationType",updated_at:0,created_at:0,checksum:0},
   CollectionRelationType: {id:0,name:0,description:0,allowed_child_type:"CollectionType",allowed_parent_type:"CollectionType",updated_at:0,created_at:0,checksum:0},
   CollectionType: {id:0,name:0,description:0,updated_at:0,created_at:0,checksum:0},
-  Company: {id:0,change_date:0,change_date_category:0,changed_company_id:"Company",country:0,created_at:0,description:0,developed:"Game",logo:"CompanyLogo",name:0,parent:"Company",published:"Game",slug:0,start_date:0,start_date_category:0,updated_at:0,url:0,websites:"CompanyWebsite",checksum:0,status:"CompanyStatus",start_date_format:"DateFormat",change_date_format:"DateFormat",company_size:"CompanySize",company_type_histories:"CompanyTypeHistory"},
+  Company: {id:0,change_date:0,changed_company_id:"Company",country:0,created_at:0,description:0,developed:"Game",logo:"CompanyLogo",name:0,parent:"Company",published:"Game",slug:0,start_date:0,updated_at:0,url:0,websites:"CompanyWebsite",checksum:0,status:"CompanyStatus",start_date_format:"DateFormat",change_date_format:"DateFormat",company_size:"CompanySize",company_type_histories:"CompanyTypeHistory"},
   CompanyLogo: {id:0,alpha_channel:0,animated:0,height:0,image_id:0,url:0,width:0,checksum:0},
   CompanySize: {id:0,name:0,created_at:0,updated_at:0,checksum:0},
   CompanyStatus: {id:0,name:0,created_at:0,updated_at:0,checksum:0},
   CompanyType: {id:0,name:0,created_at:0,updated_at:0,checksum:0},
   CompanyTypeHistory: {id:0,company:"Company",company_type:"CompanyType",parent_company:"Company",created_at:0,updated_at:0,checksum:0},
-  CompanyWebsite: {id:0,category:0,trusted:0,url:0,checksum:0,type:"WebsiteType"},
+  CompanyWebsite: {id:0,trusted:0,url:0,checksum:0,type:"WebsiteType"},
   ContentSafetyRating: {id:0,name:0,created_at:0,updated_at:0,checksum:0},
   ContentSafetyRatingDimension: {id:0,content_safety_rating:"ContentSafetyRating",value:0,description:0,created_at:0,updated_at:0,checksum:0},
   Cover: {id:0,alpha_channel:0,animated:0,game:"Game",height:0,image_id:0,url:0,width:0,checksum:0,game_localization:"GameLocalization",image_type:"ImageType"},
@@ -2476,10 +3135,10 @@ export const entities: Record<string, Record<string, 0 | string>> = {
   Event: {id:0,name:0,description:0,slug:0,event_logo:"EventLogo",start_time:0,time_zone:0,end_time:0,live_stream_url:0,games:"Game",videos:"GameVideo",event_networks:"EventNetwork",created_at:0,updated_at:0,checksum:0},
   EventLogo: {id:0,event:"Event",alpha_channel:0,animated:0,height:0,image_id:0,url:0,width:0,created_at:0,updated_at:0,checksum:0},
   EventNetwork: {id:0,event:"Event",url:0,network_type:"NetworkType",created_at:0,updated_at:0,checksum:0},
-  ExternalGame: {id:0,category:0,created_at:0,game:"Game",name:0,uid:0,updated_at:0,url:0,year:0,media:0,platform:"Platform",countries:0,checksum:0,external_game_source:"ExternalGameSource",game_release_format:"GameReleaseFormat"},
+  ExternalGame: {id:0,created_at:0,game:"Game",name:0,uid:0,updated_at:0,url:0,year:0,platform:"Platform",countries:0,checksum:0,external_game_source:"ExternalGameSource",game_release_format:"GameReleaseFormat"},
   ExternalGameSource: {id:0,name:0,created_at:0,updated_at:0,checksum:0},
   Franchise: {id:0,created_at:0,games:"Game",name:0,slug:0,updated_at:0,url:0,checksum:0},
-  Game: {id:0,age_ratings:"AgeRating",aggregated_rating:0,aggregated_rating_count:0,alternative_names:"AlternativeName",artworks:"Artwork",bundles:"Game",category:0,collection:"Collection",cover:"Cover",created_at:0,dlcs:"Game",expansions:"Game",external_games:"ExternalGame",first_release_date:0,follows:0,franchise:"Franchise",franchises:"Franchise",game_engines:"GameEngine",game_modes:"GameMode",genres:"Genre",hypes:0,involved_companies:"InvolvedCompany",keywords:"Keyword",multiplayer_modes:"MultiplayerMode",name:0,parent_game:"Game",platforms:"Platform",player_perspectives:"PlayerPerspective",rating:0,rating_count:0,release_dates:"ReleaseDate",screenshots:"Screenshot",similar_games:"Game",slug:0,standalone_expansions:"Game",status:0,storyline:0,summary:0,tags:0,themes:"Theme",total_rating:0,total_rating_count:0,updated_at:0,url:0,version_parent:"Game",version_title:0,videos:"GameVideo",websites:"Website",checksum:0,remakes:"Game",remasters:"Game",expanded_games:"Game",ports:"Game",forks:"Game",language_supports:"LanguageSupport",game_localizations:"GameLocalization",collections:"Collection",game_status:"GameStatus",game_type:"GameType",executables:"Executable"},
+  Game: {id:0,age_ratings:"AgeRating",aggregated_rating:0,aggregated_rating_count:0,alternative_names:"AlternativeName",artworks:"Artwork",bundles:"Game",cover:"Cover",created_at:0,dlcs:"Game",expansions:"Game",external_games:"ExternalGame",first_release_date:0,franchise:"Franchise",franchises:"Franchise",game_engines:"GameEngine",game_modes:"GameMode",genres:"Genre",hypes:0,involved_companies:"InvolvedCompany",keywords:"Keyword",multiplayer_modes:"MultiplayerMode",name:0,parent_game:"Game",platforms:"Platform",player_perspectives:"PlayerPerspective",rating:0,rating_count:0,release_dates:"ReleaseDate",screenshots:"Screenshot",similar_games:"Game",slug:0,standalone_expansions:"Game",storyline:0,summary:0,tags:0,themes:"Theme",total_rating:0,total_rating_count:0,updated_at:0,url:0,version_parent:"Game",version_title:0,videos:"GameVideo",websites:"Website",checksum:0,remakes:"Game",remasters:"Game",expanded_games:"Game",ports:"Game",forks:"Game",language_supports:"LanguageSupport",game_localizations:"GameLocalization",collections:"Collection",game_status:"GameStatus",game_type:"GameType",executables:"Executable"},
   GameContentSafetyRating: {id:0,game:"Game",content_safety_rating_dimension:"ContentSafetyRatingDimension",content_safety_rating:"ContentSafetyRating",created_at:0,updated_at:0,checksum:0},
   GameEngine: {id:0,companies:"Company",created_at:0,description:0,logo:"GameEngineLogo",name:0,platforms:"Platform",slug:0,updated_at:0,url:0,checksum:0},
   GameEngineLogo: {id:0,alpha_channel:0,animated:0,height:0,image_id:0,url:0,width:0,checksum:0},
@@ -2503,19 +3162,19 @@ export const entities: Record<string, Record<string, 0 | string>> = {
   Logo: {id:0,alpha_channel:0,animated:0,game:"Game",height:0,image_id:0,url:0,width:0,checksum:0,image_type:"ImageType"},
   MultiplayerMode: {id:0,campaigncoop:0,dropin:0,game:"Game",lancoop:0,offlinecoop:0,offlinecoopmax:0,offlinemax:0,onlinecoop:0,onlinecoopmax:0,onlinemax:0,platform:"Platform",splitscreen:0,splitscreenonline:0,checksum:0},
   NetworkType: {id:0,name:0,event_networks:"EventNetwork",created_at:0,updated_at:0,checksum:0},
-  Platform: {id:0,abbreviation:0,alternative_name:0,category:0,created_at:0,generation:0,name:0,platform_logo:"PlatformLogo",platform_family:"PlatformFamily",slug:0,summary:0,updated_at:0,url:0,versions:"PlatformVersion",websites:"PlatformWebsite",checksum:0,platform_type:"PlatformType"},
+  Platform: {id:0,abbreviation:0,alternative_name:0,created_at:0,generation:0,name:0,platform_logo:"PlatformLogo",platform_family:"PlatformFamily",slug:0,summary:0,updated_at:0,url:0,versions:"PlatformVersion",websites:"PlatformWebsite",checksum:0,platform_type:"PlatformType"},
   PlatformFamily: {id:0,name:0,slug:0,checksum:0},
   PlatformLogo: {id:0,alpha_channel:0,animated:0,height:0,image_id:0,url:0,width:0,checksum:0},
   PlatformType: {id:0,name:0,created_at:0,updated_at:0,checksum:0},
   PlatformVersion: {id:0,companies:"PlatformVersionCompany",connectivity:0,cpu:0,graphics:0,main_manufacturer:"PlatformVersionCompany",media:0,memory:0,name:0,os:0,output:0,platform_logo:"PlatformLogo",platform_version_release_dates:"PlatformVersionReleaseDate",resolutions:0,slug:0,sound:0,storage:0,summary:0,url:0,checksum:0},
   PlatformVersionCompany: {id:0,comment:0,company:"Company",developer:0,manufacturer:0,checksum:0},
-  PlatformVersionReleaseDate: {id:0,category:0,created_at:0,date:0,human:0,m:0,platform_version:"PlatformVersion",region:0,updated_at:0,y:0,checksum:0,date_format:"DateFormat",release_region:"ReleaseDateRegion"},
-  PlatformWebsite: {id:0,category:0,trusted:0,url:0,checksum:0,type:"WebsiteType"},
+  PlatformVersionReleaseDate: {id:0,created_at:0,date:0,human:0,m:0,platform_version:"PlatformVersion",updated_at:0,y:0,checksum:0,date_format:"DateFormat",release_region:"ReleaseDateRegion"},
+  PlatformWebsite: {id:0,trusted:0,url:0,checksum:0,type:"WebsiteType"},
   PlayerPerspective: {id:0,created_at:0,name:0,slug:0,updated_at:0,url:0,checksum:0},
-  PopularityPrimitive: {id:0,game_id:0,popularity_type:"PopularityType",popularity_source:0,value:0,calculated_at:0,created_at:0,updated_at:0,checksum:0,external_popularity_source:"ExternalGameSource"},
-  PopularityType: {id:0,popularity_source:0,name:0,created_at:0,updated_at:0,checksum:0,external_popularity_source:"ExternalGameSource"},
+  PopularityPrimitive: {id:0,game_id:0,popularity_type:"PopularityType",value:0,calculated_at:0,created_at:0,updated_at:0,checksum:0,external_popularity_source:"ExternalGameSource"},
+  PopularityType: {id:0,name:0,created_at:0,updated_at:0,checksum:0,external_popularity_source:"ExternalGameSource"},
   Region: {id:0,name:0,category:0,identifier:0,created_at:0,updated_at:0,checksum:0},
-  ReleaseDate: {id:0,category:0,created_at:0,date:0,game:"Game",human:0,m:0,platform:"Platform",region:0,updated_at:0,y:0,checksum:0,status:"ReleaseDateStatus",date_format:"DateFormat",release_region:"ReleaseDateRegion",d:0},
+  ReleaseDate: {id:0,created_at:0,date:0,game:"Game",human:0,m:0,platform:"Platform",updated_at:0,y:0,checksum:0,status:"ReleaseDateStatus",date_format:"DateFormat",release_region:"ReleaseDateRegion",d:0},
   ReleaseDateRegion: {id:0,region:0,created_at:0,updated_at:0,checksum:0},
   ReleaseDateStatus: {id:0,name:0,description:0,created_at:0,updated_at:0,checksum:0},
   Report: {id:0,source_item_id:0,target_item_id:0,report_type:"ReportType",entity_type:"EntityType",created_at:0,updated_at:0,checksum:0},
@@ -2524,8 +3183,26 @@ export const entities: Record<string, Record<string, 0 | string>> = {
   Search: {id:0,alternative_name:0,character:"Character",collection:"Collection",company:"Company",description:0,game:"Game",name:0,platform:"Platform",published_at:0,test_dummy:"TestDummy",theme:"Theme",checksum:0},
   TestDummy: {id:0,bool_value:0,created_at:0,enum_test:0,float_value:0,game:"Game",integer_array:0,integer_value:0,name:0,new_integer_value:0,private:0,slug:0,string_array:0,test_dummies:"TestDummy",test_dummy:"TestDummy",updated_at:0,url:0,checksum:0},
   Theme: {id:0,created_at:0,name:0,slug:0,updated_at:0,url:0,checksum:0},
-  Website: {id:0,category:0,game:"Game",trusted:0,url:0,checksum:0,type:"WebsiteType"},
+  Website: {id:0,game:"Game",trusted:0,url:0,checksum:0,type:"WebsiteType"},
   WebsiteType: {id:0,type:0,created_at:0,updated_at:0,checksum:0},
+};
+
+/** Fields IGDB replaced or dropped, with their replacement. They are no longer returned. */
+export const removedFields: Record<string, Record<string, string | null>> = {
+  AgeRating: {category:"organization",content_descriptions:"rating_content_descriptions",rating:"rating_category"},
+  Artwork: {artwork_type:"image_type"},
+  Character: {gender:"character_gender",species:"character_species"},
+  Company: {change_date_category:"change_date_format",start_date_category:"start_date_format"},
+  CompanyWebsite: {category:"type"},
+  ExternalGame: {category:"external_game_source",media:"game_release_format"},
+  Game: {category:"game_type",collection:"collections",follows:null,status:"game_status"},
+  Platform: {category:"platform_type"},
+  PlatformVersionReleaseDate: {category:"date_format",region:"release_region"},
+  PlatformWebsite: {category:"type"},
+  PopularityPrimitive: {popularity_source:"external_popularity_source"},
+  PopularityType: {popularity_source:"external_popularity_source"},
+  ReleaseDate: {category:"date_format",region:"release_region"},
+  Website: {category:"type"},
 };
 
 export const endpoints: Record<EndpointName, { entity: string; searchable: boolean }> = {

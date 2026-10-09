@@ -1,5 +1,5 @@
 // Compile-time tests: `tsc -p test/types` fails if an inferred type drifts.
-import { createIGDB, GameCategoryEnum } from "../../src";
+import { createIGDB, GameType, Platform } from "../../src";
 import { type Equal, expectType } from "./helpers";
 
 const igdb = createIGDB({ clientId: "x", clientSecret: "y" });
@@ -68,7 +68,9 @@ if (q4) {
       | undefined
     >
   >();
-  expectType<Equal<typeof q4.category, GameCategoryEnum | undefined>>();
+  expectType<Equal<typeof q4.game_type, number | undefined>>();
+  // @ts-expect-error fields IGDB replaced are not in the types
+  q4.category;
 }
 
 // Terminals.
@@ -112,13 +114,22 @@ igdb.games.where((g) => g.name.startsWith("Super"));
 igdb.games.where((g) => g.platforms.any(6, 48));
 igdb.games.where((g) => g.platforms.name.eq("PC"));
 igdb.games.where((g) => g.cover.image_id.eq("abc"));
-igdb.games.where((g) => g.category.eq(GameCategoryEnum.DLC_ADDON));
+igdb.games.where((g) => g.game_type.eq(GameType.MainGame).and(g.platforms.any(Platform.PlayStation5)));
 // @ts-expect-error string compared to a number
 igdb.games.where((g) => g.rating.gte("80"));
 // @ts-expect-error gt does not exist on strings
 igdb.games.where((g) => g.name.gt(1));
-// @ts-expect-error 99 is not a GameCategoryEnum value
-igdb.games.where((g) => g.category.eq(99));
+// @ts-expect-error fields IGDB replaced are rejected: category -> game_type
+igdb.games.where((g) => g.category.eq(0));
+// @ts-expect-error same in select
+igdb.games.select("category");
+// @ts-expect-error and in sort
+igdb.release_dates.sort("region");
+
+// Reference constants are values and the entity types of their endpoint at once.
+expectType<Equal<typeof GameType.MainGame, 0>>();
+const gameType: GameType = { id: 0, type: "Main Game" } as GameType;
+expectType<Equal<typeof gameType.id, number>>();
 // @ts-expect-error unknown field
 igdb.games.where((g) => g.nope.eq(1));
 

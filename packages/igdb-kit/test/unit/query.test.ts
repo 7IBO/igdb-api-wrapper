@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { and, or, QueryError } from "../../src";
+import { and, GameType, or, Platform, QueryError } from "../../src";
 import { mockFetch, testClient } from "./helpers";
 
 const igdb = testClient(mockFetch(() => Response.json([])).fetch);
@@ -79,6 +79,16 @@ describe("Apicalypse compilation", () => {
   });
 });
 
+describe("reference constants", () => {
+  test("name the ids of reference tables", () => {
+    expect(GameType.MainGame).toBe(0);
+    expect(Platform.PlayStation5).toBe(167);
+    expect(igdb.games.where((g) => g.game_type.in(GameType.MainGame, GameType.Remake)).toApicalypse()).toBe(
+      "where game_type = (0,8);",
+    );
+  });
+});
+
 describe("client-side validation", () => {
   test("unknown fields are rejected before sending", () => {
     // @ts-expect-error unknown field
@@ -89,6 +99,25 @@ describe("client-side validation", () => {
     expect(() => igdb.games.select("cover.nope")).toThrow(/Cover has no field "nope"/);
     // @ts-expect-error unknown field in where
     expect(() => igdb.games.where((g) => g.nope.eq(1))).toThrow(/Unknown field "nope"/);
+  });
+
+  test("fields IGDB replaced are rejected with their replacement (it matches nothing otherwise)", () => {
+    // @ts-expect-error removed field
+    expect(() => igdb.games.select("category")).toThrow(
+      '"category" was removed from Game by IGDB and is always empty: use "game_type" instead',
+    );
+    // @ts-expect-error removed nested field
+    expect(() => igdb.games.select("release_dates.region")).toThrow(/use "release_region"/);
+    // @ts-expect-error removed field in where
+    expect(() => igdb.games.where((g) => g.category.eq(0))).toThrow(/use "game_type"/);
+    // @ts-expect-error removed nested field in where
+    expect(() => igdb.games.where((g) => g.external_games.category.eq(1))).toThrow(
+      /use "external_game_source"/,
+    );
+    // @ts-expect-error removed field in sort
+    expect(() => igdb.release_dates.sort("region")).toThrow(/use "release_region"/);
+    // @ts-expect-error removed without replacement
+    expect(() => igdb.games.select("follows")).toThrow(/always empty$/);
   });
 
   test("sort only on scalar fields (IGDB silently ignores bad sorts)", () => {

@@ -8,7 +8,7 @@ import {
   type SearchableEndpoint,
 } from "../generated/schema";
 import type { FieldPath, ScalarPath, SelectResult } from "./types";
-import { type Condition, type WhereFields, whereProxy } from "./where";
+import { type Condition, throwIfRemoved, type WhereFields, whereProxy } from "./where";
 
 /** IGDB rejects `limit` above 500 (with a 403). */
 export const MAX_LIMIT = 500;
@@ -98,6 +98,7 @@ function validatePath(entity: string, path: string, scalarOnly: boolean): void {
     if (segment === "*" && last && !scalarOnly) return;
     const target = entities[current]?.[segment];
     if (target === undefined) {
+      throwIfRemoved(current, segment, path);
       throw new QueryError(`Unknown field "${path}" on ${entity}: ${current} has no field "${segment}"`);
     }
     if (!last) {
