@@ -8,7 +8,26 @@ export {
   parseAlternativeName,
 } from "./alternative-names";
 export { type CompanyFields, companies, type GameCompanies } from "./companies";
-export { type GameLanguage, type LanguageFields, languages } from "./languages";
+export {
+  countryName,
+  type EventTime,
+  type EventTimeFields,
+  type EventTimeOptions,
+  eventTime,
+  type FormatReleaseDateOptions,
+  formatReleaseDate,
+  type LanguageNameOptions,
+  languageName,
+  releaseRegionName,
+} from "./display";
+export {
+  type GameLanguage,
+  type LanguageFields,
+  type LanguageSupport,
+  type LanguagesOptions,
+  languages,
+  supportsLanguage,
+} from "./languages";
 export { type ResolvedLocale, resolveLocale } from "./locale";
 export { type Multiplayer, type MultiplayerFields, multiplayer } from "./multiplayer";
 export {
@@ -44,12 +63,14 @@ export {
   type ReleaseMatch,
   type ReleasePrecision,
   type ReleaseStatus,
+  regionalReleases,
   releaseDate,
   releasesByPlatform,
 } from "./release";
 export type { Ref, Requires } from "./select";
 export {
   type ExternalGameFields,
+  localizeStoreUrl,
   type Store,
   type StoreLink,
   type StoreLinksOptions,

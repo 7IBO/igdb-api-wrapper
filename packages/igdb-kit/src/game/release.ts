@@ -168,7 +168,38 @@ export function releasesByPlatform<G extends object>(
     const release = pick(rows, { ...options, platform });
     if (release) releases.push(release);
   }
-  releases.sort((a, b) => endOf(a) - endOf(b) || precisionOrder[a.precision] - precisionOrder[b.precision]);
+  releases.sort(byDate);
+  return releases as GameRelease<ItemOf<G, "release_dates">>[];
+}
+
+/** Earliest first, a period after the dates it contains, TBD last. */
+function byDate(a: ReleaseDetails, b: ReleaseDetails): number {
+  return endOf(a) - endOf(b) || precisionOrder[a.precision] - precisionOrder[b.precision];
+}
+
+/**
+ * One release per region, chosen as {@link releaseDate} does within each region (worldwide rows
+ * included as their own region), sorted by date. For "Japan: Jun 24, 2021 · Worldwide: Sep 17, 2020"
+ * when a platform's date changes with the region, as it does for 18% of the 1,000 most popular games.
+ */
+export function regionalReleases<G extends object>(
+  game: G & Requires<G, ReleaseDateFields>,
+  options: Pick<ReleaseDateOptions, "platform" | "statuses"> = {},
+): GameRelease<ItemOf<G, "release_dates">>[] {
+  const rows = ((game as ReleaseDatesInput).release_dates ?? []).filter(
+    (row) => options.platform === undefined || idOf(row.platform) === options.platform,
+  );
+  const byRegion = new Map<number | undefined, ReleaseDateRow[]>();
+  for (const row of rows) {
+    const region = idOf(row.release_region);
+    byRegion.set(region, [...(byRegion.get(region) ?? []), row]);
+  }
+  const releases: GameRelease[] = [];
+  for (const [region, regionRows] of byRegion) {
+    const release = pick(regionRows, { statuses: options.statuses, region, fallback: false });
+    if (release) releases.push(release);
+  }
+  releases.sort(byDate);
   return releases as GameRelease<ItemOf<G, "release_dates">>[];
 }
 

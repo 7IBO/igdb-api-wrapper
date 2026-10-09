@@ -3,6 +3,7 @@ import {
   AgeRatingOrganization,
   GameReleaseFormat,
   Language,
+  LanguageSupportType,
   Platform,
   Region,
   ReleaseDateRegion,
@@ -13,19 +14,27 @@ import {
   ageRatings,
   alternativeTitles,
   companies,
+  countryName,
+  eventTime,
   formatPlaytime,
+  formatReleaseDate,
+  languageName,
   languages,
   localization,
   localizedCover,
   localizedName,
+  localizeStoreUrl,
   multiplayer,
   parentGame,
   parseAlternativeName,
+  regionalReleases,
   releaseDate,
+  releaseRegionName,
   releasesByPlatform,
   resolveLocale,
   storeLinks,
   storeOf,
+  supportsLanguage,
   timeToBeat,
 } from "../../src/game";
 import * as fixtures from "./fixtures/games";
@@ -362,6 +371,8 @@ describe("storeLinks()", () => {
       ["https://store.steampowered.com/app/1338610", true],
       ["https://play.google.com/store/apps/details?id=com.riotgames.league.teamfighttactics", true],
       ["https://amazon.de/dp/B07SV2KNHR", true],
+      // IGDB's own URLs for products sold in India are on www.amazon.in.
+      ["https://amazon.in/dp/B00HQEN7Y4", true],
     ]);
   });
 
@@ -962,5 +973,238 @@ describe("parentGame()", () => {
 
   test("standalone games", () => {
     expect(parentGame(fixtures.witcher3)).toBeNull();
+  });
+});
+
+describe("formatReleaseDate()", () => {
+  const start = new Date(Date.UTC(2026, 10, 19));
+  const at = (precision: "day" | "month" | "quarter" | "year" | "tbd") => ({
+    precision,
+    start: precision === "tbd" ? null : start,
+    year: precision === "tbd" ? null : 2026,
+    quarter: precision === "quarter" ? 4 : null,
+  });
+
+  test("each precision, in the user's language", () => {
+    const all = (locale: string) =>
+      (["day", "month", "quarter", "year", "tbd"] as const).map((p) => formatReleaseDate(at(p), { locale }));
+    expect(all("en-US")).toEqual(["Nov 19, 2026", "Nov 2026", "Q4 2026", "2026", "TBD"]);
+    expect(all("fr-FR")).toEqual(["19 nov. 2026", "nov. 2026", "T4 2026", "2026", "À déterminer"]);
+    expect(all("ja-JP")).toEqual(["2026/11/19", "2026年11月", "2026年第4四半期", "2026年", "未定"]);
+    expect(all("zh-TW").slice(2)).toEqual(["2026年第4季", "2026年", "待定"]);
+    expect(all("ko").slice(2, 3)).toEqual(["2026년 4분기"]);
+    // No table for Swedish: English quarters and TBD, Intl for the rest.
+    expect(all("sv-SE").slice(2)).toEqual(["Q4 2026", "2026", "TBD"]);
+  });
+
+  test("date styles and labels", () => {
+    expect(formatReleaseDate(at("day"), { locale: "fr-FR", dateStyle: "long" })).toBe("19 novembre 2026");
+    expect(formatReleaseDate(at("month"), { locale: "fr-FR", dateStyle: "long" })).toBe("novembre 2026");
+    expect(formatReleaseDate(at("day"), { locale: "en-GB", dateStyle: "short" })).toBe("19/11/2026");
+    const labels = { tbd: "Bald", quarter: (q: number, y: number) => `${y}-Q${q}` };
+    expect(formatReleaseDate(at("tbd"), { locale: "sv", labels })).toBe("Bald");
+    expect(formatReleaseDate(at("quarter"), { locale: "sv", labels })).toBe("2026-Q4");
+    // The day is IGDB's UTC day, whatever the machine's zone.
+    const release = releaseDate(fixtures.witcher3);
+    if (release) expect(formatReleaseDate(release, { locale: "en-US" })).toBe("May 19, 2015");
+  });
+});
+
+describe("names of regions, countries and languages", () => {
+  test("releaseRegionName()", () => {
+    expect(releaseRegionName(ReleaseDateRegion.Europe, "fr-FR")).toBe("Europe");
+    expect(releaseRegionName(ReleaseDateRegion.NorthAmerica, "fr-FR")).toBe("Amérique du Nord");
+    expect(releaseRegionName(ReleaseDateRegion.Japan, "de")).toBe("Japan");
+    expect(releaseRegionName(ReleaseDateRegion.Worldwide, "fr")).toBe("Monde");
+    expect(releaseRegionName(99, "fr")).toBeNull();
+  });
+
+  test("countryName() reads IGDB's numeric codes", () => {
+    expect(countryName(250, "fr-FR")).toBe("France");
+    expect(countryName(840, "de")).toBe("Vereinigte Staaten");
+    expect(countryName("jp", "en")).toBe("Japan");
+    expect(countryName(732, "en")).toBe("Western Sahara");
+    expect(countryName(999, "en")).toBeNull();
+    expect(countryName("EU", "en")).not.toBe("Basque");
+  });
+
+  test("languageName() names IGDB's languages", () => {
+    expect(languageName(Language.ChineseSimplified, "fr")).toBe("chinois simplifié");
+    expect(languageName(Language.EnglishUK, "en")).toBe("British English");
+    expect(languageName("es-MX", "en")).toBe("Latin American Spanish");
+    expect(languageName("zh-TW", "en")).toBe("Traditional Chinese");
+    expect(languageName(Language.German, "fr", { native: true })).toBe("Deutsch");
+    expect(languageName(Language.Japanese, "en", { native: true })).toBe("日本語");
+    expect(languageName(99, "en")).toBeNull();
+  });
+});
+
+describe("eventTime()", () => {
+  // Summer Game Fest style: 10:00 Pacific time.
+  const event = { id: 1, start_time: 1781110800, end_time: 1781118000, time_zone: "PST" };
+
+  test("IGDB's abbreviations become IANA zones", () => {
+    expect(eventTime(event, { locale: "en-US" })).toEqual({
+      start: new Date("2026-06-10T17:00:00Z"),
+      end: new Date("2026-06-10T19:00:00Z"),
+      timeZone: "America/Los_Angeles",
+      text: "Jun 10, 2026, 10:00 AM PDT",
+    });
+    for (const [abbreviation, zone] of [
+      ["EST", "America/New_York"],
+      ["JST", "Asia/Tokyo"],
+      ["CET", "Europe/Berlin"],
+      ["GMT", "Europe/London"],
+      ["UTC", "UTC"],
+      ["Europe/Paris", "Europe/Paris"],
+      ["XYZ", null],
+    ] as const)
+      expect(eventTime({ ...event, time_zone: abbreviation }, { locale: "en" }).timeZone).toBe(zone);
+  });
+
+  test("in the user's zone", () => {
+    expect(eventTime(event, { locale: "fr-FR", timeZone: "Europe/Paris" }).text).toBe(
+      "10 juin 2026, 19:00 UTC+2",
+    );
+    expect(eventTime({ id: 2, start_time: undefined, time_zone: "PST" }, { locale: "en" })).toEqual({
+      start: null,
+      end: null,
+      timeZone: "America/Los_Angeles",
+      text: null,
+    });
+  });
+});
+
+describe("regionalReleases()", () => {
+  test("one release per region, earliest first", () => {
+    // Hades on Switch: worldwide and North America in 2020, then Europe and Japan.
+    expect(
+      regionalReleases(fixtures.hades, { platform: Platform.NintendoSwitch }).map((r) => [r.region, r.human]),
+    ).toEqual([
+      [ReleaseDateRegion.NorthAmerica, "Sep 17, 2020"],
+      [ReleaseDateRegion.Worldwide, "Sep 17, 2020"],
+      [ReleaseDateRegion.Europe, "Mar 18, 2021"],
+      [ReleaseDateRegion.Japan, "Jun 24, 2021"],
+    ]);
+    expect(regionalReleases(fixtures.hades)[0]).toMatchObject({
+      region: ReleaseDateRegion.Worldwide,
+      year: 2020,
+    });
+    expect(regionalReleases({ release_dates: [] })).toEqual([]);
+  });
+});
+
+describe("languages() and supportsLanguage() with a locale", () => {
+  test("the user's languages first", () => {
+    const order = (locale?: string) =>
+      languages(fixtures.witcher3, { locale })
+        .slice(0, 3)
+        .map((l) => l.language.locale);
+    expect(order()).toEqual(["pl-PL", "de-DE", "en-US"]);
+    expect(order("fr-FR")).toEqual(["fr-FR", "pl-PL", "de-DE"]);
+    expect(order("en-GB")[0]).toBe("en-GB");
+  });
+
+  test("audio, subtitles and interface in the user's language", () => {
+    expect(supportsLanguage(fixtures.witcher3, "fr-CA")).toEqual({
+      language: Language.French,
+      audio: true,
+      subtitles: true,
+      interface: true,
+    });
+    const game = {
+      language_supports: [
+        { id: 1, language: Language.SpanishSpain, language_support_type: LanguageSupportType.Subtitles },
+        { id: 2, language: Language.English, language_support_type: LanguageSupportType.Audio },
+      ],
+    };
+    // Spanish (Spain) counts for Mexico; no interface data at all is unknown.
+    expect(supportsLanguage(game, "es-MX")).toEqual({
+      language: Language.SpanishSpain,
+      audio: false,
+      subtitles: true,
+      interface: null,
+    });
+    expect(supportsLanguage(game, "ja")).toEqual({
+      language: null,
+      audio: false,
+      subtitles: false,
+      interface: null,
+    });
+    expect(supportsLanguage({ language_supports: [] }, "fr")).toEqual({
+      language: null,
+      audio: null,
+      subtitles: null,
+      interface: null,
+    });
+  });
+});
+
+describe("ageRating() with a locale", () => {
+  test("the country's organization, then ESRB and PEGI", () => {
+    const rated = (locale: string) => ageRating(fixtures.witcher3, { locale });
+    expect(rated("de-DE")).toMatchObject({ organization: AgeRatingOrganization.USK, label: "18" });
+    expect(rated("fr-FR")).toMatchObject({ organization: AgeRatingOrganization.PEGI, label: "18" });
+    expect(rated("ja-JP")).toMatchObject({ organization: AgeRatingOrganization.CERO, label: "Z" });
+    expect(rated("en-US")).toMatchObject({ organization: AgeRatingOrganization.ESRB, label: "M" });
+    expect(rated("en-AU")).toMatchObject({ organization: AgeRatingOrganization.ACB, label: "R 18+" });
+    const esrbOnly = {
+      age_ratings: [{ id: 1, organization: AgeRatingOrganization.ESRB, rating_category: 6 }],
+    };
+    expect(ageRating(esrbOnly, { locale: "de-DE" })?.label).toBe("M");
+    expect(ageRating({ age_ratings: [] }, { locale: "fr" })).toBeNull();
+  });
+});
+
+describe("storeLinks() with a locale", () => {
+  test("store pages in the user's language, Amazon products of the user's country", () => {
+    const urls = (locale: string) => storeLinks(fixtures.witcher3, { locale }).map((l) => l.url);
+    expect(urls("fr-FR")).toEqual([
+      "https://www.epicgames.com/store/fr/product/the-witcher-3-wild-hunt/home",
+      "https://store.steampowered.com/app/292030",
+      "https://www.gog.com/fr/game/the_witcher_3_wild_hunt",
+      "https://www.xbox.com/fr-fr/games/store/the-witcher-3-wild-hunt/BR765873CQJD",
+      "https://store.playstation.com/fr-fr/concept/204794",
+      "https://www.nintendo.com/games/detail/the-witcher-3-wild-hunt-switch/",
+    ]);
+    expect(urls("ja-JP").filter((url) => url.includes("amazon"))).toEqual([
+      "https://amazon.co.jp/dp/B00T3SPV36",
+    ]);
+    expect(urls("en-US").filter((url) => url.includes("amazon"))).toHaveLength(2);
+  });
+
+  test("localizeStoreUrl()", () => {
+    const concept = "https://store.playstation.com/en-us/concept/10005908";
+    expect(localizeStoreUrl(concept, "de-AT")).toBe("https://store.playstation.com/de-at/concept/10005908");
+    expect(localizeStoreUrl(concept, "fr-CA")).toBe("https://store.playstation.com/fr-ca/concept/10005908");
+    // Not a language of the country, a product page tied to a region, or Chinese: unchanged.
+    expect(localizeStoreUrl(concept, "fr-US")).toBe(concept);
+    const product = "https://store.playstation.com/en-us/product/EP1805-PPSA12544_00-HKSILKSONGPS5000";
+    expect(localizeStoreUrl(product, "fr-FR")).toBe(product);
+    expect(localizeStoreUrl(concept, "zh-TW")).toBe(concept);
+    expect(
+      localizeStoreUrl(
+        "https://www.xbox.com/en-US/games/store/hollow-knight-silksong/9N116V0599HB/0010",
+        "pt-BR",
+      ),
+    ).toBe("https://www.xbox.com/pt-BR/games/store/hollow-knight-silksong/9N116V0599HB/0010");
+    expect(localizeStoreUrl("https://www.microsoft.com/en-us/p/-1-/9N116V0599HB", "ko")).toBe(
+      "https://www.microsoft.com/ko-kr/p/-1-/9N116V0599HB",
+    );
+    expect(localizeStoreUrl("https://store.epicgames.com/en-US/p/hades", "es-AR")).toBe(
+      "https://store.epicgames.com/es-MX/p/hades",
+    );
+    expect(localizeStoreUrl("https://store.epicgames.com/p/hades", "zh-TW")).toBe(
+      "https://store.epicgames.com/zh-Hant/p/hades",
+    );
+    expect(localizeStoreUrl("https://store.epicgames.com/en-US/p/hades", "sv")).toBe(
+      "https://store.epicgames.com/en-US/p/hades",
+    );
+    expect(localizeStoreUrl("https://www.gog.com/en/game/hades", "pl-PL")).toBe(
+      "https://www.gog.com/pl/game/hades",
+    );
+    const apple = "https://apps.apple.com/us/app/hades/id1234567890";
+    expect(localizeStoreUrl(apple, "fr-FR")).toBe(apple);
+    expect(localizeStoreUrl("not a url", "fr-FR")).toBe("not a url");
   });
 });

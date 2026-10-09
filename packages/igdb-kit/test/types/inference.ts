@@ -544,16 +544,20 @@ import {
   ageRating,
   alternativeTitles,
   companies,
+  eventTime,
+  formatReleaseDate,
   languages,
   localizedCover,
   localizedName,
   multiplayer,
   parentGame,
+  regionalReleases,
   releaseDate,
   type resolveLocale,
   type Store,
   storeLinks,
   type storeOf,
+  supportsLanguage,
   timeToBeat,
 } from "../../src/game";
 
@@ -659,6 +663,20 @@ if (title) {
 // @ts-expect-error alternative_names.comment is not selected
 alternativeTitles(await igdb.games.select("alternative_names.name").findByIdOrThrow(1));
 expectType<Equal<ReturnType<typeof resolveLocale>["languages"], number[]>>();
+
+// Localized display.
+if (release) formatReleaseDate(release, { locale: "fr-FR", dateStyle: "long" });
+const entry = calendar[0];
+if (entry) formatReleaseDate(entry.release, { locale: "fr-FR" });
+regionalReleases(page, { platform: 6 })[0]?.row.human;
+languages(page, { locale: "fr-FR" });
+supportsLanguage(page, "fr-FR").audio satisfies boolean | null;
+ageRating(page, { locale: "de-DE" });
+storeLinks(page, { locale: "fr-FR", stores: ["playstation"] });
+const event = await igdb.events.select("name", "start_time", "time_zone").findByIdOrThrow(1);
+eventTime(event, { locale: "fr-FR", timeZone: "Europe/Paris" }).text satisfies string | null;
+// @ts-expect-error time_zone is not selected
+eventTime(await igdb.events.select("start_time").findByIdOrThrow(1), { locale: "fr" });
 
 const ttb = await igdb.game_time_to_beats.select("hastily", "normally", "completely", "count").first();
 timeToBeat(ttb);
