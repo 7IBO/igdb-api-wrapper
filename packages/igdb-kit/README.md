@@ -414,7 +414,7 @@ Some queries are always sent alone: `search` queries (IGDB returns an empty mult
 const genres = await igdb.genres.select("name").limit(500).cache(24 * 3600_000); // kept a day
 ```
 
-`cache(ttlMs)` keeps the response so identical queries skip IGDB and the rate limit. Responses live in memory by default; pass `cache` to share them (see Redis below). Set `cacheTtlMs` to cache every query, and `cache(false)` to opt one out. A failing cache store never fails a query.
+`cache(ttlMs)` keeps the response so identical queries skip IGDB and the rate limit. Responses live in memory by default, 1,000 of them and 50 MB at most, the least recently used going first; `cache: memoryCache({ maxEntries, maxBytes })` changes these limits, and a response above a quarter of `maxBytes` is not kept. Pass another `cache` to share responses (see Redis below). Set `cacheTtlMs` to cache every query, and `cache(false)` to opt one out. A failing cache store never fails a query.
 
 ### Several processes: Redis
 
