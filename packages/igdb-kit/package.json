@@ -1,6 +1,6 @@
 {
   "name": "igdb-kit",
-  "version": "0.4.1",
+  "version": "0.5.0",
   "description": "Fully typed IGDB API client for Node.js and Bun: result types inferred from selected fields, typed filters, automatic multiquery batching, shared rate limit and token renewal.",
   "license": "MIT",
   "author": "7IBO",

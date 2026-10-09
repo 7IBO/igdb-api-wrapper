@@ -1,5 +1,51 @@
 # igdb-kit
 
+## 0.5.0
+
+### Minor Changes
+
+- 55bf8ca: Dates are taken the same way everywhere: a `Date`, a `"YYYY-MM-DD"` or ISO string, or Unix seconds (the `DateInput` type), in `where` on every timestamp field, `releasedIn()`, `releases()`, `sync({ since })` and `toUnix()`. A number in milliseconds, such as `Date.now()`, throws a `QueryError` instead of silently matching nothing. Timestamp filters gain `between(from, to)`, on or after `from` and before `to`.
+  
+  `popular()` and `weightedPopular()` take their page from the query, like any other read: `igdb.games.limit(20).offset(20).popular(type)`. The `limit` option still works and is deprecated. `releases()` pages its entries with the query's `limit` and `offset` when they are set.
+  
+  Breaking changes:
+  
+  - `sync({ since })` took a number of milliseconds; it now takes Unix seconds, like IGDB's `updated_at`, and throws on milliseconds. A `Date` works in both versions.
+  - `popular()`, `weightedPopular()` and `releases()` ignored the query's `limit`, `offset` and `sort`. The first two now return the query's `limit` games (10 by default) from its `offset`, `releases()` applies them when set, and a `sort()` throws, since these methods set the order.
+- 01ece5b: Each endpoint only has the methods that work on it. `igdb.games` is a `GamesQuery`, with `popular()`, `weightedPopular()`, `releases()` and `findByExternalIds()`; the 24 endpoints whose rows point to games are `GameLinkedQuery`s, with `findByGames()`; the others are plain `Query`s. Autocompletion no longer offers `igdb.platforms.popular()`, which only threw. `QueryOf<N>` names the query type of an endpoint, and `select()`, `where()` and the other builder methods keep it.
+  
+  Queries behave like promises: `catch()` and `finally()` run them, as `then()` does.
+  
+  Views gain `count()` and `withCount()`. Their `findById()`, `findByIds()` and `first()` send nothing before they are awaited: they return a `Task`, whose `execute()` takes the request options (`signal`, `priority`). Passing the options as their last argument still works and is deprecated.
+  
+  Breaking changes:
+  
+  - The methods of games and of the endpoints that point to games are gone from the other endpoints, in the types and at runtime; calling them there only threw. Code that types a query as `Query<"games">` and calls `popular()` on it should use `GamesQuery` or `QueryOf<"games">`.
+  - A view's `findById()`, `findByIds()` and `first()` start their requests when awaited, not when called.
+- 1cd8bc1: Names follow one set of conventions, now written down in the README's "Conventions" section. The old names keep working for one minor version and are marked deprecated:
+  
+  - `findByGames()` replaces `byGame()`, next to `findById()`, `findByIds()` and `findByExternalIds()`.
+  - `searchAll({ includeEditions })` replaces `editions`.
+  - `popularitySnapshot({ limit })` replaces `top`, still counted per metric.
+  - `MAIN_GAME_TYPES` replaces `SEARCH_GAME_TYPES`, and fits a filter: `g.game_type.in(...MAIN_GAME_TYPES)`.
+  
+  Options that filter on ids take one id as well as a list: `searchAll({ gameTypes })`, `popularitySnapshot({ types })` and `releaseDate({ statuses })`.
+- 7cf467e: The methods that take several requests wait to be awaited, like queries: `findByIds()`, `findByGames()` (and `byGame()`), `findByExternalIds()`, `popular()`, `weightedPopular()`, `releases()`, `igdb.searchAll()` and `igdb.expand()` return a `Task`, typed as a promise of their result. `igdb.batch()` takes tasks and views along with queries, and the first requests of everything in it share one multiquery. Request options (`signal`, `priority`, `batch`) go to the task's `execute()`: `igdb.games.popular(type).execute({ signal })`. Passing them as the last argument (`findByIds(ids, { signal })`) or among the method's options (`popular(type, { signal })`) still works and is deprecated.
+  
+  Breaking changes:
+  
+  - These methods start their requests when the task is awaited, not when they are called. A task sends them once however many times it is awaited, and `execute()` sends them again: call `execute()` to start one at once.
+  - A task is not a `Promise` instance, although its type is assignable to `Promise`: `instanceof Promise` is false, and Bun's `expect(…).rejects` needs the real promise that `execute()` returns.
+- 447853d: Release dates share one vocabulary. `g.releasedIn()` takes the options of `releases()` (the `ReleaseFilter` type): `platforms` and `regions` (one id or several), `includeWorldwide`, `statuses` (`ReleaseDateStatus` ids, `null` for "no status"), `from` and `to`. Its `platform`, `region`, `worldwide` and `includeCancelled` options still work and are deprecated. `releases()` takes a single id as well as a list. A calendar release and `releaseDate()` now return the same fields, worked out by one module: `precision`, `start`, `end`, `year`, `quarter`, `month`, `day`, `human`, `platform`, `region` and `status`. `releaseDate()` gains `locale`, which picks the region from the user's country (`fr-FR`: Europe, `en-US`: North America). `timeToBeat(row, { prefer })` replaces `timeToBeat(row, prefer)`, which still works and is deprecated.
+  
+  `igdb-kit/game` follows the conventions of the rest of the library: a missing value is `null`, never `undefined`, so results survive `JSON.stringify` and Next.js props, and references are ids.
+  
+  Breaking changes:
+  
+  - `releaseDate()`: `status` is the `ReleaseDateStatus` id, `null` without one, instead of a name. `statuses` takes ids; the names still work and are deprecated. `date` and `statusId` are deprecated: use `start` and `status`.
+  - `null` instead of `undefined` in `releaseDate()`, `ageRating()` (`label`, `minimumAge`, `synopsis`), `languages()`, `multiplayer()`, `parentGame()` (`title`), `timeToBeat()` (`count`), `formatPlaytime()`, `localization()`, `storeOf()`, `storeLinks()` (`trusted`, `platform`, `countries`) and `artworkType()`.
+  - `StoreLink.format` is the `GameReleaseFormat` id instead of `"digital"` or `"physical"`.
+
 ## 0.4.1
 
 ### Patch Changes
