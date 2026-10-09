@@ -23,7 +23,7 @@ import {
   releaseCalendar,
 } from "./releases";
 import type { ExcludePath, ExcludeResult, FieldPath, ScalarKeys, SelectResult } from "./types";
-import { type Condition, throwIfRemoved, type WhereRoot, whereProxy } from "./where";
+import { type Condition, type NameLookup, throwIfRemoved, type WhereRoot, whereProxy } from "./where";
 
 /** IGDB rejects `limit` above 500 (with a 403). */
 export const MAX_LIMIT = 500;
@@ -56,6 +56,8 @@ export interface QueryRequest {
   limit: number;
   /** How long to cache the response: set by `cache()`, else the client's `cacheTtlMs`. 0 disables. */
   cacheTtlMs?: number | undefined;
+  /** Company names in `body` that the client turns into ids before sending (`developedBy("Nintendo")`). */
+  lookups?: readonly NameLookup[] | undefined;
 }
 
 export interface RawResponse {
@@ -90,6 +92,8 @@ export interface QueryState {
   cacheTtlMs?: number | undefined;
   /** Rows expected back, when it differs from `limit`; only used to estimate the response size. */
   expectedRows?: number | undefined;
+  /** Company names of the `where`, resolved to ids when the query runs. */
+  lookups?: readonly NameLookup[] | undefined;
 }
 
 export interface SyncOptions extends ExecuteOptions {
@@ -120,7 +124,10 @@ export abstract class Executable<T> implements PromiseLike<T> {
     return this.execute().then(onfulfilled, onrejected);
   }
 
-  /** The Apicalypse body this query sends. */
+  /**
+   * The Apicalypse body this query sends. Company names (`developedBy("Nintendo")`) show as name
+   * filters, which IGDB accepts; the client looks them up and sends their ids instead.
+   */
   toApicalypse(): string {
     return this.toRequest().body;
   }
@@ -214,10 +221,14 @@ export class Query<N extends EndpointName, R = { id: number }> extends Executabl
    * the builder also has named filters: `g.developedBy(908)`, `g.publishedBy(50)`, `g.releasedIn({...})`.
    */
   where(condition: string | ((fields: WhereRoot<N>) => Condition)): this {
-    const text =
-      typeof condition === "string" ? condition : condition(whereProxy(this.entity) as WhereRoot<N>).text;
+    const built =
+      typeof condition === "string" ? undefined : condition(whereProxy(this.entity) as WhereRoot<N>);
+    const text = built === undefined ? (condition as string) : built.text;
     const where = this.state.where ? `(${this.state.where}) & (${text})` : text;
-    return this.with({ where });
+    const lookups = built?.lookups.length
+      ? [...(this.state.lookups ?? []), ...built.lookups]
+      : this.state.lookups;
+    return this.with({ where, lookups });
   }
 
   /**
@@ -584,7 +595,8 @@ export class Query<N extends EndpointName, R = { id: number }> extends Executabl
 
   /** @internal */
   toRequest(kind: "list" | "count" = "list"): QueryRequest {
-    const { fields, exclude, where, sort, search, limit, offset, cacheTtlMs, expectedRows } = this.state;
+    const { fields, exclude, where, sort, search, limit, offset, cacheTtlMs, expectedRows, lookups } =
+      this.state;
     const lines: string[] = [];
     if (kind === "list" && fields.length) lines.push(`fields ${fields.join(",")};`);
     // One line for every excluded field: IGDB rejects a second `exclude` line.
@@ -609,6 +621,7 @@ export class Query<N extends EndpointName, R = { id: number }> extends Executabl
       fields,
       limit: kind === "count" ? 0 : (expectedRows ?? limit ?? 10),
       cacheTtlMs,
+      ...(lookups?.length ? { lookups } : {}),
     };
   }
 

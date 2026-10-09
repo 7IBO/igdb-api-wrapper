@@ -12,12 +12,28 @@ import type { TimestampKeys } from "./types";
 type Scalar = string | number | boolean;
 type Value = Scalar | Date;
 
+/**
+ * @internal Company names in a condition, which the client turns into ids before sending: IGDB
+ * answers `involved_companies.company = (70)` in under a second, and the name filter it replaces in
+ * 10 to 25 seconds.
+ */
+export interface NameLookup {
+  /** The name filter as it appears in the condition text, replaced by `field = (ids)`. */
+  readonly text: string;
+  /** The relation the ids are matched on: `involved_companies.company`. */
+  readonly field: string;
+  /** Company names, each matched in full, ignoring case. */
+  readonly names: readonly string[];
+}
+
 /** A compiled `where` condition. Combine with `.and()` / `.or()` or the {@link and} / {@link or} helpers. */
 export class Condition {
   /** @internal */
   constructor(
     readonly text: string,
     private readonly composite = false,
+    /** @internal Names the client resolves to ids before sending. */
+    readonly lookups: readonly NameLookup[] = [],
   ) {}
 
   and(...others: Condition[]): Condition {
@@ -41,7 +57,11 @@ export class Condition {
 function join(op: "&" | "|", conditions: Condition[]): Condition {
   if (conditions.length === 0) throw new QueryError("and()/or() need at least one condition");
   if (conditions.length === 1) return conditions[0] as Condition;
-  return new Condition(conditions.map((c) => c.operand).join(` ${op} `), true);
+  return new Condition(
+    conditions.map((c) => c.operand).join(` ${op} `),
+    true,
+    conditions.flatMap((c) => c.lookups),
+  );
 }
 
 export const and = (...conditions: Condition[]): Condition => join("&", conditions);
@@ -138,7 +158,8 @@ export type WhereFields<E> = {
   readonly [K in keyof E & string]-?: K extends TimestampKeys<E> ? TimestampFilter : FieldFilter<E[K]>;
 };
 
-function literal(value: Value | null): string {
+/** @internal An Apicalypse literal: a quoted string, a number, `null`, or a `Date` in Unix seconds. */
+export function literal(value: Value | null): string {
   if (value === null) return "null";
   if (value instanceof Date) {
     if (Number.isNaN(value.getTime())) throw new QueryError("Invalid Date in where");
@@ -228,6 +249,10 @@ export interface GameFilters {
    * Games one of these companies developed (`involved_companies` with `developer`). Pass company ids,
    * or company names matched in full, ignoring case: `developedBy("CD Projekt RED")`. A name matches
    * one company only: "Ubisoft" is not "Ubisoft Montreal". Ids and names can't be mixed in one call.
+   *
+   * Names are looked up in `companies` before the query is sent (one request, cached for a day), and
+   * the query filters on their ids: IGDB takes 10 to 25 seconds on a company name filter. A name that
+   * matches no company throws a `NotFoundError` listing close names.
    */
   developedBy(...companies: number[] | string[]): Condition;
   /** Games one of these companies published, regional publishers included. Takes ids or names. */
@@ -258,17 +283,21 @@ function companyRole(role: "developer" | "publisher") {
   return (...companies: number[] | string[]) => {
     if (companies.length === 0) throw new QueryError(`${role}: pass at least one company`);
     let company: string;
+    let lookups: NameLookup[] = [];
     if (companies.every((c) => typeof c === "number")) {
       company = `involved_companies.company = ${ids(companies, "company")}`;
     } else if (companies.every((c) => typeof c === "string")) {
-      // `~` matches the whole name, ignoring case. An or of them still applies to one company entry,
-      // where `company = 908 | company.name ~ "..."` does not: IGDB then matches the role on any entry.
+      // `~` matches the whole name, ignoring case. The client sends `involved_companies.company =
+      // (ids)` instead (see NameLookup); the name form stays in the text, which IGDB also accepts.
+      // Both keep the role on one company entry, where `company = 908 | company.name ~ "..."` would
+      // not: IGDB then matches the role on any entry.
       const names = companies.map((name) => `involved_companies.company.name ~ ${literal(name)}`);
       company = names.length === 1 ? names.join("") : `(${names.join(" | ")})`;
+      lookups = [{ text: company, field: "involved_companies.company", names: companies as string[] }];
     } else {
       throw new QueryError(`${role}: pass company ids or company names, not both`);
     }
-    return new Condition(`${company} & involved_companies.${role} = true`, true);
+    return new Condition(`${company} & involved_companies.${role} = true`, true, lookups);
   };
 }
 

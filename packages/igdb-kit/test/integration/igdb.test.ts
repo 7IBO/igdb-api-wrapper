@@ -13,6 +13,7 @@ import {
   endpoints,
   GameType,
   gameLink,
+  NotFoundError,
   or,
   Platform,
   PopularityType,
@@ -446,7 +447,21 @@ describe.skipIf(!clientId || !clientSecret)("real IGDB API", () => {
     expect(twoNames).toBe(twoIds);
     // A name is the whole name: "CD Projekt" is not "CD Projekt RED".
     expect(await igdb.games.where((g) => g.developedBy("CD Projekt")).count()).toBeLessThan(byId);
-  }, 20_000); // IGDB takes about a second per count filtered on a company name
+    // Names are sent as ids: a big publisher takes about a second, not the 24 s of a name filter.
+    const start = Date.now();
+    expect(await igdb.games.where((g) => g.publishedBy("Electronic Arts")).count()).toBeGreaterThan(1000);
+    expect(Date.now() - start).toBeLessThan(8000);
+    const unknown = await igdb.games
+      .where((g) => g.developedBy("Ubisoft"))
+      .count()
+      .execute()
+      .catch((e: unknown) => e);
+    expect(unknown).toBeInstanceOf(NotFoundError);
+    expect((unknown as NotFoundError).suggestions.slice(0, 2)).toEqual([
+      "Ubisoft Entertainment",
+      "Ubisoft Montreal",
+    ]);
+  }, 15_000); // a name costs one more request the first time: its lookup
 
   test("game filters match one involved company and one release date for all their conditions", async () => {
     const ids = (q: typeof igdb.games) =>

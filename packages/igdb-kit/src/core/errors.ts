@@ -37,9 +37,22 @@ export class QueryError extends IGDBError {
   override name = "QueryError";
 }
 
-/** `firstOrThrow()` / `findByIdOrThrow()` found nothing. */
+/**
+ * `firstOrThrow()` / `findByIdOrThrow()` found nothing, or a name passed to `developedBy()` /
+ * `publishedBy()` matches no company.
+ */
 export class NotFoundError extends IGDBError {
   override name = "NotFoundError";
+  /** For a company name that matches no company: the companies that contain it, most games first. */
+  readonly suggestions: readonly string[];
+
+  constructor(
+    message: string,
+    options: IGDBErrorOptions & { suggestions?: readonly string[] | undefined } = {},
+  ) {
+    super(message, options);
+    this.suggestions = options.suggestions ?? [];
+  }
 }
 
 /** The response would exceed IGDB's 10 MB cap. Lower `limit` or select fewer fields. */
