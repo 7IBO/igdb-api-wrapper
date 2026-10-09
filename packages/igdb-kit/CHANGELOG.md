@@ -1,5 +1,57 @@
 # igdb-kit
 
+## 0.6.0
+
+### Minor Changes
+
+- a093c45: `igdb.games.match({ name, platforms, year })` finds the games a store or list title may be, for titles without a store id IGDB knows (PlayStation, Xbox): it looks in names, alternative names and localized titles, ignores trademark signs, punctuation, accents and case, reads "VII" as "7", also tries the title without its edition or platform label, and returns candidates best first, each with a score from 0 to 1 and the title that matched. `platforms` takes ids or names ("PS5").
+- 8fd4fad: New helpers in `igdb-kit/game` to group and link what a game's fields hold, with no request: `relatedGames()` and `relatedGameFields()` (parent, DLCs, expansions, remakes, remasters, ports, forks, bundles), `groupByParent()` (editions and ports under their original, with the missing parents to load), `franchisesOf()`, `externalIds()` and `externalId()` (store and service ids, several per source), `websiteLinks()` (by kind), `videoLinks()` (YouTube links, embed and thumbnail, with the kind of video), `bestImage()` (cover, artwork or screenshot, with its size) and `platformVersions()` (a console's versions with their regional dates). `imageSrcSet()` in `igdb-kit` gives a 1x and 2x `srcset`.
+- e10172a: Queries in the user's language:
+  
+  - `g.supportsLanguage(language, kind?)`, a named filter on `games`: `supportsLanguage("fr-FR", "audio")` keeps the games with a French voice-over. It takes `Language` ids or a locale, whose IGDB languages it uses (`"en-GB"`: English (UK) or English), and one kind of support matched on the same `language_supports` row.
+  - `searchAll()` finds games by their alternative and localized titles, which IGDB's search index misses: "Wiedźmin 3", "ウィッチャー", "Pokémon Épée", "Layton und das geheimnisvolle Dorf" (56 of 67 localized titles found, against 26). They rank after every name match, with `matched: "alternative_name"` and the title in `alternative_name`. The new `alternativeTitles` option (`"auto"` by default) sends one more request, a multiquery, alongside the search for a term in another script than Latin, or after it when fewer than `limit` hits match by name; `false` turns it off.
+- fe1cc84: Locale helpers in `igdb-kit/game`:
+  
+  - `resolveLocale(locale)` says what a locale picks in IGDB: its release region, its game localizations, its age rating organizations (USK then PEGI and ESRB in Germany, CERO then ESRB and PEGI in Japan…) and its IGDB languages, best first (`en-GB`: English (UK) then English). A locale without a country takes its likely one: `"fr"` is France, `"en"` the US, `"zh"` China.
+  - `parseAlternativeName(comment)` reads IGDB's 739 free-text comments of `alternative_names` ("Japanese title - romanization", "Brazilian title", "Korean Acroynm", "UK title", "Steam title") into a `kind`, a BCP 47 `language` and a `variant`. `alternativeTitles(game)` returns a game's alternative names read this way, without the executable file names.
+  - `localizedCover(game, locale)` returns the Japanese, Korean or European box art of a game's localizations, else its `cover`.
+  
+  `localizedName()` finds more names and fewer wrong ones:
+  
+  - It reads comments with `parseAlternativeName()`: Brazilian, Taiwanese, "Chinese Simplified" or "Korean title - translated" names are found, and a market's title is used in that market ("North American title" in the US and Canada, "UK title" in the UK).
+  - It checks the script of the name for Japanese, Chinese, Korean, Russian and the other languages not written in Latin letters: a romanization labeled "Japanese title" or pinyin labeled "Chinese title - simplified" no longer wins over the game's name. A name marked "original" is still trusted.
+  - Unofficial titles are skipped, and translations unless they are in the language's own script.
+  - The result has the `language` and `variant` of the name.
+  
+  Behavior change: `releaseDate()` and `releasesByPlatform()` pick a region for a `locale` without a country, from its likely country (`"fr"`: Europe, `"ja"`: Japan), where they requested none before.
+- 807e84e: Localized display helpers in `igdb-kit/game`:
+  
+  - `formatReleaseDate(release, { locale })` writes a release date in the user's language from its precision: "19 nov. 2026", "nov. 2026", "T4 2026", "2026", "À déterminer". It takes the result of `releaseDate()` or a calendar release of `releases()`. Quarters and TBD come from a table of 13 languages, with English otherwise unless `labels` gives them.
+  - `regionalReleases(game, { platform })` returns one release per region, earliest first, for games whose date changes with the region.
+  - `releaseRegionName(id, locale)`, `countryName(code, locale)` and `languageName(language, locale)` name release regions, countries (IGDB's numeric codes, such as `companies.country`) and IGDB languages (`Language.ChineseSimplified` is "Simplified Chinese", "Spanish (Mexico)" is Latin American Spanish) with `Intl`.
+  - `eventTime(event, { locale, timeZone })` turns IGDB's time zone abbreviations (`PST`, `JST`, `CET`), which Bun rejects, into IANA zones, and writes the event's start in the user's zone.
+  - `languages(game, { locale })` lists the user's languages first, and `supportsLanguage(game, locale)` says whether a game has audio, subtitles and interface in the user's language (`null` when IGDB does not know).
+  - `ageRating(game, { locale })` takes the country's organization, then ESRB and PEGI.
+  - `storeLinks(game, { locale })` and `localizeStoreUrl(url, locale)` give PlayStation, Xbox, Epic and GOG pages in the user's language, and `storeLinks` leaves out Amazon products sold in other countries. Amazon products sold in India now get a built URL.
+- e190496: New filters: `named()` on any relation to a table with names (`g.platforms.named("PS5", "Switch")`, `g.genres.named("RPG")`, `g.franchises.named("The Witcher")`), looked up before the query is sent and replaced by ids; `g.mainGames()`, full games as a catalog lists them, with `includeUndated`, `includeAdult`, `includeEditions` and `requireCover`; `g.playableTogether({ platform, players, mode, coop })` on one `multiplayer_modes` row; and `eq(text, { caseSensitive: false })`.
+- eba47ed: Related games by query: `igdb.games.family(id)` reads a game's editions, children (DLCs, expansions, mods, episodes, seasons, packs, updates, remakes, ports...), the bundles that contain it, a bundle's contents and its series in one multiquery; `igdb.games.series(collectionId, { subseries, spinoffs })` lists a series in release order; `igdb.games.catalog(companyId, { roles, includeSubsidiaries })` lists a company's games with their roles. `findBy(field, ids)` groups rows by any relation on every endpoint (`igdb.games.findBy("version_parent", ids)`), and `linkedBy(field)` links a `games` query to a view by `version_parent`, `parent_game` or `bundles`.
+- ade123a: Breaking: the names and forms deprecated in 0.5.0 are removed.
+  
+  - Request options go to the task's `execute()` only: `findByIds(ids).execute({ signal })`. They are no longer accepted as the last argument of `findByIds()`, `findByGames()`, `findByExternalIds()`, `igdb.expand()` and a view's `findById()`, `findByIds()` and `first()`, nor among the options of `popular()`, `weightedPopular()`, `releases()` and `searchAll()`.
+  - `popular()` and `weightedPopular()` take their page from the query only: `igdb.games.limit(20).popular(type)`; their `limit` option is removed.
+  - `byGame()` is removed: use `findByGames()`.
+  - `searchAll({ editions })` is removed: use `includeEditions`.
+  - `popularitySnapshot({ top })` is removed: use `limit`.
+  - `SEARCH_GAME_TYPES` is removed: use `MAIN_GAME_TYPES`.
+  - `g.releasedIn()` loses `platform`, `region`, `worldwide` and `includeCancelled`: use `platforms`, `regions`, `includeWorldwide`, and `statuses` to keep cancelled or offline release dates.
+  - `timeToBeat(row, kinds)` is removed: use `timeToBeat(row, { prefer: kinds })`.
+  - `releaseDate()` loses `date` and `statusId` (use `start` and `status`), and `statuses` takes `ReleaseDateStatus` ids only; the `ReleaseStatus` type is removed.
+  
+  `g.playableTogether()`, new in this version, takes `platforms` like the other filters.
+- e4bec4b: `removed(ids)` on every endpoint lists the stored ids IGDB no longer has, with the reason and the replacement of a duplicate from IGDB's reports, for local copies kept by `sync()` or webhooks. New `igdb-kit/schema` entry: `endpointSchema(endpoint)` describes every field (type, target endpoint, enum values, description, deprecation) and the fields that point to the endpoint, and `jsonSchema(endpoint)` gives the JSON Schema of a row.
+- 5150168: `hooks.onRequest` reports every request for logs and metrics (`path`, `status`, `durationMs`, `bytes`, `attempt`, `blocks`, `cached`). `iterate()` and `sync()` throw on a `sort()` other than the id, which they used to drop. A second client with the same client id and other limiter options gets a console warning instead of silently sharing the first limiter. `expand()` rejects keys that hold values (`tags`, `hypes`). `GameVersionFeatureCategoryEnum` and `GameVersionFeatureValueIncludedFeatureEnum` are no longer marked deprecated.
+- 444feb0: `igdb-kit/i18n`: IGDB's reference labels in the user's language. `createLabels([fr, ja])` returns `label(table, id or row, locale)`, `description()` and `entries()` for 27 tables (genres, themes, game modes, player perspectives, game types and statuses, release statuses and regions, website and popularity types, company sizes and types, image and artwork types, collection types…) and the 97 age rating content descriptors. English is built in, with IGDB's slips fixed (`Operating_system`, `Postitive Reviews`, lowercase regions); French, German, Spanish, Brazilian Portuguese, Polish, Russian, Japanese and Simplified Chinese are entry points of their own (`igdb-kit/i18n/fr`, `igdb-kit/i18n/pt-BR`, `igdb-kit/i18n/zh-CN`…), so an app ships only the languages it imports. A locale reads the dictionaries of its language and script, its country's first, then English. A row added to IGDB after this version keeps its own English label, and a `LabelDictionary` of your own adds a language or changes some labels.
+
 ## 0.5.0
 
 ### Minor Changes
