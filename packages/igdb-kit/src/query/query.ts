@@ -22,8 +22,8 @@ import {
   type ReleasesOptions,
   releaseCalendar,
 } from "./releases";
-import type { FieldPath, ScalarKeys, SelectResult } from "./types";
-import { type Condition, throwIfRemoved, type WhereFields, whereProxy } from "./where";
+import type { ExcludePath, ExcludeResult, FieldPath, ScalarKeys, SelectResult } from "./types";
+import { type Condition, throwIfRemoved, type WhereRoot, whereProxy } from "./where";
 
 /** IGDB rejects `limit` above 500 (with a 403). */
 export const MAX_LIMIT = 500;
@@ -81,6 +81,7 @@ export interface PopularOptions extends ExecuteOptions {
 /** @internal */
 export interface QueryState {
   fields: readonly string[];
+  exclude?: readonly string[] | undefined;
   where?: string | undefined;
   sort?: { field: string; direction: "asc" | "desc" } | undefined;
   search?: string | undefined;
@@ -177,15 +178,44 @@ export class Query<N extends EndpointName, R = { id: number }> extends Executabl
    */
   select<P extends string>(...fields: FieldPath<Endpoints[N], P>[]): Query<N, SelectResult<Endpoints[N], P>> {
     for (const field of fields) validatePath(this.entity, field, false);
-    return this.with({ fields: [...new Set(fields as string[])] }) as never;
+    return this.with({ fields: [...new Set(fields as string[])], exclude: undefined }) as never;
   }
 
-  /** Filters with a typed builder (`g => g.rating.gte(80)`) or a raw Apicalypse condition. */
-  where(condition: string | ((fields: WhereFields<Endpoints[N]>) => Condition)): this {
+  /**
+   * Leaves selected fields out of the response, at any depth: `select("*", "cover.*").exclude("summary",
+   * "cover.url")`. Only fields the selection covers are accepted (IGDB rejects the others once a
+   * relation is expanded); `id` is always returned, and an expanded relation is dropped from `select`
+   * instead. Call it after `select`, which resets it.
+   */
+  exclude<P extends string>(...fields: ExcludePath<R, P>[]): Query<N, ExcludeResult<R, P>> {
+    for (const field of fields) this.validateExclude(field);
+    return this.with({
+      exclude: [...new Set([...(this.state.exclude ?? []), ...(fields as string[])])],
+    }) as never;
+  }
+
+  private validateExclude(path: string): void {
+    validatePath(this.entity, path, false);
+    const segments = path.split(".");
+    const parent = segments.slice(0, -1).join(".");
+    const field = segments[segments.length - 1];
+    if (field === "*") throw new QueryError(`IGDB does not allow "*" in exclude ("${path}")`);
+    if (field === "id") throw new QueryError(`IGDB always returns "${path}": it cannot be excluded`);
+    const { fields } = this.state;
+    if (fields.some((f) => f.startsWith(`${path}.`))) {
+      throw new QueryError(`"${path}" is expanded: remove its fields from select() instead of excluding it`);
+    }
+    const covered = fields.includes(path) || fields.includes(parent ? `${parent}.*` : "*");
+    if (!covered) throw new QueryError(`Cannot exclude "${path}": it is not selected`);
+  }
+
+  /**
+   * Filters with a typed builder (`g => g.rating.gte(80)`) or a raw Apicalypse condition. On `games`,
+   * the builder also has named filters: `g.developedBy(908)`, `g.publishedBy(50)`, `g.releasedIn({...})`.
+   */
+  where(condition: string | ((fields: WhereRoot<N>) => Condition)): this {
     const text =
-      typeof condition === "string"
-        ? condition
-        : condition(whereProxy(this.entity) as WhereFields<Endpoints[N]>).text;
+      typeof condition === "string" ? condition : condition(whereProxy(this.entity) as WhereRoot<N>).text;
     const where = this.state.where ? `(${this.state.where}) & (${text})` : text;
     return this.with({ where });
   }
@@ -554,9 +584,11 @@ export class Query<N extends EndpointName, R = { id: number }> extends Executabl
 
   /** @internal */
   toRequest(kind: "list" | "count" = "list"): QueryRequest {
-    const { fields, where, sort, search, limit, offset, cacheTtlMs, expectedRows } = this.state;
+    const { fields, exclude, where, sort, search, limit, offset, cacheTtlMs, expectedRows } = this.state;
     const lines: string[] = [];
     if (kind === "list" && fields.length) lines.push(`fields ${fields.join(",")};`);
+    // One line for every excluded field: IGDB rejects a second `exclude` line.
+    if (kind === "list" && exclude?.length) lines.push(`exclude ${exclude.join(",")};`);
     if (search !== undefined) lines.push(`search ${JSON.stringify(search)};`);
     if (where) lines.push(`where ${where};`);
     if (kind === "list") {

@@ -21,6 +21,7 @@ import {
   type QueryRunner,
   type RawResponse,
 } from "./query/query";
+import { type SearchAll, type SearchAllOptions, searchAll } from "./query/search-all";
 import type { FieldPath, SelectResult } from "./query/types";
 import { Webhooks } from "./webhooks/api";
 
@@ -85,6 +86,13 @@ export type IGDBClient = { readonly [K in EndpointName]: Query<K> } & {
    * each result under its key with its own type. Works even when `autoBatch` is off.
    */
   batch<T extends BatchInput>(queries: T, options?: Omit<ExecuteOptions, "batch">): Promise<BatchResult<T>>;
+  /**
+   * Searches games, characters, collections, platforms and themes at once, through the `search`
+   * endpoint, and returns typed hits narrowed by `kind`. Mods, DLCs and editions are left out of game
+   * hits by default, and hits are ranked by how well their name matches (IGDB itself returns the most
+   * recently indexed first). One request per 500 matches; never batched.
+   */
+  searchAll: SearchAll;
   /** Registers, lists and removes your app's webhooks. */
   webhooks: Webhooks;
   /**
@@ -175,6 +183,8 @@ export function createIGDB(options: IGDBClientOptions): IGDBClient {
       );
       return Object.fromEntries(keys.map((key, i) => [key, results[i]]));
     },
+    searchAll: (term: string, searchOptions?: SearchAllOptions) =>
+      searchAll(client.search as Query<"search">, term, searchOptions),
     webhooks: new Webhooks((method, path, body, requestOptions) =>
       transport.request(
         method,

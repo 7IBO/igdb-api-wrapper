@@ -1813,5 +1813,580 @@
       "id": 5,
       "name": "Unknown"
     }
+  ],
+  "regions": [
+    {
+      "id": 2,
+      "name": "Korea",
+      "identifier": "ko-KR"
+    },
+    {
+      "id": 3,
+      "name": "Japan",
+      "identifier": "ja-JP"
+    },
+    {
+      "id": 4,
+      "name": "Europe",
+      "identifier": "EU"
+    }
+  ],
+  "languages": [
+    {
+      "id": 1,
+      "name": "Arabic",
+      "locale": "ar"
+    },
+    {
+      "id": 2,
+      "name": "Chinese (Simplified)",
+      "locale": "zh-CN"
+    },
+    {
+      "id": 3,
+      "name": "Chinese (Traditional)",
+      "locale": "zh-TW"
+    },
+    {
+      "id": 4,
+      "name": "Czech",
+      "locale": "cs-CZ"
+    },
+    {
+      "id": 5,
+      "name": "Danish",
+      "locale": "da-DK"
+    },
+    {
+      "id": 6,
+      "name": "Dutch",
+      "locale": "nl-NL"
+    },
+    {
+      "id": 7,
+      "name": "English",
+      "locale": "en-US"
+    },
+    {
+      "id": 8,
+      "name": "English (UK)",
+      "locale": "en-GB"
+    },
+    {
+      "id": 9,
+      "name": "Spanish (Spain)",
+      "locale": "es-ES"
+    },
+    {
+      "id": 10,
+      "name": "Spanish (Mexico)",
+      "locale": "es-MX"
+    },
+    {
+      "id": 11,
+      "name": "Finnish",
+      "locale": "fi-FI"
+    },
+    {
+      "id": 12,
+      "name": "French",
+      "locale": "fr-FR"
+    },
+    {
+      "id": 13,
+      "name": "Hebrew",
+      "locale": "he-IL"
+    },
+    {
+      "id": 14,
+      "name": "Hungarian",
+      "locale": "hu-HU"
+    },
+    {
+      "id": 15,
+      "name": "Italian",
+      "locale": "it-IT"
+    },
+    {
+      "id": 16,
+      "name": "Japanese",
+      "locale": "ja-JP"
+    },
+    {
+      "id": 17,
+      "name": "Korean",
+      "locale": "ko-KR"
+    },
+    {
+      "id": 18,
+      "name": "Norwegian",
+      "locale": "nb-NO"
+    },
+    {
+      "id": 19,
+      "name": "Polish",
+      "locale": "pl-PL"
+    },
+    {
+      "id": 20,
+      "name": "Portuguese (Portugal)",
+      "locale": "pt-PT"
+    },
+    {
+      "id": 21,
+      "name": "Portuguese (Brazil)",
+      "locale": "pt-BR"
+    },
+    {
+      "id": 22,
+      "name": "Russian",
+      "locale": "ru-RU"
+    },
+    {
+      "id": 23,
+      "name": "Swedish",
+      "locale": "sv-SE"
+    },
+    {
+      "id": 24,
+      "name": "Turkish",
+      "locale": "tr-TR"
+    },
+    {
+      "id": 25,
+      "name": "Thai",
+      "locale": "th-TH"
+    },
+    {
+      "id": 26,
+      "name": "Vietnamese",
+      "locale": "vi-VN"
+    },
+    {
+      "id": 27,
+      "name": "German",
+      "locale": "de-DE"
+    },
+    {
+      "id": 28,
+      "name": "Ukrainian",
+      "locale": "uk-UA"
+    }
+  ],
+  "age_rating_categories": [
+    {
+      "id": 1,
+      "rating": "RP",
+      "organization": 1
+    },
+    {
+      "id": 2,
+      "rating": "EC",
+      "organization": 1
+    },
+    {
+      "id": 3,
+      "rating": "E",
+      "organization": 1
+    },
+    {
+      "id": 4,
+      "rating": "E10+",
+      "organization": 1
+    },
+    {
+      "id": 5,
+      "rating": "T",
+      "organization": 1
+    },
+    {
+      "id": 6,
+      "rating": "M",
+      "organization": 1
+    },
+    {
+      "id": 7,
+      "rating": "AO",
+      "organization": 1
+    },
+    {
+      "id": 8,
+      "rating": "3",
+      "organization": 2
+    },
+    {
+      "id": 9,
+      "rating": "7",
+      "organization": 2
+    },
+    {
+      "id": 10,
+      "rating": "12",
+      "organization": 2
+    },
+    {
+      "id": 11,
+      "rating": "16",
+      "organization": 2
+    },
+    {
+      "id": 12,
+      "rating": "18",
+      "organization": 2
+    },
+    {
+      "id": 13,
+      "rating": "A",
+      "organization": 3
+    },
+    {
+      "id": 14,
+      "rating": "B",
+      "organization": 3
+    },
+    {
+      "id": 15,
+      "rating": "C",
+      "organization": 3
+    },
+    {
+      "id": 16,
+      "rating": "D",
+      "organization": 3
+    },
+    {
+      "id": 17,
+      "rating": "Z",
+      "organization": 3
+    },
+    {
+      "id": 18,
+      "rating": "0",
+      "organization": 4
+    },
+    {
+      "id": 19,
+      "rating": "6",
+      "organization": 4
+    },
+    {
+      "id": 20,
+      "rating": "12",
+      "organization": 4
+    },
+    {
+      "id": 21,
+      "rating": "16",
+      "organization": 4
+    },
+    {
+      "id": 22,
+      "rating": "18",
+      "organization": 4
+    },
+    {
+      "id": 23,
+      "rating": "ALL",
+      "organization": 5
+    },
+    {
+      "id": 24,
+      "rating": "12+",
+      "organization": 5
+    },
+    {
+      "id": 25,
+      "rating": "15+",
+      "organization": 5
+    },
+    {
+      "id": 26,
+      "rating": "19+",
+      "organization": 5
+    },
+    {
+      "id": 27,
+      "rating": "TESTING",
+      "organization": 5
+    },
+    {
+      "id": 28,
+      "rating": "L",
+      "organization": 6
+    },
+    {
+      "id": 29,
+      "rating": "10",
+      "organization": 6
+    },
+    {
+      "id": 30,
+      "rating": "12",
+      "organization": 6
+    },
+    {
+      "id": 31,
+      "rating": "14",
+      "organization": 6
+    },
+    {
+      "id": 32,
+      "rating": "16",
+      "organization": 6
+    },
+    {
+      "id": 33,
+      "rating": "18",
+      "organization": 6
+    },
+    {
+      "id": 34,
+      "rating": "G",
+      "organization": 7
+    },
+    {
+      "id": 35,
+      "rating": "PG",
+      "organization": 7
+    },
+    {
+      "id": 36,
+      "rating": "M",
+      "organization": 7
+    },
+    {
+      "id": 37,
+      "rating": "MA 15+",
+      "organization": 7
+    },
+    {
+      "id": 38,
+      "rating": "R 18+",
+      "organization": 7
+    },
+    {
+      "id": 39,
+      "rating": "RC",
+      "organization": 7
+    },
+    {
+      "id": 40,
+      "rating": "18+",
+      "organization": 5
+    }
+  ],
+  "company_statuses": [
+    {
+      "id": 0,
+      "name": "active"
+    },
+    {
+      "id": 1,
+      "name": "defunct"
+    },
+    {
+      "id": 2,
+      "name": "merged"
+    },
+    {
+      "id": 3,
+      "name": "renamed"
+    }
+  ],
+  "company_sizes": [
+    {
+      "id": 1,
+      "name": "0-1 employees"
+    },
+    {
+      "id": 2,
+      "name": "2-10 employees"
+    },
+    {
+      "id": 3,
+      "name": "11-50 employees"
+    },
+    {
+      "id": 4,
+      "name": "51-200 employees"
+    },
+    {
+      "id": 5,
+      "name": "201-500 employees"
+    },
+    {
+      "id": 6,
+      "name": "501-1000 employees"
+    },
+    {
+      "id": 7,
+      "name": "1001-5000 employees"
+    },
+    {
+      "id": 8,
+      "name": "5000+ employees"
+    }
+  ],
+  "company_types": [
+    {
+      "id": 1,
+      "name": "Main Company"
+    },
+    {
+      "id": 2,
+      "name": "Division"
+    },
+    {
+      "id": 3,
+      "name": "Subsidiary"
+    },
+    {
+      "id": 4,
+      "name": "Holding Company"
+    },
+    {
+      "id": 5,
+      "name": "Solo Dev"
+    }
+  ],
+  "network_types": [
+    {
+      "id": 1,
+      "name": "Twitch"
+    },
+    {
+      "id": 2,
+      "name": "Official website"
+    },
+    {
+      "id": 3,
+      "name": "YouTube"
+    },
+    {
+      "id": 4,
+      "name": "Twitter"
+    }
+  ],
+  "collection_types": [
+    {
+      "id": 1,
+      "name": "Series"
+    }
+  ],
+  "collection_membership_types": [
+    {
+      "id": 1,
+      "name": "Member"
+    },
+    {
+      "id": 2,
+      "name": "Spin-off"
+    }
+  ],
+  "collection_relation_types": [
+    {
+      "id": 1,
+      "name": "Subseries"
+    },
+    {
+      "id": 2,
+      "name": "Spin-off Series"
+    },
+    {
+      "id": 34,
+      "name": "Story Arc"
+    }
+  ],
+  "platform_families": [
+    {
+      "id": 1,
+      "name": "PlayStation"
+    },
+    {
+      "id": 2,
+      "name": "Xbox"
+    },
+    {
+      "id": 3,
+      "name": "Sega"
+    },
+    {
+      "id": 4,
+      "name": "Linux"
+    },
+    {
+      "id": 5,
+      "name": "Nintendo"
+    },
+    {
+      "id": 6,
+      "name": "Atari"
+    }
+  ],
+  "image_types": [
+    {
+      "id": 1,
+      "name": "Artwork"
+    },
+    {
+      "id": 2,
+      "name": "Key art without logo"
+    },
+    {
+      "id": 3,
+      "name": "Key art with logo"
+    },
+    {
+      "id": 4,
+      "name": "Concept art"
+    },
+    {
+      "id": 5,
+      "name": "Game logo (white)"
+    },
+    {
+      "id": 6,
+      "name": "Game logo (black)"
+    },
+    {
+      "id": 7,
+      "name": "Game logo (color)"
+    },
+    {
+      "id": 8,
+      "name": "Main cover"
+    },
+    {
+      "id": 9,
+      "name": "Historical cover"
+    },
+    {
+      "id": 10,
+      "name": "Alternative cover"
+    },
+    {
+      "id": 11,
+      "name": "Square cover"
+    },
+    {
+      "id": 12,
+      "name": "Infographic"
+    },
+    {
+      "id": 13,
+      "name": "Icon"
+    },
+    {
+      "id": 14,
+      "name": "Historical logo"
+    },
+    {
+      "id": 15,
+      "name": "Historical icon"
+    },
+    {
+      "id": 16,
+      "name": "Historical artwork"
+    }
   ]
 }

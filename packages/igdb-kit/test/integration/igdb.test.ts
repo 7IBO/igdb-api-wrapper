@@ -1,7 +1,9 @@
 // Runs against the real IGDB API. Skipped unless TWITCH_CLIENT_ID and TWITCH_CLIENT_SECRET are set.
-// Uses about 50 requests. The webhook test registers webhooks on example.com and removes them.
+// Uses about 60 requests. The webhook test registers webhooks on example.com and removes them.
 import { describe, expect, test } from "bun:test";
 import {
+  AgeRatingCategory,
+  AgeRatingOrganization,
   and,
   createIGDB,
   defineSelection,
@@ -15,8 +17,10 @@ import {
   PopularityType,
   type Query,
   QueryError,
+  Region,
   ReleaseDateRegion,
   ReleaseDateStatus,
+  SEARCH_GAME_TYPES,
   Theme,
   TierError,
   toDate,
@@ -376,6 +380,117 @@ describe.skipIf(!clientId || !clientSecret)("real IGDB API", () => {
     });
     expect(Object.values(results).every(Array.isArray)).toBe(true);
     expect(results.text.length).toBeGreaterThan(0);
+  });
+
+  test("new reference constants match the API", async () => {
+    const { statuses, regions, ratings } = await igdb.batch({
+      statuses: igdb.release_date_statuses.select("name").limit(500),
+      regions: igdb.regions.select("identifier").limit(500),
+      ratings: igdb.age_rating_categories.select("rating", "organization").limit(500),
+    });
+    expect(Object.fromEntries(statuses.map((s) => [s.id, s.name]))).toMatchObject({
+      [ReleaseDateStatus.Cancelled]: "Cancelled",
+      [ReleaseDateStatus.FullRelease]: "Full Release",
+      [ReleaseDateStatus.AdvancedAccess]: "Advanced Access",
+    });
+    expect(regions.find((r) => r.id === Region.Japan)?.identifier).toBe("ja-JP");
+    const pegi18 = ratings.find((r) => r.id === AgeRatingCategory.PEGI_18);
+    expect(pegi18).toMatchObject({ rating: "18", organization: AgeRatingOrganization.PEGI });
+    expect(ratings.find((r) => r.id === AgeRatingCategory.USK_18)?.organization).toBe(
+      AgeRatingOrganization.USK,
+    );
+  });
+
+  test("exclude() drops top-level and nested fields, alone and in a multiquery", async () => {
+    const [alone, batched] = await Promise.all([
+      igdb.games.select("*", "cover.*").exclude("summary", "storyline", "cover.url").findById(1942),
+      igdb.batch({
+        witcher: igdb.games
+          .select("name", "summary", "cover.*")
+          .exclude("summary", "cover.url")
+          .findById(1942),
+        count: igdb.games.count(),
+      }),
+    ]);
+    for (const game of [alone, batched.witcher]) {
+      expect(game?.name).toBe("The Witcher 3: Wild Hunt");
+      expect(game).not.toHaveProperty("summary");
+      expect(typeof game?.cover?.image_id).toBe("string");
+      expect(game?.cover).not.toHaveProperty("url");
+    }
+    expect(alone?.platforms?.length).toBeGreaterThan(0);
+  });
+
+  test("game filters match one involved company and one release date for all their conditions", async () => {
+    const ids = (q: typeof igdb.games) =>
+      q
+        .limit(500)
+        .execute()
+        .then((games) => games.map((g) => g.id));
+    const witcher = igdb.games.where((g) => g.id.in(1942, 214992));
+    const [
+      byCdpr,
+      byWb,
+      publishedByWb,
+      switchBefore2020,
+      switchSince2021,
+      cancelledOnly,
+      withCancelled,
+      platforms,
+    ] = await Promise.all([
+      ids(witcher.where((g) => g.developedBy(908))),
+      ids(witcher.where((g) => g.developedBy(50))), // WB Games only published it
+      ids(witcher.where((g) => g.publishedBy(50))),
+      ids(
+        witcher.where((g) => g.releasedIn({ platform: Platform.NintendoSwitch, to: new Date("2020-01-01") })),
+      ),
+      ids(
+        witcher.where((g) =>
+          g.releasedIn({ platform: Platform.NintendoSwitch, from: new Date("2021-01-01") }),
+        ),
+      ),
+      // 214992: every release date is Cancelled, yet its platforms still list Xbox Series X|S.
+      ids(witcher.where((g) => g.releasedIn({ platform: Platform.XboxSeriesXS }))),
+      ids(witcher.where((g) => g.releasedIn({ platform: Platform.XboxSeriesXS, includeCancelled: true }))),
+      ids(witcher.where((g) => g.platforms.any(Platform.XboxSeriesXS))),
+    ]);
+    expect(byCdpr).toEqual([1942]);
+    expect(byWb).toEqual([]);
+    expect(publishedByWb).toEqual([1942]);
+    expect(switchBefore2020).toEqual([]); // the PS4 release is before 2020, the Switch one is not
+    expect(switchSince2021).toEqual([1942]);
+    expect(cancelledOnly).toEqual([1942]);
+    expect(withCancelled.sort()).toEqual([1942, 214992]);
+    expect(platforms.sort()).toEqual([1942, 214992]);
+  });
+
+  test("searchAll() returns typed hits of several kinds, ranked, without mods", async () => {
+    const witcher = await igdb.searchAll("witcher", {
+      select: { game: ["game_type", "version_parent"] },
+      limit: 30,
+    });
+    expect(witcher[0]).toMatchObject({
+      kind: "game",
+      id: 1942,
+      name: "The Witcher 3: Wild Hunt",
+      matched: "name",
+    });
+    for (const hit of witcher) {
+      expect((hit as unknown as Record<string, { id: number }>)[hit.kind]?.id).toBe(hit.id);
+      if (hit.kind !== "game") continue;
+      expect(SEARCH_GAME_TYPES).toContain(hit.game.game_type as number);
+      expect(hit.game.version_parent).toBeUndefined();
+    }
+    expect(witcher.some((h) => h.kind === "collection")).toBe(true);
+    const [geralt] = await igdb.searchAll("gwynbleidd", { kinds: ["character"] });
+    expect(geralt).toMatchObject({
+      kind: "character",
+      id: 1453,
+      name: "Geralt of Rivia",
+      matched: "alternative_name",
+    });
+    const platforms = await igdb.searchAll("playstation", { kinds: ["platform"], limit: 20 });
+    expect(platforms.map((h) => h.id)).toContain(Platform.PlayStation5);
   });
 
   test("the search endpoint searches several entity types", async () => {
