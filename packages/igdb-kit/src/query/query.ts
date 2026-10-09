@@ -39,6 +39,8 @@ export interface QueryRequest {
   fields: readonly string[];
   /** Expected number of entities (the `limit`, 10 by default; 0 for a count). */
   limit: number;
+  /** How long to cache the response: set by `cache()`, else the client's `cacheTtlMs`. 0 disables. */
+  cacheTtlMs?: number | undefined;
 }
 
 export interface RawResponse {
@@ -61,6 +63,14 @@ interface QueryState {
   search?: string | undefined;
   limit?: number | undefined;
   offset?: number | undefined;
+  cacheTtlMs?: number | undefined;
+}
+
+export interface SyncOptions extends ExecuteOptions {
+  /** Id ranges of 500 requested at once. Default 40, which automatic batching sends as a few multiqueries. */
+  concurrency?: number | undefined;
+  /** Up to this many matches, pages are read with an id cursor instead of id ranges. Default 5000. */
+  cursorThreshold?: number | undefined;
 }
 
 /** Base of everything that can be awaited or put in a `batch()`. */
@@ -186,6 +196,17 @@ export class Query<N extends EndpointName, R = { id: number }> extends Executabl
     return this.with({ offset: count });
   }
 
+  /**
+   * Caches the response for `ttlMs` in the client's `cache` store (memory by default), or disables
+   * caching for this query with `false`. Identical queries then skip IGDB and the rate limit.
+   */
+  cache(ttlMs: number | false): this {
+    if (ttlMs !== false && (!Number.isFinite(ttlMs) || ttlMs <= 0)) {
+      throw new QueryError(`cache() takes a positive duration in milliseconds or false, got ${ttlMs}`);
+    }
+    return this.with({ cacheTtlMs: ttlMs === false ? 0 : ttlMs });
+  }
+
   /** The first result, or null. */
   first(): Single<R> {
     return new Single(this.runner, this.limit(1).toRequest());
@@ -234,19 +255,91 @@ export class Query<N extends EndpointName, R = { id: number }> extends Executabl
    * time. Stable even if entities are added meanwhile, and fast at any depth unlike `offset`.
    */
   async *iterate(options: ExecuteOptions & { pageSize?: number } = {}): AsyncGenerator<R, void, undefined> {
+    for await (const page of this.cursorPages(options.pageSize ?? MAX_LIMIT, options)) yield* page;
+  }
+
+  /**
+   * Every match, page by page, to copy an endpoint into your own storage. Pass `since` (the time you
+   * started the previous sync) to get only what changed since then. Large result sets are fetched as
+   * id ranges sent in parallel, which automatic batching packs into multiqueries; small ones with an
+   * id cursor. Requests default to `background` priority so they wait behind interactive ones.
+   * Pages arrive in id order.
+   */
+  async *sync(
+    options: SyncOptions &
+      ("updated_at" extends keyof Endpoints[N] ? { since?: Date | number } : { since?: never }) = {},
+  ): AsyncGenerator<R[], void, undefined> {
+    if (this.state.search) throw new QueryError("sync() cannot be combined with search");
+    const executeOptions: ExecuteOptions = { ...options, priority: options.priority ?? "background" };
+    let query: Query<N, R> = this.with({
+      fields: this.fieldsWithId(),
+      sort: undefined,
+      offset: undefined,
+      limit: undefined,
+    });
+    if (options.since !== undefined) {
+      if (!(entities[this.entity] && "updated_at" in (entities[this.entity] as object))) {
+        throw new QueryError(`${this.endpoint} has no updated_at field: sync it without since`);
+      }
+      const seconds = Math.floor(
+        (options.since instanceof Date ? options.since.getTime() : options.since) / 1000,
+      );
+      query = query.where(`updated_at >= ${seconds}`);
+    }
+
+    const total = await query.count().execute(executeOptions);
+    if (total === 0) return;
+    if (total <= (options.cursorThreshold ?? 5000)) {
+      yield* query.cursorPages(MAX_LIMIT, executeOptions);
+      return;
+    }
+
+    const last = await query
+      .with({ fields: ["id"], sort: { field: "id", direction: "desc" } })
+      .first()
+      .execute(executeOptions);
+    const maxId = (last as { id: number } | null)?.id ?? 0;
+    const window = Math.max(1, options.concurrency ?? 40);
+    const pending: Promise<R[]>[] = [];
+    let next = 0;
+    const launch = () => {
+      if (next > maxId) return;
+      const from = next;
+      next += MAX_LIMIT;
+      const page = query
+        .with({ sort: { field: "id", direction: "asc" }, limit: MAX_LIMIT })
+        .where(`id >= ${from} & id < ${from + MAX_LIMIT}`)
+        .execute(executeOptions);
+      page.catch(() => {}); // awaited in order below; avoid unhandled rejections meanwhile
+      pending.push(page);
+    };
+    for (let i = 0; i < window; i++) launch();
+    while (pending.length > 0) {
+      const page = await (pending.shift() as Promise<R[]>);
+      launch();
+      if (page.length > 0) yield page;
+    }
+  }
+
+  private fieldsWithId(): readonly string[] {
+    const { fields } = this.state;
+    return fields.length && !fields.includes("id") && !fields.includes("*") ? [...fields, "id"] : fields;
+  }
+
+  private async *cursorPages(
+    pageSize: number,
+    options: ExecuteOptions,
+  ): AsyncGenerator<R[], void, undefined> {
     if (this.state.search) throw new QueryError("iterate() cannot be combined with search");
-    const pageSize = options.pageSize ?? MAX_LIMIT;
-    const fields =
-      this.state.fields.length && !this.state.fields.includes("id") && !this.state.fields.includes("*")
-        ? [...this.state.fields, "id"]
-        : this.state.fields;
+    const base = this.with({
+      fields: this.fieldsWithId(),
+      sort: { field: "id", direction: "asc" },
+      offset: undefined,
+    });
     let last = -1;
     for (;;) {
-      const page = await this.with({ fields, sort: { field: "id", direction: "asc" }, offset: undefined })
-        .where(`id > ${last}`)
-        .limit(pageSize)
-        .execute(options);
-      yield* page;
+      const page = await base.where(`id > ${last}`).limit(pageSize).execute(options);
+      if (page.length > 0) yield page;
       if (page.length < pageSize) return;
       last = (page[page.length - 1] as { id: number }).id;
     }
@@ -254,7 +347,7 @@ export class Query<N extends EndpointName, R = { id: number }> extends Executabl
 
   /** @internal */
   toRequest(kind: "list" | "count" = "list"): QueryRequest {
-    const { fields, where, sort, search, limit, offset } = this.state;
+    const { fields, where, sort, search, limit, offset, cacheTtlMs } = this.state;
     const lines: string[] = [];
     if (kind === "list" && fields.length) lines.push(`fields ${fields.join(",")};`);
     if (search !== undefined) lines.push(`search ${JSON.stringify(search)};`);
@@ -276,6 +369,7 @@ export class Query<N extends EndpointName, R = { id: number }> extends Executabl
       hasSearch: search !== undefined,
       fields,
       limit: kind === "count" ? 0 : (limit ?? 10),
+      cacheTtlMs,
     };
   }
 

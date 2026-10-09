@@ -1,5 +1,5 @@
 // Runs against the real IGDB API. Skipped unless TWITCH_CLIENT_ID and TWITCH_CLIENT_SECRET are set.
-// Uses about 15 requests.
+// Uses about 25 requests. The webhook test registers webhooks on example.com and removes them.
 import { describe, expect, test } from "bun:test";
 import { and, createIGDB, GameType, Platform, QueryError, Theme, TierError, toDate } from "../../src";
 
@@ -117,5 +117,34 @@ describe.skipIf(!clientId || !clientSecret)("real IGDB API", () => {
     expect(upcoming).toHaveLength(5);
     for (const r of upcoming)
       expect(toDate(r.date ?? 0).getTime()).toBeGreaterThanOrEqual(now.getTime() - 1000);
+  });
+
+  test("sync reads every entity once, in id order", async () => {
+    const seen: number[] = [];
+    for await (const page of igdb.platforms.select("name").sync()) seen.push(...page.map((p) => p.id));
+    expect(seen.length).toBe(await igdb.platforms.count());
+    expect(seen).toEqual([...seen].sort((a, b) => a - b));
+  });
+
+  test("webhooks: register, list, re-register and delete", async () => {
+    const url = `https://example.com/igdb-kit-ci/${crypto.randomUUID()}`;
+    const hooks = await igdb.webhooks.ensure({ url, secret: "ci-secret", endpoints: ["platforms"] });
+    try {
+      expect(hooks.map((h) => h.operation).sort()).toEqual(["create", "delete", "update"]);
+      expect(hooks.every((h) => h.active && h.url.startsWith(url))).toBe(true);
+      const again = await igdb.webhooks.register("platforms", {
+        url: hooks[0]?.url as string,
+        secret: "ci-secret",
+        operation: hooks[0]?.operation as "create",
+      });
+      expect(again.id).toBe(hooks[0]?.id as number);
+      const listed = await igdb.webhooks.list();
+      expect(hooks.every((h) => listed.some((l) => l.id === h.id))).toBe(true);
+      expect((await igdb.webhooks.get(hooks[1]?.id as number))?.url).toBe(hooks[1]?.url as string);
+    } finally {
+      await Promise.all(hooks.map((h) => igdb.webhooks.delete(h.id)));
+    }
+    const after = await igdb.webhooks.list();
+    expect(after.some((l) => hooks.some((h) => h.id === l.id))).toBe(false);
   });
 });
