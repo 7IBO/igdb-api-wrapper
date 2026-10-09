@@ -102,6 +102,7 @@ jobs:
           node -e "const { igdbProxy } = require('igdb-kit/proxy'); const { createIGDB } = require('igdb-kit'); igdbProxy({ igdb: createIGDB({ clientId: 'a', clientSecret: 'b' }) })"
           node --input-type=module -e "import { releaseDate } from 'igdb-kit/game'; if (releaseDate({ release_dates: [{ id: 1, date: 0, date_format: 0, release_region: 8, platform: 6 }] }).year !== 1970) process.exit(1)"
           node -e "const { formatPlaytime } = require('igdb-kit/game'); if (formatPlaytime(7200, { locale: 'en-US' }) !== '2 hr') process.exit(1)"
+          node -e "const { eventTime, countryName } = require('igdb-kit/game'); if (eventTime({ start_time: 0, time_zone: 'PST' }, { locale: 'en' }).timeZone !== 'America/Los_Angeles' || countryName(250, 'en') !== 'France') process.exit(1)"
 
   integration:
     name: Integration tests (real IGDB API)

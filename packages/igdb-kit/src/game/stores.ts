@@ -1,4 +1,6 @@
 import { ExternalGameSource } from "../generated/schema";
+import { numericCountry } from "./countries";
+import { resolveLocale } from "./locale";
 import { idOf, type Ref, type Requires, type RequiresIfSelected } from "./select";
 
 /** Stores recognized from a link's address. */
@@ -78,6 +80,12 @@ export interface StoreLink {
 export interface StoreLinksOptions {
   /** Only these stores. */
   stores?: readonly Store[] | undefined;
+  /**
+   * The user's locale: store pages in its language where the address says it (see
+   * {@link localizeStoreUrl}), and Amazon products of its country only, when IGDB says where they
+   * are sold.
+   */
+  locale?: string | undefined;
 }
 
 interface StoreDef {
@@ -121,6 +129,7 @@ const amazonDomains: Record<number, string> = {
   380: "amazon.it",
   724: "amazon.es",
   392: "amazon.co.jp",
+  356: "amazon.in",
 };
 
 /** The store a URL belongs to, from its host; null for anything else. */
@@ -178,10 +187,14 @@ export function storeLinks<G extends object>(
     });
   }
 
+  const country = options.locale === undefined ? null : resolveLocale(options.locale).country;
+  const countryCode = country === null ? undefined : numericCountry(country);
   const links = new Map<string, StoreLink>();
   for (const candidate of candidates) {
     const store = storeOf(candidate.url);
     if (!store || (options.stores && !options.stores.includes(store))) continue;
+    if (countryCode !== undefined && candidate.countries && !candidate.countries.includes(countryCode))
+      continue;
     const key = `${store} ${productKey(store, candidate.url)}`;
     const kept = links.get(key);
     if (!kept) {
@@ -192,7 +205,94 @@ export function storeLinks<G extends object>(
     kept.countries ??= candidate.countries;
     kept.format ??= candidate.format;
   }
-  return [...links.values()];
+  const result = [...links.values()];
+  if (options.locale !== undefined)
+    for (const link of result) link.url = localizeStoreUrl(link.url, options.locale);
+  return result;
+}
+
+// Languages of Epic's store, as its addresses write them.
+const epicLanguages = new Set("ar de fr it ja ko pl ru th tr".split(" "));
+// Languages of GOG's site.
+const gogLanguages = new Set("en de fr pl ru zh".split(" "));
+// Countries whose stores also come in another language than their main one.
+const otherLanguages: Record<string, readonly string[]> = {
+  CA: ["fr"],
+  BE: ["fr", "nl"],
+  CH: ["fr", "it"],
+  LU: ["fr", "de"],
+  IN: ["en"],
+  SG: ["en"],
+  HK: ["en"],
+  AE: ["en"],
+  SA: ["en"],
+  IL: ["en"],
+};
+
+/**
+ * A store page's address in the user's language, when the address names a locale that can be
+ * changed: PlayStation (`/en-us/concept/…` to `/fr-fr/concept/…`; product pages are left alone, as
+ * their id names a region), Xbox and Microsoft (`/en-US/` to `/fr-FR/`), Epic (`/en-US/p/…` to
+ * `/fr/p/…`) and GOG (`/en/game/…` to `/fr/game/…`). PlayStation, Xbox and Microsoft addresses
+ * change only for a language spoken in the locale's country (`fr-FR`, `fr-CA`, not `fr-US`), and
+ * Epic and GOG only for a language they offer. Other addresses come back as they are: Nintendo's
+ * stores have different addresses per country, and an App Store app may not exist in every country.
+ * 99.5% of IGDB's PlayStation links and 99.3% of its Xbox links are in `en-us`.
+ */
+export function localizeStoreUrl(url: string, locale: string): string {
+  const store = storeOf(url);
+  if (store !== "playstation" && store !== "xbox" && store !== "epic" && store !== "gog") return url;
+  const { language, script, country } = resolveLocale(locale);
+  const parsed = new URL(url);
+  const segments = parsed.pathname.split("/");
+  // The locale comes first, or after "store" in Epic's older addresses (`/store/en-US/product/…`).
+  const at = store === "epic" && segments[1] === "store" ? 2 : 1;
+  const first = segments[at] ?? "";
+  const hasLocale = /^[a-z]{2}(?:-[a-z]{2,4})?$/i.test(first);
+  let tag: string | null = null;
+  if (store === "playstation" || store === "xbox") {
+    if (!hasLocale || (store === "playstation" && segments[at + 1] !== "concept")) return url;
+    tag = marketTag(language, country);
+    if (tag === null || (store === "playstation" && language === "zh")) return url;
+    tag = first === first.toLowerCase() ? tag.toLowerCase() : tag;
+  } else if (store === "epic") {
+    tag = epicTag(language, script, country);
+  } else if (gogLanguages.has(language)) {
+    tag = language;
+  }
+  if (tag === null) return url;
+  if (hasLocale) segments[at] = tag;
+  else if (["p", "product", "game"].includes(first)) segments.splice(at, 0, tag);
+  else return url;
+  parsed.pathname = segments.join("/");
+  return parsed.toString();
+}
+
+/** `fr-FR` for a language spoken in the country, else null. */
+function marketTag(language: string, country: string | null): string | null {
+  if (country === null || !/^[A-Z]{2}$/.test(country)) return null;
+  let main: string | undefined;
+  try {
+    main = new Intl.Locale(`und-${country}`).maximize().language;
+  } catch {
+    return null;
+  }
+  return main === language || otherLanguages[country]?.includes(language) ? `${language}-${country}` : null;
+}
+
+function epicTag(language: string, script: string | null, country: string | null): string | null {
+  switch (language) {
+    case "en":
+      return "en-US";
+    case "es":
+      return country !== null && country !== "ES" && marketTag("es", country) !== null ? "es-MX" : "es-ES";
+    case "pt":
+      return "pt-BR";
+    case "zh":
+      return script === "Hant" ? "zh-Hant" : "zh-CN";
+    default:
+      return epicLanguages.has(language) ? language : null;
+  }
 }
 
 type Candidate = Omit<StoreLink, "store">;

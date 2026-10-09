@@ -15,6 +15,7 @@ import {
   type GameLinkedQuery,
   GameType,
   gameLink,
+  Language,
   MAIN_GAME_TYPES,
   NotFoundError,
   or,
@@ -32,12 +33,15 @@ import {
   ageRating,
   alternativeTitles,
   companies,
+  eventTime,
+  formatReleaseDate,
   languages,
   localizedCover,
   localizedName,
   parentGame,
   releaseDate,
   storeLinks,
+  supportsLanguage,
   timeToBeat,
 } from "../../src/game";
 import { igdbProxy } from "../../src/proxy";
@@ -697,6 +701,11 @@ describe.skipIf(!clientId || !clientSecret)("real IGDB API", () => {
     expect(ageRating(witcher, AgeRatingOrganization.PEGI)).toMatchObject({ label: "18", minimumAge: 18 });
     expect(localizedName(witcher, "ja-JP")?.source).toBe("localization");
     expect(localizedName(witcher, "pl-PL")).toMatchObject({ source: "alternative_name", language: "pl" });
+    const witcherRelease = releaseDate(witcher);
+    if (witcherRelease)
+      expect(formatReleaseDate(witcherRelease, { locale: "en-US" })).toBe(witcherRelease.human as string);
+    expect(supportsLanguage(witcher, "fr-FR")).toMatchObject({ language: Language.French, audio: true });
+    expect(ageRating(witcher, { locale: "ja-JP" })?.organization).toBe(AgeRatingOrganization.CERO);
     expect(localizedCover(witcher, "en-US")).toMatchObject({
       source: "cover",
       image_id: witcher.cover?.image_id,
@@ -737,6 +746,13 @@ describe.skipIf(!clientId || !clientSecret)("real IGDB API", () => {
       expect(localizedName(game, locale)?.source).toBe("localization");
       expect(localizedCover(game, locale)?.source).toBe("localization");
     }
+  });
+
+  test("eventTime() knows the time zone of every recent event", async () => {
+    const events = await igdb.events.select("start_time", "time_zone").sort("id", "desc").limit(500);
+    expect(events.length).toBeGreaterThan(100);
+    for (const event of events)
+      if (event.time_zone) expect(eventTime(event, { locale: "en" }).timeZone).not.toBeNull();
   });
 
   test("findByGames() accepts the game link of every endpoint that has one", async () => {
