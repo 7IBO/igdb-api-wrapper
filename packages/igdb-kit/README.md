@@ -180,6 +180,42 @@ imageUrl(game.cover?.image_id, "cover_big", { retina: true });
 imageUrl(game.cover?.url, "cover_big"); // the url field IGDB returns (always t_thumb) works too
 ```
 
+### Displaying a game: igdb-kit/game
+
+IGDB returns raw rows: several release dates per platform and region, companies with role flags, store ids, rating category ids. `igdb-kit/game` turns a query result into what a page shows, with no request. Each helper requires the fields it reads at compile time (a missing one is an error naming it, such as `select("release_dates.status") is missing`) and accepts any richer selection; `release_dates.*` style wildcards work too.
+
+```ts
+import { ageRating, companies, localizedName, releaseDate, storeLinks } from "igdb-kit/game";
+import { AgeRatingOrganization, Platform, ReleaseDateRegion } from "igdb-kit";
+
+const game = await igdb.games
+  .select("name", "release_dates.*", "involved_companies.company.name", "involved_companies.developer",
+    "involved_companies.publisher", "involved_companies.porting", "involved_companies.supporting",
+    "websites.url", "websites.trusted", "age_ratings.organization", "age_ratings.rating_category")
+  .findByIdOrThrow(1942);
+
+releaseDate(game, { region: ReleaseDateRegion.Europe, platform: Platform.NintendoSwitch });
+// { date, precision: "day", year: 2021, month: 1, day: 28, status: "full_release", match: "worldwide", ... }
+companies(game).developers;                          // [{ id: 908, name: "CD Projekt RED" }]
+storeLinks(game);                                    // [{ store: "epic", url, trusted: true, ... }, { store: "steam", ... }]
+ageRating(game, [AgeRatingOrganization.PEGI, AgeRatingOrganization.ESRB]); // { label: "18", minimumAge: 18, ... }
+```
+
+| Helper | Returns | What it handles |
+|---|---|---|
+| `releaseDate(game, { region?, platform?, statuses? })` | The date to show, its `precision` (`day`, `month`, `quarter`, `year`, `tbd`), `status` and `match` (`exact`, `worldwide`, `other_region`) | Full release first, as IGDB's `first_release_date` does (not early or advanced access), then the region's own row over worldwide. Half of the dates have no status: `unknown`, not excluded. Quarters and years are stored as the period's last day, so use `precision` and `year`/`quarter`/`month`, never `date` alone. |
+| `releasesByPlatform(game, { region? })` | One release per platform, earliest first | |
+| `companies(game)` | `{ developers, publishers, porting, supporting }` with your selected company fields | Several regional publishers, a company listed twice |
+| `storeLinks(game, { stores? })` | One link per store product from `websites` and `external_games` | The store comes from the address: archived copies and mistyped links are dropped. Missing URLs are built for Steam, Google Play and single-country Amazon products. |
+| `ageRating(game, organization)`, `ageRatings(game)` | `label` (`18`, `M`, `MA 15+`), `minimumAge`, `descriptors`, `synopsis`, or null | Labels and ages for all 40 IGDB categories; two ratings from one organization (the strictest wins) |
+| `localizedName(game, locale)`, `localization(game, locale)` | `{ name, source }` | Regional localization (`ja-JP`, `ko-KR`), then alternative names by their free-text comment ("Japanese title", "Chinese title - traditional"; romanizations skipped), then the European title for a European locale, then `name` |
+| `languages(game)` | Per language: `audio`, `subtitles`, `interface` | `undefined` when the game has no data of that kind, `false` when other languages have it |
+| `multiplayer(game, platform?)` | Player counts and co-op flags per platform | 0 means unknown, rows that apply to every platform |
+| `parentGame(game)` | `{ relation, game, title }` for editions, DLCs, expansions, remakes, ports... | `version_parent` and `parent_game`, named from `game_type` |
+| `timeToBeat(row)`, `formatPlaytime(seconds)` | `{ seconds, kind, count }`, `"71 hr"` | Rows of `game_time_to_beats` (97% of games have none); localized with `Intl` |
+
+Data is often missing, and helpers keep "unknown" apart from "no": 79% of games have no age rating, 39% of main games no language data, 94% no multiplayer data.
+
 ### Batching
 
 Nothing to do: queries started within the same couple of milliseconds are sent together.
