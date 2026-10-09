@@ -2,7 +2,7 @@ import { QueryError } from "../core/errors";
 import { entities, type Game } from "../generated/schema";
 import type { ExecuteOptions, Query } from "../query/query";
 import type { Prettify, ScalarKeys } from "../query/types";
-import type { Condition, WhereFields } from "../query/where";
+import type { Condition, WhereRoot } from "../query/where";
 import { byGame, gameLink } from "./by-game";
 
 // biome-ignore lint/suspicious/noExplicitAny: the rows of each linked query are typed by ViewRow.
@@ -45,8 +45,8 @@ export class View<R, W extends ViewLinks> implements PromiseLike<ViewRow<R, W>[]
     }
   }
 
-  /** Filters the games, as `Query.where`. */
-  where(condition: string | ((fields: WhereFields<Game>) => Condition)): View<R, W> {
+  /** Filters the games, as `Query.where`, named filters (`developedBy()`…) included. */
+  where(condition: string | ((fields: WhereRoot<"games">) => Condition)): View<R, W> {
     return new View(this.base.where(condition), this.links);
   }
 

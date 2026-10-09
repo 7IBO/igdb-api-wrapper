@@ -7,6 +7,7 @@ import { Transport, type TransportHooks } from "./core/transport";
 import { type EndpointName, endpoints, type Game, PopularityType } from "./generated/schema";
 import { type Expanded, expand, type IdKeys } from "./links/expand";
 import { type NoGameFields, View, type ViewLinks } from "./links/view";
+import { resolveLookups } from "./query/lookups";
 import {
   type PopularityRow,
   type PopularitySnapshotOptions,
@@ -169,10 +170,13 @@ export function createIGDB(options: IGDBClientOptions): IGDBClient {
     return response;
   };
   const runner: QueryRunner = {
-    run: (request: QueryRequest, runOptions?: ExecuteOptions): Promise<RawResponse> =>
-      cached(request.path, request.body, request.cacheTtlMs ?? options.cacheTtlMs ?? 0, () =>
-        batcher.run(request, runOptions),
-      ),
+    run: async (request: QueryRequest, runOptions?: ExecuteOptions): Promise<RawResponse> => {
+      // Company names (`developedBy("Nintendo")`) become ids first: their cache and batch keys are the ids.
+      const sent = request.lookups?.length ? await resolveLookups(request, runner, runOptions) : request;
+      return cached(sent.path, sent.body, sent.cacheTtlMs ?? options.cacheTtlMs ?? 0, () =>
+        batcher.run(sent, runOptions),
+      );
+    },
   };
 
   const client: Record<string, unknown> = {
