@@ -25,28 +25,31 @@ export interface GameAgeRating<R = AgeRatingRow> {
   organization: number;
   /** `age_rating_categories` id. */
   category: number;
-  /** The rating as printed on the box: `18` (PEGI), `M` (ESRB), `MA 15+` (ACB), `Z` (CERO). */
-  label: string | undefined;
   /**
-   * The age the rating starts at: 0 for all ages, 18 for PEGI 18 or CERO Z. Undefined for a rating
+   * The rating as printed on the box: `18` (PEGI), `M` (ESRB), `MA 15+` (ACB), `Z` (CERO). `null` for
+   * a category added to IGDB after this version, unless `rating_category.rating` is selected.
+   */
+  label: string | null;
+  /**
+   * The age the rating starts at: 0 for all ages, 18 for PEGI 18 or CERO Z. `null` for a rating
    * without one: pending (ESRB RP), refused classification (ACB RC), test (GRAC), parental guidance
    * (ACB PG), or a category added to IGDB after this version.
    */
-  minimumAge: number | undefined;
+  minimumAge: number | null;
   /**
    * Content descriptors (`Violence`, `In-Game Purchases`), when `rating_content_descriptions.description`
    * is selected. IGDB has them on 41% of ratings: an empty list does not mean "no sensitive content".
    */
   descriptors: string[];
-  /** IGDB's free text, on about 3% of ratings (PEGI, ACB and GRAC only). */
-  synopsis: string | undefined;
+  /** IGDB's free text, on about 3% of ratings (PEGI, ACB and GRAC only), when selected. */
+  synopsis: string | null;
   /** The `age_ratings` row as selected. */
   row: R;
 }
 
 // The 40 rows of `age_rating_categories`: organization, label and the age the rating starts at.
-const categories: Record<number, [organization: number, label: string, minimumAge: number | undefined]> = {
-  1: [1, "RP", undefined],
+const categories: Record<number, [organization: number, label: string, minimumAge: number | null]> = {
+  1: [1, "RP", null],
   2: [1, "EC", 3],
   3: [1, "E", 0],
   4: [1, "E10+", 10],
@@ -72,7 +75,7 @@ const categories: Record<number, [organization: number, label: string, minimumAg
   24: [5, "12+", 12],
   25: [5, "15+", 15],
   26: [5, "19+", 19],
-  27: [5, "TESTING", undefined],
+  27: [5, "TESTING", null],
   28: [6, "L", 0],
   29: [6, "10", 10],
   30: [6, "12", 12],
@@ -80,11 +83,11 @@ const categories: Record<number, [organization: number, label: string, minimumAg
   32: [6, "16", 16],
   33: [6, "18", 18],
   34: [7, "G", 0],
-  35: [7, "PG", undefined],
+  35: [7, "PG", null],
   36: [7, "M", 15],
   37: [7, "MA 15+", 15],
   38: [7, "R 18+", 18],
-  39: [7, "RC", undefined],
+  39: [7, "RC", null],
   40: [5, "18+", 18],
 };
 
@@ -133,12 +136,12 @@ function toAgeRating(row: AgeRatingRow): GameAgeRating {
   return {
     organization: idOf(row.organization) as number,
     category,
-    label: expanded ?? known?.[1],
-    minimumAge: known?.[2],
+    label: expanded ?? known?.[1] ?? null,
+    minimumAge: known?.[2] ?? null,
     descriptors: (row.rating_content_descriptions ?? []).flatMap((d) =>
       d.description ? [d.description] : [],
     ),
-    synopsis: row.synopsis,
+    synopsis: row.synopsis ?? null,
     row,
   };
 }

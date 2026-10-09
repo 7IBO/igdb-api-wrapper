@@ -34,29 +34,30 @@ export interface MultiplayerInput {
 }
 
 /**
- * Multiplayer support on one platform. Player counts are undefined when unknown: IGDB stores 0 or
- * nothing for "not filled in" (on 64% to 80% of rows depending on the field), never "none".
+ * Multiplayer support on one platform. Player counts are `null` when unknown: IGDB stores 0 or
+ * nothing for "not filled in" (on 64% to 80% of rows depending on the field), never "none". Flags
+ * are `null` when not selected or not filled in.
  */
 export interface Multiplayer {
-  /** `Platform` id; undefined for a row that applies to every platform (18% of rows). */
-  platform: number | undefined;
+  /** `Platform` id; `null` for a row that applies to every platform (18% of rows). */
+  platform: number | null;
   /** Most players in online multiplayer. */
-  onlineMax: number | undefined;
-  onlineCoop: boolean | undefined;
+  onlineMax: number | null;
+  onlineCoop: boolean | null;
   /** Most players in online co-op. */
-  onlineCoopMax: number | undefined;
+  onlineCoopMax: number | null;
   /** Most players in offline (local) multiplayer. */
-  offlineMax: number | undefined;
-  offlineCoop: boolean | undefined;
+  offlineMax: number | null;
+  offlineCoop: boolean | null;
   /** Most players in offline (local) co-op. */
-  offlineCoopMax: number | undefined;
-  lanCoop: boolean | undefined;
+  offlineCoopMax: number | null;
+  lanCoop: boolean | null;
   /** Offline split screen. */
-  splitscreen: boolean | undefined;
+  splitscreen: boolean | null;
   /** Players can join and leave a running game. */
-  dropIn: boolean | undefined;
+  dropIn: boolean | null;
   /** The campaign can be played in co-op. */
-  campaignCoop: boolean | undefined;
+  campaignCoop: boolean | null;
 }
 
 /**
@@ -66,7 +67,7 @@ export interface Multiplayer {
  *
  * ```ts
  * const game = await igdb.games.select("multiplayer_modes.*").findByIdOrThrow(1121); // Watch Dogs
- * multiplayer(game, Platform.XboxOne); // { onlineMax: 8, onlineCoop: true, onlineCoopMax: undefined, ... }
+ * multiplayer(game, Platform.XboxOne); // { onlineMax: 8, onlineCoop: true, onlineCoopMax: null, ... }
  * ```
  */
 export function multiplayer<G extends object>(game: G & Requires<G, MultiplayerFields>): Multiplayer[];
@@ -77,21 +78,21 @@ export function multiplayer<G extends object>(
 export function multiplayer(game: MultiplayerInput, platform?: number): Multiplayer[] | Multiplayer | null {
   const modes = (game.multiplayer_modes ?? []).map(toMultiplayer);
   if (platform === undefined) return modes;
-  return modes.find((m) => m.platform === platform) ?? modes.find((m) => m.platform === undefined) ?? null;
+  return modes.find((m) => m.platform === platform) ?? modes.find((m) => m.platform === null) ?? null;
 }
 
 function toMultiplayer(row: MultiplayerModeRow): Multiplayer {
   return {
-    platform: idOf(row.platform),
-    onlineMax: positive(row.onlinemax),
-    onlineCoop: row.onlinecoop,
-    onlineCoopMax: positive(row.onlinecoopmax),
-    offlineMax: positive(row.offlinemax),
-    offlineCoop: row.offlinecoop,
-    offlineCoopMax: positive(row.offlinecoopmax),
-    lanCoop: row.lancoop,
-    splitscreen: row.splitscreen,
-    dropIn: row.dropin,
-    campaignCoop: row.campaigncoop,
+    platform: idOf(row.platform) ?? null,
+    onlineMax: positive(row.onlinemax) ?? null,
+    onlineCoop: row.onlinecoop ?? null,
+    onlineCoopMax: positive(row.onlinecoopmax) ?? null,
+    offlineMax: positive(row.offlinemax) ?? null,
+    offlineCoop: row.offlinecoop ?? null,
+    offlineCoopMax: positive(row.offlinecoopmax) ?? null,
+    lanCoop: row.lancoop ?? null,
+    splitscreen: row.splitscreen ?? null,
+    dropIn: row.dropin ?? null,
+    campaignCoop: row.campaigncoop ?? null,
   };
 }

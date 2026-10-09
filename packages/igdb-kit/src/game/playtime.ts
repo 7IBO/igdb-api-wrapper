@@ -21,12 +21,17 @@ export interface Playtime {
   /** Average time in seconds. */
   seconds: number;
   kind: PlaytimeKind;
-  /** Number of submissions behind the averages (1 for 72% of rows). */
-  count: number | undefined;
+  /** Number of submissions behind the averages (1 for 72% of rows), `null` when not selected. */
+  count: number | null;
+}
+
+export interface TimeToBeatOptions {
+  /** Kinds to try, in order. Default `["normally", "hastily", "completely"]`. */
+  prefer?: readonly PlaytimeKind[] | undefined;
 }
 
 /**
- * The playtime to show from a `game_time_to_beats` row: the first of `prefer` that IGDB has
+ * The playtime to show from a `game_time_to_beats` row: the first kind of `prefer` that IGDB has
  * (default `normally`, then `hastily`, then `completely`). Null without a row (97% of games have
  * none: fetch it with `game_time_to_beats where game_id = …`) or without any time in it.
  * The three averages come from different submissions, so `hastily` can exceed `normally`.
@@ -40,13 +45,26 @@ export interface Playtime {
  */
 export function timeToBeat<R extends object>(
   row: (R & Requires<R, TimeToBeatFields>) | null | undefined,
-  prefer: readonly PlaytimeKind[] = ["normally", "hastily", "completely"],
+  options?: TimeToBeatOptions,
+): Playtime | null;
+/** @deprecated Pass the kinds as an option: `timeToBeat(row, { prefer: ["hastily"] })`. */
+export function timeToBeat<R extends object>(
+  row: (R & Requires<R, TimeToBeatFields>) | null | undefined,
+  prefer: readonly PlaytimeKind[],
+): Playtime | null;
+export function timeToBeat(
+  row: TimeToBeatInput | null | undefined,
+  options: TimeToBeatOptions | readonly PlaytimeKind[] = {},
 ): Playtime | null {
   if (!row) return null;
-  const input = row as TimeToBeatInput;
-  for (const kind of prefer) {
-    const seconds = input[kind];
-    if (typeof seconds === "number" && seconds > 0) return { seconds, kind, count: input.count };
+  const prefer = (Array.isArray(options) ? options : (options as TimeToBeatOptions).prefer) ?? [
+    "normally",
+    "hastily",
+    "completely",
+  ];
+  for (const kind of prefer as readonly PlaytimeKind[]) {
+    const seconds = row[kind];
+    if (typeof seconds === "number" && seconds > 0) return { seconds, kind, count: row.count ?? null };
   }
   return null;
 }
@@ -60,19 +78,19 @@ export interface FormatPlaytimeOptions {
 
 /**
  * A playtime in seconds as a localized duration: minutes under an hour ("45 min"), hours with
- * half-hour steps under ten hours ("2.5 hr"), whole hours above ("71 hr"). Undefined for a missing
- * or non-positive value.
+ * half-hour steps under ten hours ("2.5 hr"), whole hours above ("71 hr"). Null for a missing or
+ * non-positive value.
  */
 export function formatPlaytime(seconds: number, options?: FormatPlaytimeOptions): string;
 export function formatPlaytime(
   seconds: number | undefined | null,
   options?: FormatPlaytimeOptions,
-): string | undefined;
+): string | null;
 export function formatPlaytime(
   seconds: number | undefined | null,
   options: FormatPlaytimeOptions = {},
-): string | undefined {
-  if (typeof seconds !== "number" || !(seconds > 0)) return undefined;
+): string | null {
+  if (typeof seconds !== "number" || !(seconds > 0)) return null;
   const locale = options.locale as string | string[] | undefined;
   const unitDisplay = options.unitDisplay ?? "short";
   const minutes = seconds / 60;

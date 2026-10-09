@@ -257,11 +257,11 @@ describe.skipIf(!clientId || !clientSecret)("real IGDB API", () => {
     ]);
     // IGDB still fills artwork_type where image_type is missing.
     expect(missing).toHaveLength(50);
-    expect(missing.every((a) => artworkType(a) !== undefined)).toBe(true);
+    expect(missing.every((a) => artworkType(a) !== null)).toBe(true);
     // Where both are filled, the conversion gives IGDB's own image_type.
     expect(both).toHaveLength(500);
     for (const a of both)
-      expect(artworkType({ image_type: undefined, artwork_type: a.artwork_type })).toBe(a.image_type);
+      expect(artworkType({ image_type: undefined, artwork_type: a.artwork_type })).toBe(a.image_type ?? null);
   });
 
   test("popularitySnapshot() returns ranked rows with their calculation time; IGDB keeps no history", async () => {
@@ -549,22 +549,29 @@ describe.skipIf(!clientId || !clientSecret)("real IGDB API", () => {
       switchSince2021,
       cancelledOnly,
       withCancelled,
+      cancelledListed,
+      fullOrNone,
       platforms,
     ] = await Promise.all([
       ids(witcher.where((g) => g.developedBy(908))),
       ids(witcher.where((g) => g.developedBy(50))), // WB Games only published it
       ids(witcher.where((g) => g.publishedBy(50))),
+      ids(witcher.where((g) => g.releasedIn({ platforms: Platform.NintendoSwitch, to: "2020-01-01" }))),
+      ids(witcher.where((g) => g.releasedIn({ platforms: Platform.NintendoSwitch, from: "2021-01-01" }))),
+      // 214992: every release date is Cancelled, yet its platforms still list Xbox Series X|S.
+      ids(witcher.where((g) => g.releasedIn({ platforms: Platform.XboxSeriesXS }))),
+      // Deprecated names, still accepted.
+      ids(witcher.where((g) => g.releasedIn({ platform: Platform.XboxSeriesXS, includeCancelled: true }))),
       ids(
-        witcher.where((g) => g.releasedIn({ platform: Platform.NintendoSwitch, to: new Date("2020-01-01") })),
+        witcher.where((g) =>
+          g.releasedIn({ platforms: Platform.XboxSeriesXS, statuses: [ReleaseDateStatus.Cancelled] }),
+        ),
       ),
       ids(
         witcher.where((g) =>
-          g.releasedIn({ platform: Platform.NintendoSwitch, from: new Date("2021-01-01") }),
+          g.releasedIn({ platforms: Platform.XboxSeriesXS, statuses: [ReleaseDateStatus.FullRelease, null] }),
         ),
       ),
-      // 214992: every release date is Cancelled, yet its platforms still list Xbox Series X|S.
-      ids(witcher.where((g) => g.releasedIn({ platform: Platform.XboxSeriesXS }))),
-      ids(witcher.where((g) => g.releasedIn({ platform: Platform.XboxSeriesXS, includeCancelled: true }))),
       ids(witcher.where((g) => g.platforms.any(Platform.XboxSeriesXS))),
     ]);
     expect(byCdpr).toEqual([1942]);
@@ -574,6 +581,8 @@ describe.skipIf(!clientId || !clientSecret)("real IGDB API", () => {
     expect(switchSince2021).toEqual([1942]);
     expect(cancelledOnly).toEqual([1942]);
     expect(withCancelled.sort()).toEqual([1942, 214992]);
+    expect(cancelledListed).toEqual([214992]);
+    expect(fullOrNone).toEqual([1942]);
     expect(platforms.sort()).toEqual([1942, 214992]);
   });
 
@@ -652,10 +661,15 @@ describe.skipIf(!clientId || !clientSecret)("real IGDB API", () => {
     });
     if (!witcher || !hades || !erdtree) throw new Error("game not found");
 
-    expect(releaseDate(witcher)?.date?.getTime()).toBe((witcher.first_release_date ?? 0) * 1000);
-    expect(releaseDate(hades)).toMatchObject({ status: "full_release", year: 2020 });
-    expect(releaseDate(hades)?.date?.getTime()).toBe((hades.first_release_date ?? 0) * 1000);
-    expect(releaseDate(hades, { statuses: ["early_access"] })?.year).toBe(2018);
+    expect(releaseDate(witcher)?.start?.getTime()).toBe((witcher.first_release_date ?? 0) * 1000);
+    expect(releaseDate(hades)).toMatchObject({ status: ReleaseDateStatus.FullRelease, year: 2020 });
+    expect(releaseDate(hades)?.start?.getTime()).toBe((hades.first_release_date ?? 0) * 1000);
+    expect(releaseDate(hades, { statuses: [ReleaseDateStatus.EarlyAccess] })?.year).toBe(2018);
+    // Hades came to the Switch in Japan on its own date.
+    expect(releaseDate(hades, { locale: "ja-JP", platform: Platform.NintendoSwitch })).toMatchObject({
+      region: ReleaseDateRegion.Japan,
+      match: "exact",
+    });
 
     expect(companies(witcher).developers.map((c) => c.name)).toContain("CD Projekt RED");
     expect(companies(witcher).publishers.length).toBeGreaterThan(1);
@@ -681,8 +695,9 @@ describe.skipIf(!clientId || !clientSecret)("real IGDB API", () => {
     });
     for (const status of statuses) {
       const row = { id: 1, date: 0, date_format: 0, release_region: 8, platform: 6, status: status.id };
-      const release = releaseDate({ release_dates: [row] });
-      expect(release?.status).not.toBe("other");
+      expect(releaseDate({ release_dates: [row] })?.status).toBe(status.id);
+      // Every status has a name, and so a rank: none is "other".
+      expect(releaseDate({ release_dates: [row] }, { statuses: ["other"] })).toBeNull();
     }
     expect(formats.map((f) => f.id).sort()).toEqual(Object.values(DateFormat).sort());
     for (const category of categories) {

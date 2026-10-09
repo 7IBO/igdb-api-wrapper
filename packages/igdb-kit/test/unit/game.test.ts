@@ -1,5 +1,11 @@
 import { describe, expect, test } from "bun:test";
-import { AgeRatingOrganization, Platform, ReleaseDateRegion } from "../../src";
+import {
+  AgeRatingOrganization,
+  GameReleaseFormat,
+  Platform,
+  ReleaseDateRegion,
+  ReleaseDateStatus,
+} from "../../src";
 import {
   ageRating,
   ageRatings,
@@ -25,52 +31,61 @@ describe("releaseDate()", () => {
     const release = releaseDate(fixtures.witcher3);
     expect(release).toMatchObject({
       precision: "day",
+      start: new Date("2015-05-19T00:00:00Z"),
+      end: new Date("2015-05-20T00:00:00Z"),
       year: 2015,
+      quarter: null,
       month: 5,
       day: 19,
       human: "May 19, 2015",
-      status: "full_release",
-      statusId: 6,
+      status: ReleaseDateStatus.FullRelease,
       region: ReleaseDateRegion.Worldwide,
       match: "any_region",
     });
+    expect(release?.start?.getTime()).toBe((fixtures.witcher3.first_release_date ?? 0) * 1000);
+    // Deprecated: the stored timestamp and the status id under their old names.
     expect(release?.date).toEqual(new Date("2015-05-19T00:00:00Z"));
-    expect(release?.date?.getTime()).toBe((fixtures.witcher3.first_release_date ?? 0) * 1000);
+    expect(release?.statusId).toBe(ReleaseDateStatus.FullRelease);
   });
 
   test("full release over an earlier early access", () => {
     // Hades was in early access from December 2018; IGDB's first_release_date is the 1.0.
     expect(releaseDate(fixtures.hades)?.human).toBe("Sep 17, 2020");
     expect(fixtures.hades.first_release_date).toBe(1600300800);
-    const early = releaseDate(fixtures.hades, { statuses: ["early_access"] });
+    const early = releaseDate(fixtures.hades, { statuses: [ReleaseDateStatus.EarlyAccess] });
     expect(early).toMatchObject({
       human: "Dec 07, 2018",
-      status: "early_access",
+      status: ReleaseDateStatus.EarlyAccess,
       platform: Platform.PCMicrosoftWindows,
     });
+    // Deprecated: status names.
+    expect(releaseDate(fixtures.hades, { statuses: ["early_access"] })).toEqual(early);
   });
 
   test("full release over advanced access and over compatibility releases", () => {
-    expect(releaseDate(fixtures.advancedAccess)?.status).toBe("full_release");
-    expect(releaseDate(fixtures.advancedAccess)?.date?.getTime()).toBe(
+    expect(releaseDate(fixtures.advancedAccess)?.status).toBe(ReleaseDateStatus.FullRelease);
+    expect(releaseDate(fixtures.advancedAccess)?.start?.getTime()).toBe(
       (fixtures.advancedAccess.first_release_date ?? 0) * 1000,
     );
-    expect(releaseDate(fixtures.advancedAccess, { statuses: ["advanced_access"] })?.status).toBe(
-      "advanced_access",
-    );
+    expect(
+      releaseDate(fixtures.advancedAccess, { statuses: [ReleaseDateStatus.AdvancedAccess] })?.status,
+    ).toBe(ReleaseDateStatus.AdvancedAccess);
     const release = releaseDate(fixtures.compatibilityRelease);
-    expect(release).toMatchObject({ status: "full_release", year: 1998 });
+    expect(release).toMatchObject({ status: ReleaseDateStatus.FullRelease, year: 1998 });
   });
 
   test("early access when the game has nothing else", () => {
     expect(releaseDate(fixtures.starCitizen)).toMatchObject({
-      status: "early_access",
+      status: ReleaseDateStatus.EarlyAccess,
       human: "Aug 30, 2013",
     });
   });
 
-  test("a missing status is unknown, not excluded", () => {
-    expect(releaseDate(fixtures.gta5)).toMatchObject({ status: "unknown", statusId: undefined, year: 2013 });
+  test("a missing status is unknown (null), not excluded", () => {
+    expect(releaseDate(fixtures.gta5)).toMatchObject({ status: null, statusId: null, year: 2013 });
+    expect(releaseDate(fixtures.gta5, { statuses: [null] })?.year).toBe(2013);
+    expect(releaseDate(fixtures.gta5, { statuses: ["unknown"] })?.year).toBe(2013);
+    expect(releaseDate(fixtures.gta5, { statuses: [ReleaseDateStatus.FullRelease] })).toBeNull();
   });
 
   test("one platform", () => {
@@ -89,6 +104,26 @@ describe("releaseDate()", () => {
     });
   });
 
+  test("a locale picks the region of its country", () => {
+    const switchIn = (locale: string) =>
+      releaseDate(fixtures.hades, { platform: Platform.NintendoSwitch, locale });
+    expect(switchIn("fr-FR")).toMatchObject({ human: "Mar 18, 2021", match: "exact" });
+    expect(switchIn("de_DE")).toMatchObject({ human: "Mar 18, 2021", match: "exact" });
+    expect(switchIn("ja-JP")).toMatchObject({ human: "Jun 24, 2021", match: "exact" });
+    expect(switchIn("en-AU")).toMatchObject({ human: "Sep 17, 2020", match: "worldwide" });
+    // No country, or one IGDB has no region for: no region requested.
+    expect(switchIn("fr")).toMatchObject({ human: "Sep 17, 2020", match: "any_region" });
+    expect(switchIn("es-MX")).toMatchObject({ match: "any_region" });
+    // An explicit region wins over the locale.
+    expect(
+      releaseDate(fixtures.hades, {
+        platform: Platform.NintendoSwitch,
+        locale: "fr-FR",
+        region: ReleaseDateRegion.Japan,
+      }),
+    ).toMatchObject({ human: "Jun 24, 2021", match: "exact" });
+  });
+
   test("another region as a last resort, unless fallback is false", () => {
     // Mother 3 was only released in Japan.
     const release = releaseDate(fixtures.mother3, { region: ReleaseDateRegion.Europe });
@@ -98,27 +133,43 @@ describe("releaseDate()", () => {
 
   test("TBD and cancelled", () => {
     const release = releaseDate(fixtures.scalebound);
-    expect(release).toMatchObject({ precision: "tbd", status: "cancelled", human: "TBD" });
-    expect(release?.date).toBeUndefined();
-    expect(release?.year).toBeUndefined();
+    expect(release).toMatchObject({
+      precision: "tbd",
+      status: ReleaseDateStatus.Cancelled,
+      human: "TBD",
+      start: null,
+      end: null,
+      year: null,
+      date: null,
+    });
   });
 
   test("month, quarter and year precision", () => {
     const of = (row: (typeof releaseRows)[keyof typeof releaseRows]) => releaseDate({ release_dates: [row] });
     expect(of(releaseRows.month)).toMatchObject({
       precision: "month",
+      start: new Date("2026-10-01T00:00:00Z"),
+      end: new Date("2026-11-01T00:00:00Z"),
       year: 2026,
       month: 10,
-      day: undefined,
+      day: null,
     });
     expect(of(releaseRows.q4)).toMatchObject({
       precision: "quarter",
+      start: new Date("2026-10-01T00:00:00Z"),
+      end: new Date("2027-01-01T00:00:00Z"),
       year: 2026,
       quarter: 4,
-      month: undefined,
+      month: null,
     });
     expect(of(releaseRows.q1)).toMatchObject({ precision: "quarter", year: 2027, quarter: 1 });
-    expect(of(releaseRows.year)).toMatchObject({ precision: "year", year: 2027, month: undefined });
+    expect(of(releaseRows.year)).toMatchObject({
+      precision: "year",
+      start: new Date("2027-01-01T00:00:00Z"),
+      end: new Date("2028-01-01T00:00:00Z"),
+      year: 2027,
+      month: null,
+    });
     expect(of(releaseRows.year)?.date).toEqual(new Date("2027-12-31T00:00:00Z"));
     expect(of(releaseRows.oldYear)).toMatchObject({ precision: "year", year: 1993 });
     expect(of(releaseRows.before1970)).toMatchObject({ precision: "year", year: 1947 });
@@ -163,7 +214,7 @@ describe("releaseDate()", () => {
       platform: { id: 6, name: "PC" },
       status: { id: 6, name: "Full Release" },
     };
-    expect(releaseDate({ release_dates: [row] })).toMatchObject({ platform: 6, statusId: 6, row });
+    expect(releaseDate({ release_dates: [row] })).toMatchObject({ platform: 6, status: 6, row });
   });
 
   test("releasesByPlatform() picks one per platform, earliest first", () => {
@@ -255,12 +306,12 @@ describe("storeLinks()", () => {
       {
         store: "amazon",
         url: "https://amazon.co.jp/dp/B00T3SPV36",
-        trusted: undefined,
+        trusted: null,
         source: "external_game",
         built: true,
         platform: Platform.PlayStation4,
         countries: [392],
-        format: "physical",
+        format: GameReleaseFormat.Physical,
       },
       expect.objectContaining({ url: "https://amazon.com/dp/B00WTI2HV6", platform: Platform.XboxOne }),
       expect.objectContaining({
@@ -313,7 +364,7 @@ describe("storeLinks()", () => {
     // The store comes from the address: an Xbox link typed as Epic is an Xbox link.
     expect(links.map((l) => [l.store, l.trusted])).toEqual([
       ["xbox", false],
-      ["utomik", undefined],
+      ["utomik", null],
     ]);
   });
 
@@ -329,8 +380,8 @@ describe("storeLinks()", () => {
     expect(storeOf("https://store.steampowered.com/app/292030")).toBe("steam");
     expect(storeOf("https://psytronik.itch.io/im3-c64")).toBe("itch");
     expect(storeOf("https://www.nintendo.co.jp/n08/a3uj/index.html")).toBe("nintendo");
-    expect(storeOf("https://www.thewitcher.com")).toBeUndefined();
-    expect(storeOf("not a url")).toBeUndefined();
+    expect(storeOf("https://www.thewitcher.com")).toBeNull();
+    expect(storeOf("not a url")).toBeNull();
   });
 });
 
@@ -359,7 +410,7 @@ describe("ageRating()", () => {
     expect(ageRating(fixtures.gta6, [AgeRatingOrganization.PEGI, AgeRatingOrganization.ESRB])).toMatchObject({
       organization: AgeRatingOrganization.ESRB,
       label: "RP",
-      minimumAge: undefined, // rating pending
+      minimumAge: null, // rating pending
     });
     expect(ageRating(fixtures.gta6, AgeRatingOrganization.PEGI)).toBeNull();
     expect(ageRating(fixtures.mayaTheBee, AgeRatingOrganization.PEGI)).toBeNull();
@@ -385,8 +436,9 @@ describe("ageRating()", () => {
     expect(ageRating(game, 2)).toMatchObject({
       category: 99,
       label: "New",
-      minimumAge: undefined,
+      minimumAge: null,
       descriptors: [],
+      synopsis: null,
     });
   });
 });
@@ -450,6 +502,7 @@ describe("localizedName()", () => {
       id: 48892,
       region: { id: 4, identifier: "EU" },
     });
+    expect(localization(fixtures.witcher3, "en-US")).toBeNull();
   });
 
   test("regions given as ids", () => {
@@ -484,8 +537,8 @@ describe("languages()", () => {
     expect(languages(fixtures.mother3)).toEqual([
       {
         language: { id: 16, native_name: "日本語", locale: "ja-JP" },
-        audio: undefined,
-        subtitles: undefined,
+        audio: null,
+        subtitles: null,
         interface: true,
       },
     ]);
@@ -497,14 +550,18 @@ describe("timeToBeat() and formatPlaytime()", () => {
   test("picks normally, then hastily, then completely", () => {
     expect(timeToBeat(timeToBeatRows.witcher3)).toEqual({ seconds: 254778, kind: "normally", count: 41 });
     expect(timeToBeat(timeToBeatRows.hastilyOnly)).toEqual({ seconds: 154920, kind: "hastily", count: 1 });
+    expect(timeToBeat(timeToBeatRows.witcher3, { prefer: ["completely"] })?.seconds).toBe(581483);
+    // Deprecated: the kinds as the second argument.
     expect(timeToBeat(timeToBeatRows.witcher3, ["completely"])?.seconds).toBe(581483);
+    const row = { hastily: undefined, normally: 3600, completely: undefined, count: undefined };
+    expect(timeToBeat(row)).toEqual({ seconds: 3600, kind: "normally", count: null });
     expect(timeToBeat(timeToBeatRows.empty)).toBeNull();
     expect(timeToBeat(null)).toBeNull();
     expect(timeToBeat(undefined)).toBeNull();
   });
 
   test("keeps IGDB's averages as they are", () => {
-    expect(timeToBeat(timeToBeatRows.fortnite, ["hastily"])?.seconds).toBeGreaterThan(
+    expect(timeToBeat(timeToBeatRows.fortnite, { prefer: ["hastily"] })?.seconds).toBeGreaterThan(
       timeToBeat(timeToBeatRows.fortnite)?.seconds ?? 0,
     );
   });
@@ -517,8 +574,8 @@ describe("timeToBeat() and formatPlaytime()", () => {
     expect(formatPlaytime(3590, { locale: "en-US" })).toBe("1 hr");
     expect(formatPlaytime(254778, { locale: "en-US", unitDisplay: "long" })).toBe("71 hours");
     expect(formatPlaytime(254778, { locale: "fr-FR" })).toMatch(/^71\sh$/); // narrow no-break space
-    expect(formatPlaytime(undefined)).toBeUndefined();
-    expect(formatPlaytime(0)).toBeUndefined();
+    expect(formatPlaytime(undefined)).toBeNull();
+    expect(formatPlaytime(0)).toBeNull();
   });
 });
 
@@ -527,25 +584,25 @@ describe("multiplayer()", () => {
     expect(multiplayer(fixtures.watchDogs)).toEqual([
       {
         platform: Platform.PCMicrosoftWindows,
-        onlineMax: undefined,
+        onlineMax: null,
         onlineCoop: true,
         onlineCoopMax: 2,
-        offlineMax: undefined,
+        offlineMax: null,
         offlineCoop: false,
-        offlineCoopMax: undefined,
+        offlineCoopMax: null,
         lanCoop: false,
         splitscreen: false,
         dropIn: true,
         campaignCoop: false,
       },
-      expect.objectContaining({ platform: Platform.XboxOne, onlineMax: 8, onlineCoopMax: undefined }),
-      expect.objectContaining({ platform: undefined, onlineMax: undefined, onlineCoop: false }),
+      expect.objectContaining({ platform: Platform.XboxOne, onlineMax: 8, onlineCoopMax: null }),
+      expect.objectContaining({ platform: null, onlineMax: null, onlineCoop: false }),
     ]);
   });
 
   test("one platform, else the row for every platform", () => {
     expect(multiplayer(fixtures.watchDogs, Platform.XboxOne)?.onlineMax).toBe(8);
-    expect(multiplayer(fixtures.watchDogs, Platform.PlayStation4)?.platform).toBeUndefined();
+    expect(multiplayer(fixtures.watchDogs, Platform.PlayStation4)?.platform).toBeNull();
     expect(multiplayer(fixtures.pong, Platform.PCMicrosoftWindows)).toMatchObject({ offlineMax: 2 });
     expect(multiplayer(fixtures.witcher3, Platform.PCMicrosoftWindows)).toBeNull();
     expect(multiplayer(fixtures.witcher3)).toEqual([]);
@@ -567,7 +624,7 @@ describe("parentGame()", () => {
     expect(parentGame(fixtures.shadowOfTheErdtree)).toEqual({
       relation: "expansion",
       game: { id: 119133, name: "Elden Ring" },
-      title: undefined,
+      title: null,
     });
     expect(parentGame(fixtures.persona5Royal)?.relation).toBe("expanded_game");
     expect(parentGame(fixtures.scalebound)?.relation).toBe("remake");

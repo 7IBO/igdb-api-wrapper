@@ -15,6 +15,7 @@ export {
   type Playtime,
   type PlaytimeKind,
   type TimeToBeatFields,
+  type TimeToBeatOptions,
   timeToBeat,
 } from "./playtime";
 export {
@@ -27,6 +28,7 @@ export {
   type GameRelease,
   type ReleaseDateFields,
   type ReleaseDateOptions,
+  type ReleaseDetails,
   type ReleaseMatch,
   type ReleasePrecision,
   type ReleaseStatus,

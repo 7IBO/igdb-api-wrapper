@@ -3,6 +3,7 @@ import {
   type AgeRatingCategory,
   and,
   artworkType,
+  type CalendarRelease,
   createIGDB,
   defineSelection,
   ExternalGameSource,
@@ -200,12 +201,17 @@ igdb.games.where((g) => g.developedBy("CD Projekt RED", "Square Enix"));
 igdb.games.where((g) => g.developedBy(908, "Square Enix"));
 igdb.games.where((g) =>
   g.releasedIn({
-    platform: Platform.PlayStation5,
-    region: ReleaseDateRegion.Europe,
+    platforms: Platform.PlayStation5,
+    regions: [ReleaseDateRegion.Europe, ReleaseDateRegion.Japan],
+    statuses: [ReleaseDateStatus.FullRelease, null],
     from: new Date(),
-    to: 1_900_000_000,
+    to: "2030-01-01",
   }),
 );
+// The deprecated names still compile.
+igdb.games.where((g) => g.releasedIn({ platform: 6, region: 1, worldwide: false, includeCancelled: true }));
+// @ts-expect-error statuses are ids
+igdb.games.where((g) => g.releasedIn({ statuses: ["full_release"] }));
 // @ts-expect-error only on games
 igdb.platforms.where((p) => p.developedBy(1));
 // @ts-expect-error not on nested relations
@@ -330,6 +336,8 @@ expectType<
 >();
 expectType<Equal<(typeof calendar)[number]["release"]["start"], Date | null>>();
 expectType<Equal<(typeof calendar)[number]["release"]["status"], number | null>>();
+expectType<Equal<(typeof calendar)[number]["release"]["month"], number | null>>();
+igdb.games.releases({ from: 1_790_000_000, to: "2026-11-01", platforms: 6, regions: 1, statuses: 6 });
 // @ts-expect-error not a precision
 igdb.games.releases({ from: "2026-10-01", to: "2026-11-01", precision: ["week"] });
 // @ts-expect-error a window is required
@@ -456,7 +464,9 @@ import {
   multiplayer,
   parentGame,
   releaseDate,
+  type Store,
   storeLinks,
+  type storeOf,
   timeToBeat,
 } from "../../src/game";
 
@@ -484,7 +494,19 @@ const page = await igdb.games
   )
   .findByIdOrThrow(1942);
 const release = releaseDate(page, { region: 1 });
-if (release) expectType<Equal<typeof release.row.human, string | undefined>>();
+if (release) {
+  expectType<Equal<typeof release.row.human, string | undefined>>();
+  expectType<Equal<typeof release.status, number | null>>();
+  expectType<Equal<typeof release.start, Date | null>>();
+  // A calendar release and releaseDate() share their fields.
+  expectType<
+    Equal<Omit<CalendarRelease, "id">, Omit<typeof release, "match" | "row" | "date" | "statusId">>
+  >();
+}
+releaseDate(page, { locale: "fr-FR", statuses: [ReleaseDateStatus.FullRelease, null] });
+// @ts-expect-error not a status
+releaseDate(page, { statuses: ["released"] });
+expectType<Equal<ReturnType<typeof storeOf>, Store | null>>();
 expectType<Equal<ReturnType<typeof companies<typeof page>>["developers"], { id: number; name?: string }[]>>();
 storeLinks(page);
 ageRating(page, 2);
@@ -524,6 +546,9 @@ multiplayer(await igdb.games.select("multiplayer_modes").findByIdOrThrow(1));
 
 const ttb = await igdb.game_time_to_beats.select("hastily", "normally", "completely", "count").first();
 timeToBeat(ttb);
+timeToBeat(ttb, { prefer: ["hastily"] });
+// @ts-expect-error not a kind
+timeToBeat(ttb, { prefer: ["quickly"] });
 // @ts-expect-error count is not selected
 timeToBeat(await igdb.game_time_to_beats.select("hastily", "normally", "completely").first());
 
@@ -531,7 +556,7 @@ timeToBeat(await igdb.game_time_to_beats.select("hastily", "normally", "complete
 const artworks = await igdb.artworks
   .select("image_id", "image_type", "artwork_type.name")
   .where((a) => a.game.eq(1942));
-expectType<Equal<ReturnType<typeof artworkType>, number | undefined>>();
+expectType<Equal<ReturnType<typeof artworkType>, number | null>>();
 for (const artwork of artworks) artworkType(artwork);
 // @ts-expect-error artwork_type is not selected
 artworkType(await igdb.artworks.select("image_type").findByIdOrThrow(1));
