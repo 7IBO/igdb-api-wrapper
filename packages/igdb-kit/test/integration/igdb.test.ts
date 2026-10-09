@@ -4,6 +4,7 @@ import { describe, expect, test } from "bun:test";
 import {
   and,
   createIGDB,
+  ExternalGameSource,
   GameType,
   Platform,
   PopularityType,
@@ -140,6 +141,15 @@ describe.skipIf(!clientId || !clientSecret)("real IGDB API", () => {
     );
     const values = top.map((t) => t.value);
     expect(values).toEqual([...values].sort((a, b) => b - a));
+  });
+
+  test("findByExternalIds() finds games by Steam app id", async () => {
+    const games = await igdb.games
+      .select("name")
+      .findByExternalIds(ExternalGameSource.Steam, ["292030", 570, "not-a-steam-id"]);
+    expect(games.get("292030")?.name).toBe("The Witcher 3: Wild Hunt");
+    expect(games.get("570")?.id).toBe(2963);
+    expect(games.has("not-a-steam-id")).toBe(false);
   });
 
   test("sync reads every entity once, in id order", async () => {

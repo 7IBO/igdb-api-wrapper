@@ -126,6 +126,20 @@ for await (const game of igdb.games.select("name").iterate()) {
 await igdb.games.select("name").search("zelda").limit(5); // searchable endpoints only, no sort
 ```
 
+### Store ids
+
+`findByExternalIds()` finds games from their id on Steam, GOG, Epic, Xbox, PlayStation Store… (`ExternalGameSource`), for example to match a Steam library:
+
+```ts
+import { ExternalGameSource } from "igdb-kit";
+
+const games = await igdb.games
+  .select("name", "cover.image_id")
+  .findByExternalIds(ExternalGameSource.Steam, ["292030", "570"]); // Map<string, game>
+```
+
+Store ids are strings in IGDB; numbers are accepted. Unknown ids are missing from the map.
+
 ### Popularity
 
 `popular()` ranks games by one of IGDB's PopScore metrics and returns them in that order with their score. The query's fields and filters apply to the games:

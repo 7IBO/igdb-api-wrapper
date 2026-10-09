@@ -1,5 +1,5 @@
 // Compile-time tests: `tsc -p test/types` fails if an inferred type drifts.
-import { createIGDB, GameType, Platform, PopularityType } from "../../src";
+import { createIGDB, ExternalGameSource, GameType, Platform, PopularityType } from "../../src";
 import { type Equal, expectType } from "./helpers";
 
 const igdb = createIGDB({ clientId: "x", clientSecret: "y" });
@@ -168,6 +168,12 @@ const popular = await igdb.games.select("name").popular(PopularityType.IGDBPlayi
 expectType<Equal<typeof popular, { game: { id: number; name?: string }; value: number }[]>>();
 // @ts-expect-error only on games
 igdb.platforms.popular(PopularityType.IGDBPlaying);
+
+// findByExternalIds() maps store ids to games with the selection; only on games.
+const bySteamId = await igdb.games.select("name").findByExternalIds(ExternalGameSource.Steam, ["292030"]);
+expectType<Equal<typeof bySteamId, Map<string, { id: number; name?: string }>>>();
+// @ts-expect-error only on games
+igdb.platforms.findByExternalIds(ExternalGameSource.Steam, ["1"]);
 
 // Webhook deliveries narrow by endpoint and operation.
 import { webhookHandler } from "../../src/webhooks";
