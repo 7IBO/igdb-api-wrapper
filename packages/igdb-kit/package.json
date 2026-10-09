@@ -30,6 +30,16 @@
         "default": "./dist/index.cjs"
       }
     },
+    "./redis": {
+      "import": {
+        "types": "./dist/redis.d.ts",
+        "default": "./dist/redis.js"
+      },
+      "require": {
+        "types": "./dist/redis.d.cts",
+        "default": "./dist/redis.cjs"
+      }
+    },
     "./webhooks": {
       "import": {
         "types": "./dist/webhooks.d.ts",
@@ -56,12 +66,15 @@
     "typecheck": "tsc --noEmit",
     "test": "bun test test/unit",
     "test:integration": "bun test test/integration",
+    "test:redis": "bun test test/redis",
     "test:types": "tsc --noEmit -p test/types",
     "bench:types": "bun scripts/bench-types.ts",
     "lint:package": "publint && rm -rf .pack && bun pm pack --quiet --destination .pack && attw .pack/*.tgz --profile node16",
     "prepublishOnly": "bun run build"
   },
   "devDependencies": {
+    "ioredis": "6.0.0",
+    "redis": "6.3.0",
     "tsdown": "0.23.0"
   },
   "repository": {

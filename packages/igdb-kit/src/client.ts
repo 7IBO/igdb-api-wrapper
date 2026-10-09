@@ -1,4 +1,5 @@
 import { Batcher, type BatcherOptions } from "./batch/batcher";
+import { type CacheStore, cacheKey, memoryCache, parseResponse, serializeResponse } from "./cache";
 import { TokenProvider, type TokenStore } from "./core/auth";
 import { IGDBError } from "./core/errors";
 import { type Limiter, type LocalLimiterOptions, sharedLimiter } from "./core/limiter";
@@ -35,6 +36,13 @@ export interface IGDBClientOptions extends BatcherOptions {
   fetch?: typeof fetch | undefined;
   baseUrl?: string | undefined;
   hooks?: (TransportHooks & { onTokenRefresh?: (info: { expiresAt: number }) => void }) | undefined;
+  /**
+   * Where `cache()`d responses are kept. Default: in memory, per client. Use `redisCache()` from
+   * `igdb-kit/redis` to share them across processes. Cache errors never fail a query.
+   */
+  cache?: CacheStore | undefined;
+  /** Cache every query for this long unless it calls `cache(false)`. Default: only `cache()`d queries. */
+  cacheTtlMs?: number | undefined;
   /** Allow running in a browser. Your client secret would be exposed: only use behind a proxy. */
   dangerouslyAllowBrowser?: boolean | undefined;
 }
@@ -88,9 +96,20 @@ export function createIGDB(options: IGDBClientOptions): IGDBClient {
     hooks: options.hooks,
   });
   const batcher = new Batcher((path, body, sendOptions) => transport.send(path, body, sendOptions), options);
+  let cache = options.cache;
   const runner: QueryRunner = {
-    run: (request: QueryRequest, runOptions?: ExecuteOptions): Promise<RawResponse> =>
-      batcher.run(request, runOptions),
+    run: async (request: QueryRequest, runOptions?: ExecuteOptions): Promise<RawResponse> => {
+      const ttlMs = request.cacheTtlMs ?? options.cacheTtlMs ?? 0;
+      if (ttlMs <= 0) return batcher.run(request, runOptions);
+      cache ??= memoryCache();
+      const store = cache;
+      const key = await cacheKey(request.path, request.body);
+      const hit = await store.get(key).catch(() => undefined);
+      if (hit) return parseResponse(hit);
+      const response = await batcher.run(request, runOptions);
+      await store.set(key, serializeResponse(response), ttlMs).catch(() => {});
+      return response;
+    },
   };
 
   const client: Record<string, unknown> = {
