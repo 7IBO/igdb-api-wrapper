@@ -9,6 +9,16 @@
 
 type Scalar = string | number | boolean;
 
+declare const timestampFields: unique symbol;
+/**
+ * @internal Hidden key on generated entities listing their Unix-timestamp fields, so `where` can
+ * accept a `Date` for them. A symbol keeps it out of field paths and results.
+ */
+export declare const timestampKey: typeof timestampFields;
+
+/** Names of the fields of `E` that hold a Unix timestamp in seconds. */
+export type TimestampKeys<E> = E extends { readonly [timestampKey]?: infer K } ? K : never;
+
 export type Unarray<T> = T extends readonly (infer U)[] ? U : T;
 
 /** Keys of `E` that are relations to another entity. */
@@ -47,7 +57,7 @@ export type ScalarPath<E, P extends string> = P extends `${infer Head}.${infer R
 type ScalarPathSuggestions<E> = ScalarKeys<E> | `${RelationKeys<E>}.${string}`;
 
 type TopLevelKeys<E, P extends string> = "*" extends P
-  ? keyof E
+  ? keyof E & string
   : (P extends `${infer Head}.${string}` ? Head : P) & keyof E;
 
 type SubPaths<P extends string, K extends string> = P extends `${K}.${infer Rest}` ? Rest : never;

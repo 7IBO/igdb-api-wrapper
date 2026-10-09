@@ -115,6 +115,14 @@ igdb.games.where((g) => g.platforms.any(6, 48));
 igdb.games.where((g) => g.platforms.name.eq("PC"));
 igdb.games.where((g) => g.cover.image_id.eq("abc"));
 igdb.games.where((g) => g.game_type.eq(GameType.MainGame).and(g.platforms.any(Platform.PlayStation5)));
+// Timestamp fields accept a Date, at any depth; other numbers do not.
+igdb.games.where((g) => g.first_release_date.gte(new Date()));
+igdb.games.where((g) => g.release_dates.date.lt(new Date(2030, 0, 1)));
+igdb.games.where((g) => g.first_release_date.gte(1_700_000_000));
+// @ts-expect-error rating is not a timestamp
+igdb.games.where((g) => g.rating.gte(new Date()));
+// The hidden timestamp key never shows in results.
+expectType<Equal<Extract<keyof NonNullable<typeof q4>, symbol>, never>>();
 // @ts-expect-error string compared to a number
 igdb.games.where((g) => g.rating.gte("80"));
 // @ts-expect-error gt does not exist on strings

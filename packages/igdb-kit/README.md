@@ -94,6 +94,18 @@ igdb.games.where((g) =>
 );
 ```
 
+IGDB timestamps (`first_release_date`, `release_dates.date`, `updated_at`…) are Unix seconds, not milliseconds. Timestamp fields accept a `Date` in `where`, and `toDate()` / `toUnix()` convert the other way:
+
+```ts
+import { toDate } from "igdb-kit";
+
+const upcoming = await igdb.release_dates
+  .select("date", "human", "game.name")
+  .where((r) => r.date.gte(new Date()))                               // date >= 1791504000
+  .sort("date", "asc");
+toDate(upcoming[0].date!);                                            // a Date
+```
+
 `GameType`, `GameStatus`, `GameReleaseFormat`, `Genre`, `Theme`, `GameMode`, `PlayerPerspective`, `Platform`, `PlatformType`, `ExternalGameSource`, `PopularityType`, `ReleaseDateRegion`, `DateFormat`, `WebsiteType`, `AgeRatingOrganization`, `LanguageSupportType`, `CharacterGender` and `CharacterSpecie` are generated from the API.
 
 IGDB replaced several fields with reference tables: `games.category` became `game_type`, `release_dates.region` became `release_region`, `external_games.category` became `external_game_source`, and so on. IGDB still accepts the old names but leaves them empty or no longer updates them, so `where category = 0` silently matches nothing. igdb-kit leaves them out of the types and throws a `QueryError` that names the replacement.
