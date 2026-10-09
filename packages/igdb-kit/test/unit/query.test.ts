@@ -206,6 +206,69 @@ describe("game filters", () => {
     expect(() => w((g) => g.supportsLanguage(12, "voice"))).toThrow(/audio, subtitles or interface/);
   });
 
+  test("mainGames: full games, without editions, adult games or cancelled ones", () => {
+    expect(w((g) => g.mainGames())).toBe(
+      "where game_type = (0,2,4,8,9,10,11) & version_parent = null & themes != (42) & game_status != (5,6,7);",
+    );
+    expect(
+      w((g) =>
+        and(
+          g.mainGames({
+            includeUndated: false,
+            includeAdult: true,
+            includeEditions: true,
+            requireCover: true,
+          }),
+          g.rating.gt(80),
+        ),
+      ),
+    ).toBe(
+      "where (game_type = (0,2,4,8,9,10,11) & game_status != (5,6,7) & first_release_date != null & cover != null) & rating > 80;",
+    );
+  });
+
+  test("playableTogether: players, mode, co-op and platforms on one multiplayer_modes row", () => {
+    const m = "multiplayer_modes.";
+    expect(w((g) => g.playableTogether())).toBe(
+      `where (${m}offlinemax >= 2 | ${m}offlinecoop = true | ${m}offlinecoopmax >= 2 | ` +
+        `${m}onlinemax >= 2 | ${m}onlinecoop = true | ${m}onlinecoopmax >= 2);`,
+    );
+    expect(
+      w((g) => g.playableTogether({ platform: Platform.NintendoSwitch, players: 4, mode: "local" })),
+    ).toBe(
+      `where (${m}platform = (130) | ${m}platform = null) & (${m}offlinemax >= 4 | ${m}offlinecoopmax >= 4);`,
+    );
+    expect(w((g) => g.playableTogether({ coop: true, mode: "online", platform: [6, 48] }))).toBe(
+      `where (${m}platform = (6,48) | ${m}platform = null) & (${m}onlinecoop = true | ${m}onlinecoopmax >= 2);`,
+    );
+    expect(w((g) => g.playableTogether({ coop: true, players: 3, mode: "local" }))).toBe(
+      `where ${m}offlinecoopmax >= 3;`,
+    );
+    expect(() => w((g) => g.playableTogether({ players: 0 }))).toThrow(/positive integer/);
+    // @ts-expect-error not a mode
+    expect(() => w((g) => g.playableTogether({ mode: "lan" }))).toThrow(/local or online/);
+    expect(() => w((g) => g.playableTogether({ platform: [] }))).toThrow(/at least one value/);
+  });
+
+  test("eq on text ignores case with caseSensitive: false", () => {
+    expect(w((g) => g.name.eq("zelda", { caseSensitive: false }))).toBe('where name ~ "zelda";');
+    expect(w((g) => g.name.eq("Zelda", { caseSensitive: true }))).toBe('where name = "Zelda";');
+    expect(w((g) => g.name.eq("Zelda"))).toBe('where name = "Zelda";');
+  });
+
+  test("named: the name form, which the client replaces by ids", () => {
+    expect(w((g) => g.platforms.named("PS5", "Nintendo Switch"))).toBe(
+      'where (platforms.name ~ "PS5" | platforms.name ~ "Nintendo Switch");',
+    );
+    expect(w((g) => and(g.franchise.named(" The Witcher "), g.rating.gt(80)))).toBe(
+      'where franchise.name ~ "The Witcher" & rating > 80;',
+    );
+    expect(() => w((g) => g.genres.named())).toThrow(/at least one name/);
+    expect(() => w((g) => g.genres.named(""))).toThrow(/non-empty/);
+    // @ts-expect-error release dates have no name
+    expect(() => w((g) => g.release_dates.named("x"))).toThrow(/Unknown field "release_dates.named"/);
+  });
+
   test("releasedIn: the release vocabulary of releases(), with statuses", () => {
     expect(
       w((g) =>

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { NotFoundError, or } from "../../src";
+import { and, NotFoundError, or } from "../../src";
 import { type Call, mockFetch, testClient } from "./helpers";
 
 /** Companies by lowercased name, as IGDB's `name ~ "..."` matches them. */
@@ -133,5 +133,97 @@ describe("company names in developedBy() and publishedBy()", () => {
     expect(mock.calls.map((c) => c.body)).toEqual([
       "where involved_companies.company = (908) & involved_companies.developer = true;",
     ]);
+  });
+});
+
+describe("named() on relations", () => {
+  const PLATFORMS = [
+    { id: 6, name: "PC (Microsoft Windows)", abbreviation: "PC", alternative_name: "mswin" },
+    { id: 7, name: "PlayStation", abbreviation: "PS1", alternative_name: "PSX, PSOne, PS" },
+    { id: 130, name: "Nintendo Switch", abbreviation: "Switch", alternative_name: "NX" },
+    { id: 167, name: "PlayStation 5", abbreviation: "PS5", alternative_name: "PS5" },
+  ];
+  const GENRES = [
+    { id: 12, name: "Role-playing (RPG)" },
+    { id: 11, name: "Real Time Strategy (RTS)" },
+  ];
+  const FRANCHISES: Record<string, number[]> = { "the witcher": [452] };
+
+  function namesApi() {
+    return mockFetch((call) => {
+      if (call.url.endsWith("/platforms")) return Response.json(PLATFORMS);
+      if (call.url.endsWith("/genres")) return Response.json(GENRES);
+      if (call.url.endsWith("/franchises")) {
+        const contains = /name ~ \*"(.*)"\*/.exec(call.body)?.[1];
+        if (contains !== undefined)
+          return Response.json([
+            { id: 1, name: "Witcher Fan Games", games: [1] },
+            { id: 452, name: "The Witcher", games: [1, 2, 3] },
+          ]);
+        const name = /name ~ "(.*)"/.exec(call.body)?.[1] ?? "";
+        return Response.json((FRANCHISES[name.toLowerCase()] ?? []).map((id) => ({ id })));
+      }
+      if (call.url.endsWith("/companies")) return companiesApi(call);
+      return Response.json([{ id: 1942 }]);
+    });
+  }
+
+  test("a reference table is read once and matched by name, abbreviation, alternative name and parts", async () => {
+    const mock = namesApi();
+    const igdb = testClient(mock.fetch);
+    await igdb.games.where((g) => g.platforms.named("ps5", "Nintendo Switch", "PSOne")).limit(1);
+    await igdb.games.where((g) => and(g.platforms.named("pc"), g.genres.named("RPG", "real time strategy")));
+    const tables = mock.calls.filter((c) => !/\/games$/.test(c.url));
+    expect(tables.map((c) => [c.url.split("/").pop(), c.body])).toEqual([
+      ["platforms", "fields id,name,abbreviation,alternative_name; sort id asc; limit 500;"],
+      ["genres", "fields id,name; sort id asc; limit 500;"],
+    ]);
+    expect(gameCalls(mock.calls).map((c) => c.body)).toEqual([
+      "where platforms = (7,130,167); limit 1;",
+      "where platforms = (6) & genres = (11,12);",
+    ]);
+  });
+
+  test("any other endpoint is a cached query per name; companies too, through any relation", async () => {
+    const mock = namesApi();
+    const igdb = testClient(mock.fetch);
+    await igdb.games.where((g) => or(g.franchise.named("The Witcher"), g.franchises.named("the witcher")));
+    await igdb.games.where((g) => g.involved_companies.company.named("Square Enix"));
+    // The two franchise names go out together, in one multiquery.
+    expect(mock.calls.map((c) => c.url.split("/").pop())).toEqual([
+      "multiquery",
+      "games",
+      "companies",
+      "games",
+    ]);
+    expect(mock.calls[0]?.body).toContain(
+      'query franchises "q0" { fields id; where name ~ "The Witcher"; limit 500; };',
+    );
+    expect(mock.calls[0]?.body).toContain('fields id; where name ~ "the witcher"; limit 500;');
+    expect(mock.calls[2]?.body).toBe('fields id; where name ~ "Square Enix"; limit 500;');
+    expect(gameCalls(mock.calls).map((c) => c.body)).toEqual([
+      "where franchise = (452) | franchises = (452);",
+      "where involved_companies.company = (26);",
+    ]);
+  });
+
+  test("a name that matches nothing throws with close names, before the games query", async () => {
+    const mock = namesApi();
+    const igdb = testClient(mock.fetch);
+    const error = await igdb.games
+      .where((g) => and(g.platforms.named("PlayStation 6", "Switch"), g.genres.named("Strategy")))
+      .execute()
+      .catch((e: unknown) => e);
+    expect((error as NotFoundError).message).toBe(
+      'No platform named "PlayStation 6"; No genre named "Strategy". Close names: "Real Time Strategy (RTS)"',
+    );
+    expect((error as NotFoundError).suggestions).toEqual(["Real Time Strategy (RTS)"]);
+    const franchise = await igdb.games
+      .where((g) => g.franchises.named("Witcher"))
+      .execute()
+      .catch((e: unknown) => e);
+    // The franchises with the most games first.
+    expect((franchise as NotFoundError).suggestions).toEqual(["The Witcher", "Witcher Fan Games"]);
+    expect(gameCalls(mock.calls)).toHaveLength(0);
   });
 });
