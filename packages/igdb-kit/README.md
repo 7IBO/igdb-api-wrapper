@@ -151,6 +151,7 @@ for await (const game of igdb.games.select("name").iterate()) {
   // every match, paged with an id cursor (stable and fast at any depth, unlike offset)
 }
 await igdb.games.select("name").search("zelda").limit(5); // searchable endpoints only, no sort
+await igdb.games.select("name").catch(() => []);         // a query is a promise: then, catch, finally
 ```
 
 `findByIds()`, `iterate()` and `sync()` size their pages by weight: 500 rows of a light selection, fewer of a heavy one, so that a page stays near `maxBatchBytes` (4 MB). A game with its media, companies, release dates and websites expanded weighs about 20 KB, so such pages hold about 200 games. The weight of a row starts from a cautious guess and is learned from each response. A page IGDB refuses for its size (above 10 MB, or not built within 29 seconds) is asked again in halves. `iterate({ pageSize })` caps the page at 1 to 500 rows. A query with your own `limit` is never split: lower its `limit` if IGDB answers that the response is too large.
@@ -284,9 +285,11 @@ const witcher = await gamePage.findById(1942); // 1 request: the game and its 3 
 const pages = await gamePage.findByIds(ids);
 const top = await gamePage.where((g) => g.rating.gte(90)).sort("rating", "desc").limit(20);
 const found = await gamePage.search("zelda").limit(5);
+const { data, total } = await gamePage.where((g) => g.developedBy("Nintendo")).limit(20).withCount();
+const count = await gamePage.where((g) => g.rating.gte(90)).count(); // games only, one request
 ```
 
-`findById()` and `findByIds()` send the games and the linked queries together: a game with 6 links costs one multiquery (22 KB for The Witcher 3). A list or a search needs the game ids first, so it takes one more request; a `search` is always sent alone. A key can't hide a game field, so name the link to `collection_memberships` `memberships`, not `collections`.
+Like a query, a view sends nothing before it is awaited, and neither do `findById()`, `findByIds()`, `first()` and `withCount()`: pass `signal` or `priority` to their `execute()`. `findById()` and `findByIds()` send the games and the linked queries together: a game with 6 links costs one multiquery (22 KB for The Witcher 3). A list or a search needs the game ids first, so it takes one more request; a `search` is always sent alone. A key can't hide a game field, so name the link to `collection_memberships` `memberships`, not `collections`.
 
 ### Expanding ids later
 
@@ -538,6 +541,7 @@ Requests can be marked `priority: "background"` so they wait behind `interactive
 The same rules hold across the library:
 
 - **Names.** IGDB's data keeps IGDB's names, in snake_case: endpoints, fields and the rows they return (`release_dates`, `first_release_date`). What igdb-kit adds is in camelCase: methods, options and computed objects (`findByGames()`, `includeWorldwide`, `minimumAge`). A row meant to be stored keeps IGDB's columns, such as `calculated_at` in `popularitySnapshot()`.
+- **Methods.** An endpoint only has the methods that work on it. `igdb.games` is a `GamesQuery`, with `popular()`, `weightedPopular()`, `releases()` and `findByExternalIds()`; the 24 endpoints whose rows point to games, such as `release_dates` or `characters`, are `GameLinkedQuery`s, with `findByGames()`; the others are plain `Query`s. `QueryOf<"release_dates">` names the type of an endpoint, and `select()`, `where()` and the other builder methods keep it.
 - **Placement.** A method that returns an endpoint's rows is on that endpoint, even when it reads others along the way (`igdb.games.popular()`, `igdb.release_dates.findByGames()`). The rest is on the client (`igdb.batch()`, `igdb.searchAll()`, `igdb.expand()`, `igdb.popularitySnapshot()`). Helpers that send no request are in `igdb-kit/game`, and server pieces in `igdb-kit/proxy`, `igdb-kit/redis` and `igdb-kit/webhooks`.
 - **Options.** `limit` is the number of results (10 by default, 500 at most; `popularitySnapshot()` takes it per metric), `offset` skips results, `pageSize` is the number of rows of a page read by `iterate()`, `concurrency` the pages `sync()` requests at once, and `maxRows` caps the rows read: a method that ranks (`popular()`, `weightedPopular()`, `searchAll()`) returns the best it found within it, and `releases()`, which lists everything, throws rather than return part of the list. Options that filter on ids have plural names and take one id or several (`platforms`, `regions`, `statuses`, `gameTypes`, `types`); `releaseDate()` takes one `platform` and one `region`, since they choose the date to show rather than filter. A boolean that widens a filter starts with `include` (`includeWorldwide`, `includeEditions`).
 - **Dates.** A date argument takes a `Date`, a `"YYYY-MM-DD"` or ISO string, or Unix seconds (`DateInput`), and a number in milliseconds such as `Date.now()` throws a `QueryError`. Rows keep IGDB's Unix seconds, and computed objects give `Date`s (`start` and `end` of a release).

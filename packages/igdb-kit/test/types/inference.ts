@@ -8,15 +8,20 @@ import {
   defineSelection,
   ExternalGameSource,
   type GameLinkedEndpoint,
+  type GameLinkedQuery,
+  type GamesQuery,
   GameType,
   type Language,
   MAIN_GAME_TYPES,
   Platform,
   PopularityType,
+  type Query,
+  type QueryOf,
   ReleaseDateRegion,
   ReleaseDateStatus,
   type ResultOf,
   type SearchHit,
+  type Task,
 } from "../../src";
 import type { Prettify } from "../../src/query/types";
 import { type Equal, expectType } from "./helpers";
@@ -91,6 +96,26 @@ if (q4) {
   // @ts-expect-error fields IGDB replaced are not in the types
   q4.category;
 }
+
+// Each endpoint has the query class of its methods, kept through the builder.
+expectType<Equal<typeof igdb.games, GamesQuery<{ id: number }>>>();
+expectType<Equal<typeof igdb.release_dates, GameLinkedQuery<"release_dates", { id: number }>>>();
+expectType<Equal<typeof igdb.platforms, Query<"platforms", { id: number }>>>();
+expectType<Equal<QueryOf<"characters">, GameLinkedQuery<"characters", { id: number }>>>();
+expectType<Equal<typeof q1, GamesQuery<R1>>>();
+expectType<Equal<ReturnType<typeof q1.where>, GamesQuery<R1>>>();
+igdb.games.select("name").limit(5).popular(PopularityType.IGDBVisits);
+igdb.release_dates.select("date").sort("date").findByGames([1942]);
+// @ts-expect-error popular() is only on games
+igdb.release_dates.popular(PopularityType.IGDBVisits);
+// @ts-expect-error findByGames() is only on endpoints that point to games
+igdb.platforms.select("name").findByGames([1942]);
+
+// catch() and finally() run a query like await.
+const caught = await igdb.games.select("name").catch(() => null);
+expectType<Equal<typeof caught, { id: number; name?: string }[] | null>>();
+const counted = await igdb.games.count().finally(() => {});
+expectType<Equal<typeof counted, number>>();
 
 // Terminals.
 expectType<Equal<Awaited<ReturnType<typeof q1.first>>, R1 | null>>();
@@ -417,6 +442,14 @@ expectType<Equal<Awaited<ReturnType<ReturnType<typeof gamePage.where>["limit"]>>
 expectType<Equal<ResultOf<typeof gamePage>, GamePage>>();
 gamePage.where((g) => g.rating.gte(90)).sort("rating", "desc");
 gamePage.search("zelda");
+gamePage.where((g) => g.developedBy("Nintendo"));
+const pageCount = await gamePage.where((g) => g.rating.gte(90)).count();
+expectType<Equal<typeof pageCount, number>>();
+const pageWithCount = await gamePage.limit(20).withCount();
+expectType<Equal<typeof pageWithCount, { data: GamePage[]; total: number }>>();
+expectType<Equal<ReturnType<typeof gamePage.first>, Task<GamePage | null>>>();
+const pageOrNull = await gamePage.limit(5).catch(() => null);
+expectType<Equal<typeof pageOrNull, GamePage[] | null>>();
 // @ts-expect-error unknown field in a view's select
 igdb.defineView("games", { select: ["nom"] });
 // @ts-expect-error a key that hides a game field

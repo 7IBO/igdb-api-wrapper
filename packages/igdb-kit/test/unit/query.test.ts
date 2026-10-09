@@ -4,10 +4,16 @@ import {
   ArtworkType,
   and,
   CompanySize,
+  type EndpointName,
+  endpoints,
+  GameLinkedQuery,
+  GamesQuery,
   GameType,
+  gameLink,
   Language,
   or,
   Platform,
+  Query,
   QueryError,
   Region,
   ReleaseDateRegion,
@@ -15,7 +21,7 @@ import {
   toDate,
   toUnix,
 } from "../../src";
-import { mockFetch, testClient } from "./helpers";
+import { apicalypseError, mockFetch, testClient } from "./helpers";
 
 const igdb = testClient(mockFetch(() => Response.json([])).fetch);
 
@@ -446,6 +452,48 @@ describe("terminals", () => {
     expect(seen).toEqual(all.map((g) => g.id));
     expect(mock.calls[0]?.body).toBe("fields name,id; where id > -1; sort id asc; limit 10;");
     expect(mock.calls[1]?.body).toContain("where id > 19;");
+    expect(mock.calls).toHaveLength(3);
+  });
+});
+
+describe("query classes", () => {
+  test("each endpoint has the methods that work on it, and keeps them through the builder", () => {
+    for (const endpoint of Object.keys(endpoints) as EndpointName[]) {
+      const query: unknown = igdb[endpoint];
+      expect(query).toBeInstanceOf(Query);
+      expect(query instanceof GamesQuery).toBe(endpoint === "games");
+      expect(query instanceof GameLinkedQuery).toBe(gameLink(endpoint) !== undefined);
+    }
+    const games = igdb.games
+      .select("name", "cover.*")
+      .exclude("cover.url")
+      .where((g) => g.rating.gte(80))
+      .sort("rating", "desc")
+      .limit(5)
+      .offset(5)
+      .cache(1000);
+    expect(games).toBeInstanceOf(GamesQuery);
+    expect(typeof games.popular).toBe("function");
+    const dates = igdb.release_dates.select("date").where("date > 0").limit(1);
+    expect(dates).toBeInstanceOf(GameLinkedQuery);
+    expect(typeof dates.findByGames).toBe("function");
+    expect(igdb.platforms.select("name").where("id = 6")).not.toBeInstanceOf(GameLinkedQuery);
+  });
+
+  test("catch() and finally() run the query, like await", async () => {
+    const mock = mockFetch(() => apicalypseError(400, "Syntax Error", "Expecting a STRING as input"));
+    const client = testClient(mock.fetch);
+    const error = await client.games.where("name = x").catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(QueryError);
+    let settled = 0;
+    await expect(client.games.where("name = x").finally(() => settled++)).rejects.toThrow(QueryError);
+    expect(settled).toBe(1);
+    expect(
+      await client.games
+        .where("name = x")
+        .count()
+        .catch(() => -1),
+    ).toBe(-1);
     expect(mock.calls).toHaveLength(3);
   });
 });

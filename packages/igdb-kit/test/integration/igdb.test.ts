@@ -12,6 +12,7 @@ import {
   type EndpointName,
   ExternalGameSource,
   endpoints,
+  type GameLinkedQuery,
   GameType,
   gameLink,
   MAIN_GAME_TYPES,
@@ -19,7 +20,6 @@ import {
   or,
   Platform,
   PopularityType,
-  type Query,
   QueryError,
   Region,
   ReleaseDateRegion,
@@ -718,7 +718,7 @@ describe.skipIf(!clientId || !clientSecret)("real IGDB API", () => {
     const linked = (Object.keys(endpoints) as EndpointName[]).filter((e) => gameLink(e) !== undefined);
     expect(linked.length).toBe(24);
     const maps = await Promise.all(
-      linked.map((e) => (igdb[e] as unknown as Query<"characters">).findByGames([1942])),
+      linked.map((e) => (igdb[e] as unknown as GameLinkedQuery<"characters">).findByGames([1942])),
     );
     const rows = Object.fromEntries(linked.map((e, i) => [e, maps[i]?.get(1942)?.length]));
     expect(rows.release_dates).toBeGreaterThan(0);

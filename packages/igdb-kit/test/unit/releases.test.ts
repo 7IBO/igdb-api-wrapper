@@ -280,9 +280,7 @@ describe("releases()", () => {
       igdb.games.search("zelda").releases({ from: "2026-10-01", to: "2026-11-01" }),
     ).rejects.toThrow(/search/);
     // @ts-expect-error only on games
-    await expect(igdb.platforms.releases({ from: "2026-10-01", to: "2026-11-01" })).rejects.toThrow(
-      /only on games/,
-    );
+    expect(igdb.platforms.releases).toBeUndefined();
   });
 });
 

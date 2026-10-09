@@ -161,6 +161,16 @@ export abstract class Executable<T> implements PromiseLike<T> {
     return this.execute().then(onfulfilled, onrejected);
   }
 
+  /** Runs the query, like `await`, and handles its error as `Promise.catch` does. */
+  catch<B = never>(onrejected?: ((reason: unknown) => B | PromiseLike<B>) | null): Promise<T | B> {
+    return this.execute().catch(onrejected);
+  }
+
+  /** Runs the query, like `await`, and calls `onfinally` once it settles, as `Promise.finally` does. */
+  finally(onfinally?: (() => void) | null): Promise<T> {
+    return this.execute().finally(onfinally);
+  }
+
   /**
    * The Apicalypse body this query sends. Company names (`developedBy("Nintendo")`) show as name
    * filters, which IGDB accepts; the client looks them up and sends their ids instead.
@@ -210,9 +220,10 @@ export class Query<N extends EndpointName, R = { id: number }> extends Executabl
     return endpointEntity(this.endpoint);
   }
 
-  /** @internal A copy with some of the state replaced, unvalidated. */
+  /** @internal A copy with some of the state replaced, unvalidated, of the same class. */
   with(patch: Partial<QueryState>): this {
-    return new Query(this.runner, this.endpoint, { ...this.state, ...patch }) as this;
+    const Class = this.constructor as new (runner: QueryRunner, endpoint: N, state: QueryState) => this;
+    return new Class(this.runner, this.endpoint, { ...this.state, ...patch });
   }
 
   /** This query for a lookup by ids: an `offset` would skip the rows asked for, and `sort` is moot. */
@@ -235,7 +246,9 @@ export class Query<N extends EndpointName, R = { id: number }> extends Executabl
    * sub-field of a relation expands it; otherwise a relation comes back as an id. Replaces any
    * previous selection.
    */
-  select<P extends string>(...fields: FieldPath<Endpoints[N], P>[]): Query<N, SelectResult<Endpoints[N], P>> {
+  select<P extends string>(
+    ...fields: FieldPath<Endpoints[N], P>[]
+  ): QueryOf<N, SelectResult<Endpoints[N], P>> {
     for (const field of fields) validatePath(this.entity, field, false);
     return this.with({ fields: [...new Set(fields as string[])], exclude: undefined }) as never;
   }
@@ -246,7 +259,7 @@ export class Query<N extends EndpointName, R = { id: number }> extends Executabl
    * relation is expanded); `id` is always returned, and an expanded relation is dropped from `select`
    * instead. Call it after `select`, which resets it.
    */
-  exclude<P extends string>(...fields: ExcludePath<R, P>[]): Query<N, ExcludeResult<R, P>> {
+  exclude<P extends string>(...fields: ExcludePath<R, P>[]): QueryOf<N, ExcludeResult<R, P>> {
     for (const field of fields) this.validateExclude(field);
     return this.with({
       exclude: [...new Set([...(this.state.exclude ?? []), ...(fields as string[])])],
@@ -404,270 +417,6 @@ export class Query<N extends EndpointName, R = { id: number }> extends Executabl
    */
   withCount(): WithCount<R> {
     return new WithCount(this.runner, this.toRequest());
-  }
-
-  /**
-   * The games behind store ids, such as Steam app ids: `findByExternalIds(ExternalGameSource.Steam,
-   * ["292030"])`. Returns a map from each found id to its game, with the selected fields; ids IGDB
-   * does not know, or whose game this query's `where` excludes, are missing. Only on `games`.
-   */
-  async findByExternalIds(
-    ...[source, uids, options]: N extends "games"
-      ? [source: number, uids: readonly (string | number)[], options?: ExecuteOptions]
-      : [notGames: "findByExternalIds() is only on games"]
-  ): Promise<Map<string, R>> {
-    if (this.endpoint !== "games") throw new QueryError("findByExternalIds() is only on games");
-    const unique = [...new Set((uids as readonly (string | number)[]).map(String))];
-    // One uid can have several rows (per platform or edition), so ask for fewer uids than rows.
-    const chunkSize = 100;
-    const rows = new Query<EndpointName, { uid?: string; game?: number }>(this.runner, "external_games", {
-      fields: ["uid", "game"],
-    });
-    const gameOf = new Map<string, number>();
-    await Promise.all(
-      Array.from({ length: Math.ceil(unique.length / chunkSize) }, async (_, i) => {
-        const chunk = unique.slice(i * chunkSize, (i + 1) * chunkSize);
-        const filter = rows.where(
-          `external_game_source = ${toId(source as number)} & uid = (${chunk.map((uid) => JSON.stringify(uid)).join(",")})`,
-        );
-        for await (const row of filter.iterate({ ...options, pageSize: MAX_LIMIT })) {
-          if (row.uid !== undefined && row.game !== undefined && !gameOf.has(row.uid))
-            gameOf.set(row.uid, row.game);
-        }
-      }),
-    );
-    const games = await this.findByIds([...gameOf.values()], options);
-    const byId = new Map(games.map((game) => [(game as { id: number }).id, game]));
-    const result = new Map<string, R>();
-    for (const uid of unique) {
-      const game = byId.get(gameOf.get(uid) ?? -1);
-      if (game !== undefined) result.set(uid, game);
-    }
-    return result;
-  }
-
-  /**
-   * The rows linked to each of these games, as a map from game id to rows: `game_time_to_beats`,
-   * `release_dates`, `websites`… through their `game` (or `game_id`) field, and `characters`,
-   * `events`, `collections`, `franchises` through their `games` array. The fields and `where` of this
-   * query apply; `sort` and `limit` apply to each game's rows, and every row comes back, not just 10.
-   *
-   * Every requested id is in the map, with an empty array when nothing points to it (most games have
-   * no time to beat). A row linked to several of the games is under each of them. Ids are split by
-   * 500 and pages of 500 rows are read until the end, sent together so batching packs them.
-   */
-  findByGames(
-    ...[gameIds, options]: N extends GameLinkedEndpoint
-      ? [gameIds: readonly number[], options?: ExecuteOptions]
-      : [notLinked: "findByGames() is only on endpoints that point to games"]
-  ): Promise<Map<number, R[]>> {
-    return findByGames<R>(this as never, gameIds as readonly number[], options);
-  }
-
-  /** @deprecated Renamed `findByGames()`, like `findById()` and `findByIds()`; same arguments. */
-  byGame(
-    ...[gameIds, options]: N extends GameLinkedEndpoint
-      ? [gameIds: readonly number[], options?: ExecuteOptions]
-      : [notLinked: "findByGames() is only on endpoints that point to games"]
-  ): Promise<Map<number, R[]>> {
-    return findByGames<R>(this as never, gameIds as readonly number[], options);
-  }
-
-  /**
-   * The most popular games for one PopScore metric (`PopularityType.IGDBPlaying`,
-   * `PopularityType.Steam24hrPeakPlayers`…), most popular first, each with its score. The selected
-   * fields and the `where` of this query apply to the games, and its `limit` (default 10) and
-   * `offset` pick the page of the ranking; `sort` throws. Popularity rows are read 500 at a time until
-   * enough games match, or `maxRows` rows were read. The games a `where` matches are counted along with
-   * the first page: if it is not enough and they are at most 10,000, their own rows are read instead,
-   * which is exact and takes a few requests. Only on `games`.
-   */
-  async popular(
-    ...[type, options = {}]: N extends "games"
-      ? [type: number, options?: PopularOptions]
-      : [notGames: "popular() is only on games"]
-  ): Promise<{ game: R; value: number }[]> {
-    if (this.endpoint !== "games") throw new QueryError("popular() is only on games");
-    if (this.state.search) throw new QueryError("popular() cannot be combined with search");
-    const { limit: deprecatedLimit, maxRows = 5000, ...execute } = options as PopularOptions;
-    const page = this.rankingPage("popular()", deprecatedLimit);
-    if (page.limit === 0) return [];
-    // The games before the page are ranked too.
-    const limit = page.offset + page.limit;
-    // Without a filter almost every row matches; a few spare rows cover deleted games.
-    const pageSize = this.state.where ? MAX_LIMIT : Math.min(MAX_LIMIT, limit + 10);
-    const rows = new Query<EndpointName, { game_id?: number; value?: number }>(
-      this.runner,
-      "popularity_primitives",
-      {
-        fields: ["game_id", "value"],
-        where: `popularity_type = ${toId(type as number)}`,
-        sort: { field: "value", direction: "desc" },
-      },
-    );
-    const matching = this.state.where ? gameIds(this as never) : undefined;
-    const results: { game: R; value: number }[] = [];
-    const seen = new Set<number>();
-    for (let offset = 0; offset < maxRows && results.length < limit; offset += pageSize) {
-      // The count and first ids of the matches go with the first page.
-      const [read, matches] = await Promise.all([
-        rows.limit(pageSize).offset(offset).execute(execute),
-        offset === 0 && matching !== undefined ? firstIds(matching, execute) : undefined,
-      ]);
-      if (matches?.total === 0) return [];
-      const ranked: { id: number; value: number }[] = [];
-      for (const row of read) {
-        if (row.game_id === undefined || seen.has(row.game_id)) continue;
-        seen.add(row.game_id);
-        ranked.push({ id: row.game_id, value: row.value ?? 0 });
-      }
-      const games = await this.findByIds(
-        ranked.map((row) => row.id),
-        execute,
-      );
-      const byId = new Map(games.map((game) => [(game as { id: number }).id, game]));
-      for (const { id, value } of ranked) {
-        const game = byId.get(id);
-        if (game !== undefined && results.length < limit) results.push({ game, value });
-      }
-      if (read.length < pageSize) break;
-      if (
-        results.length < limit &&
-        matching !== undefined &&
-        matches !== undefined &&
-        matches.total <= FEW_GAMES
-      ) {
-        const top = await this.popularAmong(
-          rows,
-          limit,
-          results,
-          await allIds(matching, matches, execute),
-          execute,
-        );
-        return top.slice(page.offset);
-      }
-    }
-    // Equal values in id order, as when the rows of few games are read.
-    return results
-      .sort((a, b) => b.value - a.value || (a.game as { id: number }).id - (b.game as { id: number }).id)
-      .slice(page.offset);
-  }
-
-  /**
-   * The page of games a ranking returns (`popular()`, `weightedPopular()`): the query's `limit`
-   * (default 10) and `offset`, or the deprecated `limit` option. The ranking sets the order, so a
-   * `sort` throws.
-   */
-  private rankingPage(
-    method: string,
-    deprecatedLimit: number | undefined,
-  ): { limit: number; offset: number } {
-    if (this.state.sort) throw new QueryError(`${method} returns games in popularity order: remove sort()`);
-    const limit = deprecatedLimit ?? this.state.limit ?? 10;
-    if (!Number.isInteger(limit) || limit < 0 || limit > MAX_LIMIT) {
-      throw new QueryError(`limit must be an integer between 0 and ${MAX_LIMIT}, got ${limit}`);
-    }
-    return { limit, offset: this.state.offset ?? 0 };
-  }
-
-  /**
-   * The `limit` games among `candidates` with the most popular rows, ranked exactly: each game has one
-   * row per type at most, so the top `limit` rows of each list of ids hold the top of all. `found`
-   * holds games already read.
-   */
-  private async popularAmong(
-    rows: Query<EndpointName, { game_id?: number; value?: number }>,
-    limit: number,
-    found: readonly { game: R; value: number }[],
-    candidates: readonly number[],
-    execute: ExecuteOptions,
-  ): Promise<{ game: R; value: number }[]> {
-    const pages = await Promise.all(
-      chunk(candidates, MAX_LIMIT).map((ids) =>
-        rows
-          .where(`game_id = (${ids.join(",")})`)
-          // One row per game: 500 ids have 500 rows at most.
-          .limit(Math.min(limit, MAX_LIMIT))
-          .execute(execute),
-      ),
-    );
-    const best = new Map<number, number>();
-    for (const row of pages.flat()) {
-      if (row.game_id !== undefined && !best.has(row.game_id)) best.set(row.game_id, row.value ?? 0);
-    }
-    const ranked = [...best].sort((a, b) => b[1] - a[1] || a[0] - b[0]).slice(0, limit);
-    const games = new Map(found.map(({ game }) => [(game as { id: number }).id, game]));
-    const read = await this.findByIds(
-      ranked.flatMap(([id]) => (games.has(id) ? [] : [id])),
-      execute,
-    );
-    for (const game of read) games.set((game as { id: number }).id, game);
-    return ranked.flatMap(([id, value]) => {
-      const game = games.get(id);
-      return game === undefined ? [] : [{ game, value }];
-    });
-  }
-
-  /**
-   * The most popular games by a weighted mix of PopScore types, such as `{ [PopularityType.IGDBWantToPlay]:
-   * 0.6, [PopularityType.IGDBPlaying]: 0.4 }`. Each type is scaled by its top value before weighting;
-   * a game without a row in a type scores 0 there and gets `null` in `values`. Negative weights lower
-   * a score. The fields and `where` of this query apply to the games, and its `limit` (default 10)
-   * and `offset` pick the page of the ranking; `sort` throws. Each round reads 500 rows per
-   * positively weighted type, then the other types and the games of the new ids (about 2 multiqueries
-   * per round); it stops once no unread game can enter the page. The games a `where` matches
-   * are counted during the first round: if it does not settle the top and they are at most 10,000,
-   * their own rows are scored instead. Only on `games`.
-   */
-  async weightedPopular(
-    ...[weights, options = {}]: N extends "games"
-      ? [weights: PopularityWeights, options?: WeightedPopularOptions]
-      : [notGames: "weightedPopular() is only on games"]
-  ): Promise<WeightedPopular<R>[]> {
-    if (this.endpoint !== "games") throw new QueryError("weightedPopular() is only on games");
-    if (this.state.search) throw new QueryError("weightedPopular() cannot be combined with search");
-    const page = this.rankingPage("weightedPopular()", (options as WeightedPopularOptions).limit);
-    if (page.limit === 0) return [];
-    const rows = new Query<EndpointName, PopularityRow>(this.runner, "popularity_primitives", {
-      fields: ["game_id", "popularity_type", "value"],
-      sort: { field: "value", direction: "desc" },
-    });
-    const ranked = await weightedPopular(
-      rows,
-      (ids, execute) => this.findByIds(ids, execute),
-      weights as PopularityWeights,
-      // The games before the page are ranked too.
-      { ...(options as WeightedPopularOptions), limit: page.offset + page.limit },
-      this.state.where ? gameIds(this as never) : undefined,
-    );
-    return ranked.slice(page.offset);
-  }
-
-  /**
-   * The release calendar of a window: one entry per game released in it, with its most precise
-   * release and every release in the window (platforms, regions, statuses). Imprecise dates (`Q4
-   * 2026`) are labeled by `precision` and included when their period overlaps the window. The fields
-   * and `where` of this query apply to the games; its `limit` and `offset`, when set, page the entries,
-   * and `sort` throws. Costs 1 + `ceil(dates / 500)` requests, batched, plus `ceil(games / 500)`. Only
-   * on `games`.
-   */
-  async releases(
-    ...[options]: N extends "games" ? [options: ReleasesOptions] : [notGames: "releases() is only on games"]
-  ): Promise<ReleaseCalendarEntry<R>[]> {
-    if (this.endpoint !== "games") throw new QueryError("releases() is only on games");
-    if (this.state.search) throw new QueryError("releases() cannot be combined with search");
-    if (this.state.sort) throw new QueryError("releases() returns games by release date: remove sort()");
-    const dates = new Query<EndpointName, ReleaseRow>(this.runner, "release_dates", {
-      fields: RELEASE_FIELDS,
-      sort: { field: "id", direction: "asc" },
-    });
-    const entries = await releaseCalendar(
-      dates,
-      (ids, execute) => this.findByIds(ids, execute),
-      options as ReleasesOptions,
-    );
-    const { limit, offset = 0 } = this.state;
-    return limit === undefined ? entries.slice(offset) : entries.slice(offset, offset + limit);
   }
 
   /**
@@ -963,6 +712,265 @@ export class Query<N extends EndpointName, R = { id: number }> extends Executabl
     return response.data as R[];
   }
 }
+
+/** The query on `games`: a `Query` with the methods that only work on games. */
+export class GamesQuery<R = { id: number }> extends Query<"games", R> {
+  /**
+   * The games behind store ids, such as Steam app ids: `findByExternalIds(ExternalGameSource.Steam,
+   * ["292030"])`. Returns a map from each found id to its game, with the selected fields; ids IGDB
+   * does not know, or whose game this query's `where` excludes, are missing.
+   */
+  async findByExternalIds(
+    source: number,
+    uids: readonly (string | number)[],
+    options?: ExecuteOptions,
+  ): Promise<Map<string, R>> {
+    const unique = [...new Set(uids.map(String))];
+    // One uid can have several rows (per platform or edition), so ask for fewer uids than rows.
+    const chunkSize = 100;
+    const rows = new Query<EndpointName, { uid?: string; game?: number }>(this.runner, "external_games", {
+      fields: ["uid", "game"],
+    });
+    const gameOf = new Map<string, number>();
+    await Promise.all(
+      Array.from({ length: Math.ceil(unique.length / chunkSize) }, async (_, i) => {
+        const chunk = unique.slice(i * chunkSize, (i + 1) * chunkSize);
+        const filter = rows.where(
+          `external_game_source = ${toId(source)} & uid = (${chunk.map((uid) => JSON.stringify(uid)).join(",")})`,
+        );
+        for await (const row of filter.iterate({ ...options, pageSize: MAX_LIMIT })) {
+          if (row.uid !== undefined && row.game !== undefined && !gameOf.has(row.uid))
+            gameOf.set(row.uid, row.game);
+        }
+      }),
+    );
+    const games = await this.findByIds([...gameOf.values()], options);
+    const byId = new Map(games.map((game) => [(game as { id: number }).id, game]));
+    const result = new Map<string, R>();
+    for (const uid of unique) {
+      const game = byId.get(gameOf.get(uid) ?? -1);
+      if (game !== undefined) result.set(uid, game);
+    }
+    return result;
+  }
+
+  /**
+   * The most popular games for one PopScore metric (`PopularityType.IGDBPlaying`,
+   * `PopularityType.Steam24hrPeakPlayers`…), most popular first, each with its score. The selected
+   * fields and the `where` of this query apply to the games, and its `limit` (default 10) and
+   * `offset` pick the page of the ranking; `sort` throws. Popularity rows are read 500 at a time until
+   * enough games match, or `maxRows` rows were read. The games a `where` matches are counted along with
+   * the first page: if it is not enough and they are at most 10,000, their own rows are read instead,
+   * which is exact and takes a few requests.
+   */
+  async popular(type: number, options: PopularOptions = {}): Promise<{ game: R; value: number }[]> {
+    if (this.state.search) throw new QueryError("popular() cannot be combined with search");
+    const { limit: deprecatedLimit, maxRows = 5000, ...execute } = options;
+    const page = this.rankingPage("popular()", deprecatedLimit);
+    if (page.limit === 0) return [];
+    // The games before the page are ranked too.
+    const limit = page.offset + page.limit;
+    // Without a filter almost every row matches; a few spare rows cover deleted games.
+    const pageSize = this.state.where ? MAX_LIMIT : Math.min(MAX_LIMIT, limit + 10);
+    const rows = new Query<EndpointName, { game_id?: number; value?: number }>(
+      this.runner,
+      "popularity_primitives",
+      {
+        fields: ["game_id", "value"],
+        where: `popularity_type = ${toId(type)}`,
+        sort: { field: "value", direction: "desc" },
+      },
+    );
+    const matching = this.state.where ? gameIds(this as never) : undefined;
+    const results: { game: R; value: number }[] = [];
+    const seen = new Set<number>();
+    for (let offset = 0; offset < maxRows && results.length < limit; offset += pageSize) {
+      // The count and first ids of the matches go with the first page.
+      const [read, matches] = await Promise.all([
+        rows.limit(pageSize).offset(offset).execute(execute),
+        offset === 0 && matching !== undefined ? firstIds(matching, execute) : undefined,
+      ]);
+      if (matches?.total === 0) return [];
+      const ranked: { id: number; value: number }[] = [];
+      for (const row of read) {
+        if (row.game_id === undefined || seen.has(row.game_id)) continue;
+        seen.add(row.game_id);
+        ranked.push({ id: row.game_id, value: row.value ?? 0 });
+      }
+      const games = await this.findByIds(
+        ranked.map((row) => row.id),
+        execute,
+      );
+      const byId = new Map(games.map((game) => [(game as { id: number }).id, game]));
+      for (const { id, value } of ranked) {
+        const game = byId.get(id);
+        if (game !== undefined && results.length < limit) results.push({ game, value });
+      }
+      if (read.length < pageSize) break;
+      if (
+        results.length < limit &&
+        matching !== undefined &&
+        matches !== undefined &&
+        matches.total <= FEW_GAMES
+      ) {
+        const top = await this.popularAmong(
+          rows,
+          limit,
+          results,
+          await allIds(matching, matches, execute),
+          execute,
+        );
+        return top.slice(page.offset);
+      }
+    }
+    // Equal values in id order, as when the rows of few games are read.
+    return results
+      .sort((a, b) => b.value - a.value || (a.game as { id: number }).id - (b.game as { id: number }).id)
+      .slice(page.offset);
+  }
+
+  /**
+   * The page of games a ranking returns (`popular()`, `weightedPopular()`): the query's `limit`
+   * (default 10) and `offset`, or the deprecated `limit` option. The ranking sets the order, so a
+   * `sort` throws.
+   */
+  private rankingPage(
+    method: string,
+    deprecatedLimit: number | undefined,
+  ): { limit: number; offset: number } {
+    if (this.state.sort) throw new QueryError(`${method} returns games in popularity order: remove sort()`);
+    const limit = deprecatedLimit ?? this.state.limit ?? 10;
+    if (!Number.isInteger(limit) || limit < 0 || limit > MAX_LIMIT) {
+      throw new QueryError(`limit must be an integer between 0 and ${MAX_LIMIT}, got ${limit}`);
+    }
+    return { limit, offset: this.state.offset ?? 0 };
+  }
+
+  /**
+   * The `limit` games among `candidates` with the most popular rows, ranked exactly: each game has one
+   * row per type at most, so the top `limit` rows of each list of ids hold the top of all. `found`
+   * holds games already read.
+   */
+  private async popularAmong(
+    rows: Query<EndpointName, { game_id?: number; value?: number }>,
+    limit: number,
+    found: readonly { game: R; value: number }[],
+    candidates: readonly number[],
+    execute: ExecuteOptions,
+  ): Promise<{ game: R; value: number }[]> {
+    const pages = await Promise.all(
+      chunk(candidates, MAX_LIMIT).map((ids) =>
+        rows
+          .where(`game_id = (${ids.join(",")})`)
+          // One row per game: 500 ids have 500 rows at most.
+          .limit(Math.min(limit, MAX_LIMIT))
+          .execute(execute),
+      ),
+    );
+    const best = new Map<number, number>();
+    for (const row of pages.flat()) {
+      if (row.game_id !== undefined && !best.has(row.game_id)) best.set(row.game_id, row.value ?? 0);
+    }
+    const ranked = [...best].sort((a, b) => b[1] - a[1] || a[0] - b[0]).slice(0, limit);
+    const games = new Map(found.map(({ game }) => [(game as { id: number }).id, game]));
+    const read = await this.findByIds(
+      ranked.flatMap(([id]) => (games.has(id) ? [] : [id])),
+      execute,
+    );
+    for (const game of read) games.set((game as { id: number }).id, game);
+    return ranked.flatMap(([id, value]) => {
+      const game = games.get(id);
+      return game === undefined ? [] : [{ game, value }];
+    });
+  }
+
+  /**
+   * The most popular games by a weighted mix of PopScore types, such as `{ [PopularityType.IGDBWantToPlay]:
+   * 0.6, [PopularityType.IGDBPlaying]: 0.4 }`. Each type is scaled by its top value before weighting;
+   * a game without a row in a type scores 0 there and gets `null` in `values`. Negative weights lower
+   * a score. The fields and `where` of this query apply to the games, and its `limit` (default 10)
+   * and `offset` pick the page of the ranking; `sort` throws. Each round reads 500 rows per
+   * positively weighted type, then the other types and the games of the new ids (about 2 multiqueries
+   * per round); it stops once no unread game can enter the page. The games a `where` matches
+   * are counted during the first round: if it does not settle the top and they are at most 10,000,
+   * their own rows are scored instead.
+   */
+  async weightedPopular(
+    weights: PopularityWeights,
+    options: WeightedPopularOptions = {},
+  ): Promise<WeightedPopular<R>[]> {
+    if (this.state.search) throw new QueryError("weightedPopular() cannot be combined with search");
+    const page = this.rankingPage("weightedPopular()", options.limit);
+    if (page.limit === 0) return [];
+    const rows = new Query<EndpointName, PopularityRow>(this.runner, "popularity_primitives", {
+      fields: ["game_id", "popularity_type", "value"],
+      sort: { field: "value", direction: "desc" },
+    });
+    const ranked = await weightedPopular(
+      rows,
+      (ids, execute) => this.findByIds(ids, execute),
+      weights,
+      // The games before the page are ranked too.
+      { ...options, limit: page.offset + page.limit },
+      this.state.where ? gameIds(this as never) : undefined,
+    );
+    return ranked.slice(page.offset);
+  }
+
+  /**
+   * The release calendar of a window: one entry per game released in it, with its most precise
+   * release and every release in the window (platforms, regions, statuses). Imprecise dates (`Q4
+   * 2026`) are labeled by `precision` and included when their period overlaps the window. The fields
+   * and `where` of this query apply to the games; its `limit` and `offset`, when set, page the entries,
+   * and `sort` throws. Costs 1 + `ceil(dates / 500)` requests, batched, plus `ceil(games / 500)`.
+   */
+  async releases(options: ReleasesOptions): Promise<ReleaseCalendarEntry<R>[]> {
+    if (this.state.search) throw new QueryError("releases() cannot be combined with search");
+    if (this.state.sort) throw new QueryError("releases() returns games by release date: remove sort()");
+    const dates = new Query<EndpointName, ReleaseRow>(this.runner, "release_dates", {
+      fields: RELEASE_FIELDS,
+      sort: { field: "id", direction: "asc" },
+    });
+    const entries = await releaseCalendar(dates, (ids, execute) => this.findByIds(ids, execute), options);
+    const { limit, offset = 0 } = this.state;
+    return limit === undefined ? entries.slice(offset) : entries.slice(offset, offset + limit);
+  }
+}
+
+/**
+ * A query on an endpoint whose rows point to games (`release_dates`, `websites`, `characters`,
+ * `game_time_to_beats`…): a `Query` with `findByGames()`.
+ */
+export class GameLinkedQuery<N extends GameLinkedEndpoint, R = { id: number }> extends Query<N, R> {
+  /**
+   * The rows linked to each of these games, as a map from game id to rows: `game_time_to_beats`,
+   * `release_dates`, `websites`… through their `game` (or `game_id`) field, and `characters`,
+   * `events`, `collections`, `franchises` through their `games` array. The fields and `where` of this
+   * query apply; `sort` and `limit` apply to each game's rows, and every row comes back, not just 10.
+   *
+   * Every requested id is in the map, with an empty array when nothing points to it (most games have
+   * no time to beat). A row linked to several of the games is under each of them. Ids are split by
+   * 500 and pages of 500 rows are read until the end, sent together so batching packs them.
+   */
+  findByGames(gameIds: readonly number[], options?: ExecuteOptions): Promise<Map<number, R[]>> {
+    return findByGames<R>(this as never, gameIds, options);
+  }
+
+  /** @deprecated Renamed `findByGames()`, like `findById()` and `findByIds()`; same arguments. */
+  byGame(gameIds: readonly number[], options?: ExecuteOptions): Promise<Map<number, R[]>> {
+    return findByGames<R>(this as never, gameIds, options);
+  }
+}
+
+/**
+ * The query type of an endpoint: `GamesQuery` for `games`, `GameLinkedQuery` for the endpoints whose
+ * rows point to games, `Query` for the others. Each has only the methods that work on its endpoint.
+ */
+export type QueryOf<N extends EndpointName, R = { id: number }> = N extends "games"
+  ? GamesQuery<R>
+  : N extends GameLinkedEndpoint
+    ? GameLinkedQuery<N, R>
+    : Query<N, R>;
 
 /** Result of `first()` / `findById()`. */
 export class Single<R> extends Executable<R | null> {

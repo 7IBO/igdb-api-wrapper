@@ -43,9 +43,12 @@ export {
   Count,
   Executable,
   type ExecuteOptions,
+  GameLinkedQuery,
+  GamesQuery,
   MAX_LIMIT,
   type PopularOptions,
   Query,
+  type QueryOf,
   type QueryRequest,
   Single,
   SingleOrThrow,
@@ -69,6 +72,7 @@ export {
   type SearchHit,
   type SearchKind,
 } from "./query/search-all";
+export { Task } from "./query/task";
 export type {
   ExcludePath,
   ExcludeResult,
