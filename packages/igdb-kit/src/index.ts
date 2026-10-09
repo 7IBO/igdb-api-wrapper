@@ -1,8 +1,10 @@
 export { type BatcherOptions, MAX_BLOCKS } from "./batch/batcher";
+export { type CacheStore, type MemoryCacheOptions, memoryCache } from "./cache";
 export { type BatchResult, createIGDB, type IGDBClient, type IGDBClientOptions } from "./client";
 export { memoryTokenStore, type StoredToken, type TokenStore } from "./core/auth";
 export * from "./core/errors";
 export {
+  type AcquireOptions,
   type Limiter,
   LocalLimiter,
   type LocalLimiterOptions,
@@ -11,6 +13,7 @@ export {
 } from "./core/limiter";
 export type { TransportHooks } from "./core/transport";
 export * from "./generated/schema";
+export { type ImageSize, type ImageUrlOptions, imageUrl } from "./images";
 export {
   Count,
   Executable,
@@ -20,6 +23,7 @@ export {
   Query,
   type QueryRequest,
   Single,
+  type SyncOptions,
   WithCount,
 } from "./query/query";
 export type { FieldPath, ScalarPath, SelectResult, TimestampKeys } from "./query/types";
@@ -36,3 +40,10 @@ export {
   toUnix,
   type WhereFields,
 } from "./query/where";
+export {
+  type EnsureWebhooksOptions,
+  type RegisterWebhookOptions,
+  type Webhook,
+  type WebhookOperation,
+  Webhooks,
+} from "./webhooks/api";

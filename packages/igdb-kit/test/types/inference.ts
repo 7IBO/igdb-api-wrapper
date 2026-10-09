@@ -168,3 +168,19 @@ const popular = await igdb.games.select("name").popular(PopularityType.IGDBPlayi
 expectType<Equal<typeof popular, { game: { id: number; name?: string }; value: number }[]>>();
 // @ts-expect-error only on games
 igdb.platforms.popular(PopularityType.IGDBPlaying);
+
+// Webhook deliveries narrow by endpoint and operation.
+import { webhookHandler } from "../../src/webhooks";
+
+webhookHandler<"games" | "platforms">({
+  secret: "s",
+  onEvent: (event) => {
+    if (event.endpoint === "games" && event.operation !== "delete") {
+      expectType<Equal<typeof event.data.name, string | undefined>>();
+      expectType<Equal<typeof event.data.cover, number | undefined>>();
+    }
+    if (event.operation === "delete") expectType<Equal<typeof event.data, { id: number }>>();
+    // @ts-expect-error not subscribed to this endpoint
+    if (event.endpoint === "genres") return;
+  },
+});
