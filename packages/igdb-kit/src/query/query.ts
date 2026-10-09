@@ -17,6 +17,8 @@ import {
   type LinkField,
 } from "../links/by-game";
 import { type DateInput, dateSeconds } from "./dates";
+import { idsNamed } from "./lookups";
+import { type GameMatch, type MatchInput, matchGames } from "./match";
 import {
   allIds,
   chunk,
@@ -1134,7 +1136,40 @@ export class GamesQuery<R = { id: number }> extends Query<"games", R> {
     });
   }
 
-  /** Builds the queries on other endpoints that `family()`, `series()` and `catalog()` send. */
+  /**
+   * The games a title from a store, a launcher or a list may be, best first, each with a score from
+   * 0 to 1 and the title that matched: for the games IGDB does not link to a store id
+   * (`findByExternalIds()`), such as PlayStation and Xbox titles. Looks in names, alternative names
+   * and localized titles, ignores trademark signs, punctuation, accents and case, reads "VII" as
+   * "7", and also tries the title without its edition or platform label (`" - GOTY Edition"`,
+   * `"(PS5)"`). `platforms` and `year` lower the games that disagree. A score of 1 is a sure match
+   * unless the next candidate also has it: remakes and ports often share a name, which `platforms`
+   * and `year` tell apart. The query's `limit` (default 5) caps the candidates; its fields and
+   * `where` apply to the games, and `sort`, `search` and `offset` throw. Two to four requests: the
+   * searches and a multiquery at once, then, unless only the fields `match()` reads are selected
+   * (`name`, `game_type`, `version_parent`, `first_release_date`, `platforms`, `total_rating_count`)
+   * and there is no `where`, the candidates.
+   *
+   * ```ts
+   * const [best] = await igdb.games.select("name").match({ name: "DARK SOULS™ III", platforms: ["PS4"], year: 2016 });
+   * // { game: { id: 11133, name: "Dark Souls III" }, score: 1, title: "Dark Souls III", matched: "name" }
+   * ```
+   */
+  match(input: MatchInput): Task<GameMatch<R>[]> {
+    return new Task(async (execute) => {
+      const { sort, search, offset } = this.state;
+      if (sort || search !== undefined || offset !== undefined) {
+        throw new QueryError(
+          "match() ranks games by how well they match: remove sort(), search() and offset()",
+        );
+      }
+      const platformIds = (names: string[], options: ExecuteOptions) =>
+        idsNamed(this.runner, "platforms", names, options);
+      return matchGames(this, this.maker(), input, this.state.limit ?? 5, platformIds, execute);
+    });
+  }
+
+  /** Builds the queries on other endpoints that `family()`, `series()`, `catalog()` and `match()` send. */
   private maker(): MakeQuery {
     return (endpoint, state) => new Query(this.runner, endpoint, state);
   }
