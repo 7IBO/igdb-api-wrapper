@@ -21,6 +21,13 @@ export {
 export type { TransportHooks } from "./core/transport";
 export * from "./generated/schema";
 export { type ImageSize, type ImageUrlOptions, imageUrl } from "./images";
+export type {
+  PopularitySnapshotOptions,
+  PopularitySnapshotRow,
+  PopularityWeights,
+  WeightedPopular,
+  WeightedPopularOptions,
+} from "./query/popularity";
 export {
   Count,
   Executable,
@@ -34,6 +41,12 @@ export {
   type SyncOptions,
   WithCount,
 } from "./query/query";
+export type {
+  CalendarRelease,
+  ReleaseCalendarEntry,
+  ReleasePrecision,
+  ReleasesOptions,
+} from "./query/releases";
 export type { FieldPath, ScalarPath, SelectResult, TimestampKeys } from "./query/types";
 export {
   type ArrayFilter,

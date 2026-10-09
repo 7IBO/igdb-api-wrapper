@@ -4,7 +4,13 @@ import { TokenProvider, type TokenStore } from "./core/auth";
 import { IGDBError } from "./core/errors";
 import { type Limiter, type LocalLimiterOptions, sharedLimiter } from "./core/limiter";
 import { Transport, type TransportHooks } from "./core/transport";
-import { type EndpointName, endpoints } from "./generated/schema";
+import { type EndpointName, endpoints, PopularityType } from "./generated/schema";
+import {
+  type PopularityRow,
+  type PopularitySnapshotOptions,
+  type PopularitySnapshotRow,
+  popularitySnapshot,
+} from "./query/popularity";
 import {
   type Executable,
   type ExecuteOptions,
@@ -78,6 +84,15 @@ export type IGDBClient = { readonly [K in EndpointName]: Query<K> } & {
   batch<T extends BatchInput>(queries: T, options?: Omit<ExecuteOptions, "batch">): Promise<BatchResult<T>>;
   /** Registers, lists and removes your app's webhooks. */
   webhooks: Webhooks;
+  /**
+   * Today's PopScore rows, one ranked array per type, to store: IGDB keeps only the latest value of
+   * each game and type, so a history is built from your own snapshots. `top` reads only the most
+   * popular rows of each type (`ceil(top / 500)` requests per type); without it every row is read
+   * (about 700,000 rows: some 280 multiqueries). Runs at `background` priority.
+   */
+  popularitySnapshot(
+    options?: PopularitySnapshotOptions,
+  ): AsyncGenerator<PopularitySnapshotRow[], void, undefined>;
   /** Sends a raw Apicalypse body to a path (`games`, `games/count`, `multiquery`). */
   raw<T = unknown>(path: string, body: string, options?: ExecuteOptions): Promise<T>;
 };
@@ -134,6 +149,15 @@ export function createIGDB(options: IGDBClientOptions): IGDBClient {
         requestOptions,
       ),
     ),
+    popularitySnapshot: (snapshotOptions: PopularitySnapshotOptions = {}) =>
+      popularitySnapshot(
+        new Query<EndpointName, PopularityRow>(runner, "popularity_primitives", {
+          fields: ["game_id", "popularity_type", "value", "calculated_at", "external_popularity_source"],
+          sort: { field: "value", direction: "desc" },
+        }),
+        snapshotOptions.types ?? Object.values(PopularityType),
+        snapshotOptions,
+      ),
     raw: async (path: string, body: string, runOptions?: ExecuteOptions) =>
       (await transport.send(path, body, runOptions)).data,
     [forwardKey]: ((path, body, forwardOptions) =>
