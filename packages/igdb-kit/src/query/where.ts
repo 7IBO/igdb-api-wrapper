@@ -173,14 +173,17 @@ function scalarProxy(path: string[]): unknown {
 }
 
 /**
- * IGDB still accepts the fields it replaced, but never returns them, so a filter on one silently
- * matches nothing (`where category = 0`). Fails with the name of the replacement instead.
+ * IGDB still accepts the fields it replaced, but leaves them empty or stops updating them, so a
+ * filter on one silently matches nothing or too little (`where category = 0` matches no game).
+ * Fails with the name of the replacement instead.
  */
 export function throwIfRemoved(entity: string, field: string, path: string): void {
   const removed = removedFields[entity];
   if (!removed || !(field in removed)) return;
   const replacement = removed[field];
   throw new QueryError(
-    `"${path}" was removed from ${entity} by IGDB and is always empty${replacement ? `: use "${replacement}" instead` : ""}`,
+    replacement
+      ? `"${path}" was replaced by IGDB and is empty or no longer updated: use "${replacement}" instead`
+      : `"${path}" was dropped by IGDB and is always empty`,
   );
 }

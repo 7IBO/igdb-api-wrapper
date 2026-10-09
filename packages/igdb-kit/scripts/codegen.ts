@@ -72,7 +72,7 @@ if (process.argv.includes("--fetch")) {
 /** Endpoints that accept `search "..."`, per the "Search" reference section of the docs. */
 const SEARCHABLE = new Set(["characters", "collections", "games", "platforms", "themes"]);
 /** Proto wrapper messages that are not entities. */
-const INTERNAL = new Set(["Count", "MultiQueryResult", "MultiQueryResultArray"]);
+const INTERNAL = new Set(["Count", "MultiQueryResult", "MultiQueryResultArray", "TestDummy"]);
 /** Endpoints in the proto but not in the docs. They answer 403 unless your access tier includes them. */
 const TIER_RESTRICTED: Record<string, string> = {
   ContentSafetyRating: "content_safety_ratings",
@@ -107,6 +107,8 @@ for (const m of proto.matchAll(/^message (\w+) \{([\s\S]*?)^\}/gm)) {
   for (const f of body.matchAll(
     /^\s*(repeated\s+)?([\w.]+)\s+(\w+)\s*=\s*\d+(\s*\[deprecated\s*=\s*true\])?/gm,
   )) {
+    // IGDB's internal test entity leaks into the proto (Search.test_dummy): leave it out.
+    if (INTERNAL.has(f[2] as string)) continue;
     fields.push({ repeated: !!f[1], type: f[2] as string, name: f[3] as string, deprecated: !!f[4] });
   }
   messages.set(name, fields);
@@ -192,8 +194,8 @@ function replacementOf(fields: ProtoField[], desc: string): string | undefined {
 
 /**
  * Deprecated fields that IGDB replaced with another field or announced for removal. IGDB still
- * accepts them in queries but returns them empty or frozen (`where category = 0` matches no game), so
- * they are left out of the types and rejected at runtime with the name of their replacement.
+ * accepts them in queries but leaves them empty or stops updating them (`where category = 0` matches
+ * no game), so they are left out of the types and rejected at runtime with their replacement.
  * Deprecated fields without a replacement are kept, tagged `@deprecated`.
  */
 const removed = new Map<string, Map<string, string | null>>();

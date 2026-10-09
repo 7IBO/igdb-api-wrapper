@@ -104,7 +104,7 @@ describe("client-side validation", () => {
   test("fields IGDB replaced are rejected with their replacement (it matches nothing otherwise)", () => {
     // @ts-expect-error removed field
     expect(() => igdb.games.select("category")).toThrow(
-      '"category" was removed from Game by IGDB and is always empty: use "game_type" instead',
+      '"category" was replaced by IGDB and is empty or no longer updated: use "game_type" instead',
     );
     // @ts-expect-error removed nested field
     expect(() => igdb.games.select("release_dates.region")).toThrow(/use "release_region"/);
@@ -117,7 +117,7 @@ describe("client-side validation", () => {
     // @ts-expect-error removed field in sort
     expect(() => igdb.release_dates.sort("region")).toThrow(/use "release_region"/);
     // @ts-expect-error removed without replacement
-    expect(() => igdb.games.select("follows")).toThrow(/always empty$/);
+    expect(() => igdb.games.select("follows")).toThrow('"follows" was dropped by IGDB and is always empty');
   });
 
   test("sort only on scalar fields (IGDB silently ignores bad sorts)", () => {
