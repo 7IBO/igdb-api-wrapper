@@ -40,6 +40,7 @@ const REFERENCE_TABLES: { name: string; endpoint: string; label: string; extra?:
   },
   { name: "ReleaseDateRegion", endpoint: "release_date_regions", label: "region" },
   { name: "DateFormat", endpoint: "date_formats", label: "format" },
+  { name: "ReleaseDateStatus", endpoint: "release_date_statuses", label: "name" },
   { name: "WebsiteType", endpoint: "website_types", label: "type" },
   { name: "AgeRatingOrganization", endpoint: "age_rating_organizations", label: "name" },
   { name: "LanguageSupportType", endpoint: "language_support_types", label: "name" },

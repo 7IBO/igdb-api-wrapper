@@ -2979,6 +2979,31 @@ export const DateFormat = {
 } as const;
 
 /**
+ * Ids of the `release_date_statuses` reference table, for filters such as `where(g => g.game_type.eq(...))`.
+ * IGDB can add rows at any time: regenerate with `bun run codegen --fetch`.
+ */
+export const ReleaseDateStatus = {
+  /** Alpha */
+  Alpha: 1,
+  /** Beta */
+  Beta: 2,
+  /** Early Access */
+  EarlyAccess: 3,
+  /** Offline */
+  Offline: 4,
+  /** Cancelled */
+  Cancelled: 5,
+  /** Full Release */
+  FullRelease: 6,
+  /** Advanced Access */
+  AdvancedAccess: 34,
+  /** Digital Compatibility Release */
+  DigitalCompatibilityRelease: 35,
+  /** Next-Gen Optimization Patch Release */
+  NextGenOptimizationPatchRelease: 36,
+} as const;
+
+/**
  * Ids of the `website_types` reference table, for filters such as `where(g => g.game_type.eq(...))`.
  * IGDB can add rows at any time: regenerate with `bun run codegen --fetch`.
  */

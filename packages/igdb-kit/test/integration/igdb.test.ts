@@ -15,6 +15,8 @@ import {
   PopularityType,
   type Query,
   QueryError,
+  ReleaseDateRegion,
+  ReleaseDateStatus,
   Theme,
   TierError,
   toDate,
@@ -168,6 +170,97 @@ describe.skipIf(!clientId || !clientSecret)("real IGDB API", () => {
     );
     const values = top.map((t) => t.value);
     expect(values).toEqual([...values].sort((a, b) => b - a));
+  });
+
+  test("weightedPopular() mixes types scaled to 0..1, with null for a missing row", async () => {
+    const top = await igdb.games
+      .select("name")
+      .where((g) => g.game_type.eq(GameType.MainGame))
+      .weightedPopular(
+        { [PopularityType.IGDBWantToPlay]: 0.5, [PopularityType.Steam24hrPeakPlayers]: 0.5 },
+        { limit: 20 },
+      );
+    expect(top).toHaveLength(20);
+    const scores = top.map((t) => t.score);
+    expect(scores).toEqual([...scores].sort((a, b) => b - a));
+    expect(scores.every((s) => s > 0 && s <= 1)).toBe(true);
+    for (const { values } of top) {
+      expect(Object.keys(values).sort()).toEqual(["2", "5"]);
+      expect(Object.values(values).every((v) => v === null || v >= 0)).toBe(true);
+    }
+    // Many popular games are not on Steam: no row, which is not a measured 0.
+    expect(top.some((t) => t.values[PopularityType.Steam24hrPeakPlayers] === null)).toBe(true);
+  });
+
+  test("popularitySnapshot() returns ranked rows with their calculation time; IGDB keeps no history", async () => {
+    const types = [PopularityType.IGDBPlaying, PopularityType.Steam24hrPeakPlayers];
+    const pages = [];
+    for await (const rows of igdb.popularitySnapshot({ types, top: 10 })) pages.push(rows);
+    expect(pages.map((rows) => rows[0]?.popularity_type)).toEqual(types);
+    expect(pages.map((rows) => rows[0]?.external_popularity_source)).toEqual([121, 1]);
+    for (const rows of pages) {
+      expect(rows.map((r) => r.rank)[0]).toBe(1);
+      // Each type is recomputed in one batch, at most a few days ago.
+      const at = new Set(rows.map((r) => r.calculated_at));
+      expect(at.size).toBe(1);
+      expect(Date.now() / 1000 - ([...at][0] ?? 0)).toBeLessThan(14 * 86_400);
+    }
+    const rows = await igdb.popularity_primitives
+      .select("popularity_type")
+      .where((p) => p.game_id.eq(1942))
+      .limit(50);
+    expect(rows.length).toBe(new Set(rows.map((r) => r.popularity_type)).size);
+  });
+
+  test("releases() in a past window: exact days and months, one entry per game", async () => {
+    const calendar = await igdb.games.select("name").releases({ from: "1998-11-01", to: "1998-12-01" });
+    expect(calendar.length).toBeGreaterThan(100);
+    expect(new Set(calendar.map((e) => e.game.id)).size).toBe(calendar.length);
+    const start = Date.UTC(1998, 10, 1);
+    const end = Date.UTC(1998, 11, 1);
+    for (const { release, releases } of calendar) {
+      expect(["day", "month"]).toContain(release.precision);
+      for (const r of releases) {
+        expect(r.start?.getTime()).toBeGreaterThanOrEqual(start);
+        expect(r.end?.getTime()).toBeLessThanOrEqual(end);
+      }
+    }
+    expect(calendar.some((e) => e.release.precision === "month" && e.release.human === "Nov 1998")).toBe(
+      true,
+    );
+    expect(calendar.some((e) => e.releases.length > 1)).toBe(true);
+  });
+
+  test("releases() in a future quarter: quarter labels, statuses and regions", async () => {
+    const calendar = await igdb.games.releases({
+      from: "2026-10-01",
+      to: "2027-01-01",
+      regions: [ReleaseDateRegion.Japan],
+      precision: ["day", "quarter"],
+    });
+    expect(calendar.length).toBeGreaterThan(0);
+    const releases = calendar.flatMap((e) => e.releases);
+    expect(releases.every((r) => r.region === ReleaseDateRegion.Japan || r.region === 8)).toBe(true);
+    expect(releases.some((r) => r.region === ReleaseDateRegion.Worldwide)).toBe(true);
+    expect(releases.every((r) => r.status !== ReleaseDateStatus.Cancelled)).toBe(true);
+    expect(releases.some((r) => r.status === null)).toBe(true);
+    const quarter = releases.find((r) => r.precision === "quarter");
+    expect(quarter?.human).toBe("Q4 2026");
+    expect(quarter?.start?.toISOString()).toBe("2026-10-01T00:00:00.000Z");
+  });
+
+  test("releases() with TBD dates only", async () => {
+    const calendar = await igdb.games.releases({
+      from: "2026-10-01",
+      to: "2026-10-02",
+      precision: ["tbd"],
+      platforms: [Platform.PlayStation5],
+      statuses: [ReleaseDateStatus.FullRelease],
+    });
+    expect(calendar.length).toBeGreaterThan(0);
+    for (const { release } of calendar) {
+      expect(release).toMatchObject({ precision: "tbd", start: null, end: null, platform: 167, status: 6 });
+    }
   });
 
   test("findByExternalIds() finds games by Steam app id", async () => {
