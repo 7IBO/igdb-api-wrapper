@@ -34,3 +34,10 @@ export {
   type StringFilter,
   type WhereFields,
 } from "./query/where";
+export {
+  type EnsureWebhooksOptions,
+  type RegisterWebhookOptions,
+  type Webhook,
+  type WebhookOperation,
+  Webhooks,
+} from "./webhooks/api";

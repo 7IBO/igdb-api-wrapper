@@ -93,6 +93,8 @@ jobs:
           node -e "const { createIGDB } = require('./dist/index.cjs'); createIGDB({ clientId: 'a', clientSecret: 'b' }).games.limit(1).toApicalypse()"
           node --input-type=module -e "import { redisCache } from 'igdb-kit/redis'; if (typeof redisCache !== 'function') process.exit(1)"
           node -e "const { redisLimiter } = require('igdb-kit/redis'); if (typeof redisLimiter !== 'function') process.exit(1)"
+          node --input-type=module -e "import { webhookHandler } from 'igdb-kit/webhooks'; if (typeof webhookHandler !== 'function') process.exit(1)"
+          node -e "const { parseWebhook } = require('igdb-kit/webhooks'); if (typeof parseWebhook !== 'function') process.exit(1)"
 
   integration:
     name: Integration tests (real IGDB API)
