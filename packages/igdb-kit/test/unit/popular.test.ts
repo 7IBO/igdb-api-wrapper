@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { PopularityType, QueryError } from "../../src";
+import { PopularityType } from "../../src";
 import { type Call, mockFetch, testClient } from "./helpers";
 
 // 1000 popularity rows for games 1..1000, most popular first. Games go up to 30,000: even ids are
@@ -51,7 +51,7 @@ describe("popular()", () => {
   test("returns games in popularity order with their score", async () => {
     const mock = api();
     const igdb = testClient(mock.fetch);
-    const top = await igdb.games.select("name").popular(PopularityType.IGDBPlaying, { limit: 3 });
+    const top = await igdb.games.select("name").limit(3).popular(PopularityType.IGDBPlaying);
     expect(top).toEqual([
       { game: { id: 1, name: "game 1" }, value: 1 },
       { game: { id: 2, name: "game 2" }, value: 0.999 },
@@ -74,7 +74,7 @@ describe("popular()", () => {
         ? Response.json(tied)
         : Response.json(tied.map((r) => ({ id: r.game_id }))),
     );
-    const top = await testClient(mock.fetch).games.popular(PopularityType.IGDBVisits, { limit: 3 });
+    const top = await testClient(mock.fetch).games.limit(3).popular(PopularityType.IGDBVisits);
     expect(top.map((t) => t.game.id)).toEqual([3, 7, 9]);
   });
 
@@ -84,7 +84,8 @@ describe("popular()", () => {
     const top = await igdb.games
       .select("name")
       .where((g) => g.game_status.eq(0))
-      .popular(PopularityType.IGDBVisits, { limit: 300 });
+      .limit(300)
+      .popular(PopularityType.IGDBVisits);
     expect(top).toHaveLength(300);
     expect(top.map((t) => t.game.id)).toEqual(Array.from({ length: 300 }, (_, i) => (i + 1) * 2));
     // 15,000 games match: the count says so, then two pages of rows.
@@ -97,7 +98,8 @@ describe("popular()", () => {
     const top = await igdb.games
       .select("name")
       .where((g) => g.platforms.any(508))
-      .popular(PopularityType.IGDBVisits, { limit: 50, maxRows: 500 });
+      .limit(50)
+      .popular(PopularityType.IGDBVisits, { maxRows: 500 });
     // 2,307 games match and 76 of them have a row: the 50 best, where the first 500 rows hold 38.
     expect(top.map((t) => t.game.id)).toEqual(Array.from({ length: 50 }, (_, i) => (i + 1) * 13));
     expect(top[0]).toEqual({ game: { id: 13, name: "game 13" }, value: 0.988 });
@@ -130,14 +132,12 @@ describe("popular()", () => {
 
   test("stops at maxRows and at the end of the table", async () => {
     const igdb = testClient(api().fetch);
-    const filtered = igdb.games.where((g) => g.game_status.eq(0));
-    expect(await filtered.popular(PopularityType.IGDBVisits, { limit: 500, maxRows: 500 })).toHaveLength(250);
-    expect(await filtered.popular(PopularityType.IGDBVisits, { limit: 500, maxRows: 10_000 })).toHaveLength(
-      500,
-    );
+    const filtered = igdb.games.where((g) => g.game_status.eq(0)).limit(500);
+    expect(await filtered.popular(PopularityType.IGDBVisits, { maxRows: 500 })).toHaveLength(250);
+    expect(await filtered.popular(PopularityType.IGDBVisits, { maxRows: 10_000 })).toHaveLength(500);
   });
 
-  test("the query's limit and offset page the ranking; the deprecated limit option still works", async () => {
+  test("the query's limit and offset page the ranking", async () => {
     const mock = api();
     const igdb = testClient(mock.fetch);
     const second = await igdb.games.select("name").limit(3).offset(2).popular(PopularityType.IGDBVisits);
@@ -147,8 +147,6 @@ describe("popular()", () => {
       "fields game_id,value; where popularity_type = 1; sort value desc; limit 15; offset 0;",
     );
     expect(await igdb.games.popular(PopularityType.IGDBVisits)).toHaveLength(10);
-    const old = await igdb.games.limit(5).popular(PopularityType.IGDBVisits, { limit: 2 });
-    expect(old.map((t) => t.game.id)).toEqual([1, 2]);
 
     const none = api();
     expect(await testClient(none.fetch).games.limit(0).popular(PopularityType.IGDBVisits)).toEqual([]);
@@ -170,12 +168,6 @@ describe("popular()", () => {
 
   test("validates its input", async () => {
     const igdb = testClient(api().fetch);
-    await expect(igdb.games.popular(PopularityType.IGDBVisits, { limit: 501 }).execute()).rejects.toThrow(
-      QueryError,
-    );
-    await expect(igdb.games.popular(PopularityType.IGDBVisits, { limit: 1.5 }).execute()).rejects.toThrow(
-      QueryError,
-    );
     await expect(
       igdb.games.sort("rating", "desc").popular(PopularityType.IGDBVisits).execute(),
     ).rejects.toThrow(/remove sort\(\)/);

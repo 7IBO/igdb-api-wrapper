@@ -79,27 +79,18 @@ export class View<R, W extends ViewLinks> implements PromiseLike<ViewRow<R, W>[]
   }
 
   /** The game with this id and its linked rows, or null. */
-  findById(id: number): Task<ViewRow<R, W> | null>;
-  /** @deprecated Pass the options to `execute()`: `view.findById(id).execute({ signal })`. */
-  findById(id: number, options: ExecuteOptions | undefined): Task<ViewRow<R, W> | null>;
-  findById(id: number, options?: ExecuteOptions): Task<ViewRow<R, W> | null> {
-    return new Task(async (execute) => (await this.readIds([id], { ...options, ...execute }))[0] ?? null);
+  findById(id: number): Task<ViewRow<R, W> | null> {
+    return new Task(async (execute) => (await this.readIds([id], execute))[0] ?? null);
   }
 
   /** The games with these ids, in the order given (missing ids are skipped), with their linked rows. */
-  findByIds(ids: readonly number[]): Task<ViewRow<R, W>[]>;
-  /** @deprecated Pass the options to `execute()`: `view.findByIds(ids).execute({ signal })`. */
-  findByIds(ids: readonly number[], options: ExecuteOptions | undefined): Task<ViewRow<R, W>[]>;
-  findByIds(ids: readonly number[], options?: ExecuteOptions): Task<ViewRow<R, W>[]> {
-    return new Task((execute) => this.readIds(ids, { ...options, ...execute }));
+  findByIds(ids: readonly number[]): Task<ViewRow<R, W>[]> {
+    return new Task((execute) => this.readIds(ids, execute));
   }
 
   /** The first game and its linked rows, or null. */
-  first(): Task<ViewRow<R, W> | null>;
-  /** @deprecated Pass the options to `execute()`: `view.first().execute({ signal })`. */
-  first(options: ExecuteOptions | undefined): Task<ViewRow<R, W> | null>;
-  first(options?: ExecuteOptions): Task<ViewRow<R, W> | null> {
-    return new Task(async (execute) => (await this.limit(1).execute({ ...options, ...execute }))[0] ?? null);
+  first(): Task<ViewRow<R, W> | null> {
+    return new Task(async (execute) => (await this.limit(1).execute(execute))[0] ?? null);
   }
 
   /** Number of games matching the view's `where` (and `search`), as `Query.count`; links are not read. */

@@ -103,7 +103,6 @@ export {
   type ReleaseDetails,
   type ReleaseMatch,
   type ReleasePrecision,
-  type ReleaseStatus,
   regionalReleases,
   releaseDate,
   releasesByPlatform,

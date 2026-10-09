@@ -129,16 +129,6 @@ describe("findByGames()", () => {
     expect(mock.calls[0]?.body).toContain("where ((platform = (6,48)) & (game = (10))) & (id > -1);");
   });
 
-  test("byGame() is a deprecated alias with the same result", async () => {
-    const mock = fakeIgdb({ release_dates: releaseDates });
-    const igdb = testClient(mock.fetch);
-    const query = igdb.release_dates.select("date");
-    const renamed = await query.findByGames([10, 20]);
-    const deprecated = await query.byGame([10, 20]);
-    expect([...deprecated]).toEqual([...renamed]);
-    expect(mock.calls[1]?.body).toBe(mock.calls[0]?.body);
-  });
-
   test("a row linked to several games is the same object under each", async () => {
     const igdb = testClient(fakeIgdb({ characters }).fetch);
     const byGame = await igdb.characters.select("name").findByGames([10, 20]);
@@ -359,10 +349,8 @@ describe("defineView()", () => {
     expect(tasks).toHaveLength(4);
     const aborted = AbortSignal.abort(new Error("stop"));
     await expect(games.findById(10).execute({ signal: aborted })).rejects.toThrow("stop");
-    // Deprecated: the options as the last argument, applied when the task is awaited.
-    await expect(Promise.resolve(games.findById(10, { signal: aborted }))).rejects.toThrow("stop");
-    await expect(Promise.resolve(games.findByIds([10], { signal: aborted }))).rejects.toThrow("stop");
-    await expect(Promise.resolve(games.first({ signal: aborted }))).rejects.toThrow("stop");
+    await expect(games.findByIds([10]).execute({ signal: aborted })).rejects.toThrow("stop");
+    await expect(games.first().execute({ signal: aborted })).rejects.toThrow("stop");
     expect(await games.findById(404).catch(() => "failed")).toBeNull();
   });
 

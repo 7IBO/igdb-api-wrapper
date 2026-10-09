@@ -1,7 +1,7 @@
 import { QueryError } from "../core/errors";
 import type { EndpointName } from "../generated/schema";
 import { type DateInput, dateMillis } from "./dates";
-import type { DeprecatedExecuteOptions, ExecuteOptions, Query } from "./query";
+import type { ExecuteOptions, Query } from "./query";
 import { type ReleaseDetails, type ReleasePrecision, releaseDetails } from "./release-period";
 
 export type { ReleaseDetails, ReleasePrecision };
@@ -50,7 +50,7 @@ export interface ReleaseFilter {
   to?: DateInput | undefined;
 }
 
-export interface ReleasesOptions extends ReleaseFilter, DeprecatedExecuteOptions {
+export interface ReleasesOptions extends ReleaseFilter {
   /**
    * Start of the window, inclusive: a `Date`, a `"YYYY-MM-DD"` string or Unix seconds. Release dates
    * are calendar days stored at 00:00 UTC, so the window is in UTC days: `from` is rounded down to its
@@ -126,6 +126,7 @@ export async function releaseCalendar<R>(
   /** The games these ids name that pass the caller's filter, with its selected fields. */
   findGames: (ids: number[], options: ExecuteOptions) => Promise<R[]>,
   options: ReleasesOptions,
+  execute: ExecuteOptions,
 ): Promise<ReleaseCalendarEntry<R>[]> {
   const {
     from,
@@ -137,7 +138,6 @@ export async function releaseCalendar<R>(
     precision = DEFAULT_PRECISION,
     match = "within",
     maxRows = 10_000,
-    ...execute
   } = options;
   if (!Number.isInteger(maxRows) || maxRows < 1) throw new QueryError("maxRows must be a positive integer");
   const window = { from: utcDay(from, "from", Math.floor), to: utcDay(to, "to", Math.ceil) };

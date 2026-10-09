@@ -1,6 +1,6 @@
 import { QueryError } from "../core/errors";
 import type { Character, Collection, Game, Platform, Theme } from "../generated/schema";
-import { type DeprecatedExecuteOptions, MAX_LIMIT, type Query } from "./query";
+import { type ExecuteOptions, MAX_LIMIT, type Query } from "./query";
 import type { Task } from "./task";
 import type { FieldPath, Prettify, SelectResult } from "./types";
 import { literal, MAIN_GAME_TYPES } from "./where";
@@ -22,9 +22,6 @@ interface KindEntities {
 }
 
 export { MAIN_GAME_TYPES };
-
-/** @deprecated Renamed {@link MAIN_GAME_TYPES}. */
-export const SEARCH_GAME_TYPES: readonly number[] = MAIN_GAME_TYPES;
 
 /** Selected paths per kind; a kind without a selection gets its `name`. */
 export type SearchSelection = { [K in SearchKind]: string };
@@ -53,7 +50,7 @@ export type SearchHit<
     >
   : never;
 
-export interface SearchAllOptions extends DeprecatedExecuteOptions {
+export interface SearchAllOptions {
   /** Kinds to return. Default: all of them. */
   kinds?: readonly SearchKind[] | undefined;
   /** Number of hits, 1 to 500. Default 10. */
@@ -65,8 +62,6 @@ export interface SearchAllOptions extends DeprecatedExecuteOptions {
   gameTypes?: number | readonly number[] | "all" | undefined;
   /** Also keep editions of a game (`version_parent` set, such as a "Complete Edition"). Default false. */
   includeEditions?: boolean | undefined;
-  /** @deprecated Use `includeEditions`. */
-  editions?: boolean | undefined;
   /**
    * `relevance` (default) reads every match, up to `maxRows`, and ranks it: exact name, then names
    * starting with the term, then names containing its words, then alternative names; ties go to the
@@ -142,18 +137,17 @@ export async function searchAll(
   endpoints: SearchEndpoints,
   term: string,
   options: SearchAllOptions & { select?: Partial<Record<SearchKind, readonly string[]>> } = {},
+  execute: ExecuteOptions = {},
 ): Promise<SearchHit[]> {
   const {
     kinds = SEARCH_KINDS,
     select = {},
     limit = 10,
     gameTypes = MAIN_GAME_TYPES,
-    editions,
-    includeEditions = editions ?? false,
+    includeEditions = false,
     order = "relevance",
     maxRows = 2000,
     alternativeTitles = "auto",
-    ...execute
   } = options;
   if (!Number.isInteger(limit) || limit < 1 || limit > MAX_LIMIT) {
     throw new QueryError(`limit must be an integer between 1 and ${MAX_LIMIT}, got ${limit}`);

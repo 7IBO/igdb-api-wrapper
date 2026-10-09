@@ -81,11 +81,11 @@ describe("searchAll", () => {
     expect(calls[2]?.body).toContain(
       "where (game != null & game.game_type = (5) & game.version_parent = null);",
     );
-    // One game type id, and the deprecated `editions`.
+    // One game type id, with editions.
     await igdb.searchAll("witcher", {
       kinds: ["game"],
       gameTypes: GameType.Mod,
-      editions: true,
+      includeEditions: true,
       order: "igdb",
     });
     expect(calls[3]?.body).toContain("where (game != null & game.game_type = (5));");

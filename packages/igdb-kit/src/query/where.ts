@@ -270,17 +270,6 @@ export interface ReleasedInOptions extends ReleaseFilter {
    * TBD releases have no date and never match `from` or `to`.
    */
   from?: DateInput | undefined;
-  /** @deprecated Use `platforms`, which takes the same ids. */
-  platform?: number | readonly number[] | undefined;
-  /** @deprecated Use `regions`, which takes the same ids. */
-  region?: number | readonly number[] | undefined;
-  /** @deprecated Use `includeWorldwide`. */
-  worldwide?: boolean | undefined;
-  /**
-   * @deprecated Use `statuses`, which lists the statuses to keep. Also counts release dates IGDB marks
-   * Cancelled or Offline.
-   */
-  includeCancelled?: boolean | undefined;
 }
 
 /**
@@ -289,7 +278,7 @@ export interface ReleasedInOptions extends ReleaseFilter {
  * `developedBy(908)` only matches games where company 908 is itself a developer. The flip side is that
  * two such filters joined with `and` must hold for one entry: `and(g.developedBy(908), g.publishedBy(50))`
  * matches no game unless one company entry is both, and
- * `and(g.releasedIn({ platform: 48 }), g.releasedIn({ platform: 6 }))` matches none. Run two queries
+ * `and(g.releasedIn({ platforms: 48 }), g.releasedIn({ platforms: 6 }))` matches none. Run two queries
  * instead. `or` works as expected.
  */
 export interface GameFilters {
@@ -331,7 +320,7 @@ export interface GameFilters {
   mainGames(options?: MainGamesOptions): Condition;
   /**
    * Games that several people can play together, from `multiplayer_modes`, where every condition
-   * holds for one row: `playableTogether({ platform: Platform.NintendoSwitch, players: 4, mode:
+   * holds for one row: `playableTogether({ platforms: Platform.NintendoSwitch, players: 4, mode:
    * "local" })` is four players on one Switch, competitive or co-op. A row without a platform
    * applies to every platform. Only 5.7% of main games have multiplayer data, so a game left out is
    * not single-player for sure.
@@ -352,7 +341,7 @@ export interface MainGamesOptions {
 
 export interface PlayableTogetherOptions {
   /** `Platform` id, or several: rows of these platforms, and rows that apply to every platform. */
-  platform?: number | readonly number[] | undefined;
+  platforms?: number | readonly number[] | undefined;
   /** At least this many players. Default 2. */
   players?: number | undefined;
   /** `"local"`: on one machine (split screen, shared screen). `"online"`. Default either. */
@@ -415,11 +404,7 @@ const gameFilters: Record<keyof GameFilters, (...args: never[]) => Condition> = 
   publishedBy: companyRole("publisher"),
   releasedIn: (options: ReleasedInOptions) => {
     const parts = releaseFilterParts(
-      {
-        platforms: options.platforms ?? options.platform,
-        regions: options.regions ?? options.region,
-        includeWorldwide: options.includeWorldwide ?? options.worldwide,
-      },
+      { platforms: options.platforms, regions: options.regions, includeWorldwide: options.includeWorldwide },
       "release_dates.",
     );
     if (options.from !== undefined)
@@ -432,9 +417,7 @@ const gameFilters: Record<keyof GameFilters, (...args: never[]) => Condition> = 
       ...releaseFilterParts(
         { statuses: options.statuses },
         "release_dates.",
-        options.includeCancelled
-          ? undefined
-          : `(release_dates.status = null | release_dates.status != (${skipped}))`,
+        `(release_dates.status = null | release_dates.status != (${skipped}))`,
       ),
     );
     if (parts.length === 0) parts.push("release_dates != null");
@@ -468,8 +451,8 @@ const gameFilters: Record<keyof GameFilters, (...args: never[]) => Condition> = 
       ...(options.mode !== "local" ? kinds("online") : []),
     ];
     const parts = [any.length === 1 ? (any[0] as string) : `(${any.join(" | ")})`];
-    if (options.platform !== undefined) {
-      const platforms = typeof options.platform === "number" ? [options.platform] : options.platform;
+    if (options.platforms !== undefined) {
+      const platforms = typeof options.platforms === "number" ? [options.platforms] : options.platforms;
       parts.unshift(`(${m}platform = ${ids(platforms, "platform")} | ${m}platform = null)`);
     }
     return new Condition(parts.join(" & "), parts.length > 1);
