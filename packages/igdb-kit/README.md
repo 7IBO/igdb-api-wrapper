@@ -112,6 +112,21 @@ for await (const game of igdb.games.select("name").iterate()) {
 await igdb.games.select("name").search("zelda").limit(5); // searchable endpoints only, no sort
 ```
 
+### Popularity
+
+`popular()` ranks games by one of IGDB's PopScore metrics and returns them in that order with their score. The query's fields and filters apply to the games:
+
+```ts
+import { GameType, PopularityType } from "igdb-kit";
+
+const trending = await igdb.games
+  .select("name", "cover.image_id")
+  .where((g) => g.game_type.eq(GameType.MainGame))
+  .popular(PopularityType.IGDBPlaying, { limit: 20 });   // { game, value }[]
+```
+
+The metrics are `IGDBVisits`, `IGDBWantToPlay`, `IGDBPlaying` and `IGDBPlayed`, plus Steam (`Steam24hrPeakPlayers`, `SteamGlobalTopSellers`, `SteamMostWishlistedUpcoming`…) and `Twitch24hrHoursWatched`. Popularity rows are read 500 at a time until enough games pass the filter, up to `maxRows` (5000 by default).
+
 ### Batching
 
 Nothing to do: queries started within the same couple of milliseconds are sent together.

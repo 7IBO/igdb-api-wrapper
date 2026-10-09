@@ -1,5 +1,5 @@
 // Compile-time tests: `tsc -p test/types` fails if an inferred type drifts.
-import { createIGDB, GameType, Platform } from "../../src";
+import { createIGDB, GameType, Platform, PopularityType } from "../../src";
 import { type Equal, expectType } from "./helpers";
 
 const igdb = createIGDB({ clientId: "x", clientSecret: "y" });
@@ -162,3 +162,9 @@ expectType<
     }
   >
 >();
+
+// popular() keeps the selection and adds the score; only on games.
+const popular = await igdb.games.select("name").popular(PopularityType.IGDBPlaying);
+expectType<Equal<typeof popular, { game: { id: number; name?: string }; value: number }[]>>();
+// @ts-expect-error only on games
+igdb.platforms.popular(PopularityType.IGDBPlaying);

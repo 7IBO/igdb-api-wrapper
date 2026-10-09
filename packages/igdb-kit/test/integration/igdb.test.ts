@@ -1,7 +1,17 @@
 // Runs against the real IGDB API. Skipped unless TWITCH_CLIENT_ID and TWITCH_CLIENT_SECRET are set.
 // Uses about 15 requests.
 import { describe, expect, test } from "bun:test";
-import { and, createIGDB, GameType, Platform, QueryError, Theme, TierError, toDate } from "../../src";
+import {
+  and,
+  createIGDB,
+  GameType,
+  Platform,
+  PopularityType,
+  QueryError,
+  Theme,
+  TierError,
+  toDate,
+} from "../../src";
 
 const clientId = process.env.TWITCH_CLIENT_ID;
 const clientSecret = process.env.TWITCH_CLIENT_SECRET;
@@ -117,5 +127,18 @@ describe.skipIf(!clientId || !clientSecret)("real IGDB API", () => {
     expect(upcoming).toHaveLength(5);
     for (const r of upcoming)
       expect(toDate(r.date ?? 0).getTime()).toBeGreaterThanOrEqual(now.getTime() - 1000);
+  });
+
+  test("popular() returns games by PopScore, filtered by the query", async () => {
+    const top = await igdb.games
+      .select("name", "game_type")
+      .where((g) => g.game_type.eq(GameType.MainGame))
+      .popular(PopularityType.IGDBPlaying, { limit: 5 });
+    expect(top).toHaveLength(5);
+    expect(top.every((t) => t.game.game_type === GameType.MainGame && typeof t.game.name === "string")).toBe(
+      true,
+    );
+    const values = top.map((t) => t.value);
+    expect(values).toEqual([...values].sort((a, b) => b - a));
   });
 });
