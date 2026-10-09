@@ -50,6 +50,16 @@
         "default": "./dist/webhooks.cjs"
       }
     },
+    "./proxy": {
+      "import": {
+        "types": "./dist/proxy.d.ts",
+        "default": "./dist/proxy.js"
+      },
+      "require": {
+        "types": "./dist/proxy.d.cts",
+        "default": "./dist/proxy.cjs"
+      }
+    },
     "./package.json": "./package.json"
   },
   "keywords": [

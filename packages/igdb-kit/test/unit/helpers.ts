@@ -1,4 +1,4 @@
-import { createIGDB, type IGDBClientOptions, LocalLimiter } from "../../src";
+import { createIGDB, type IGDBServerClientOptions, LocalLimiter } from "../../src";
 
 export interface Call {
   url: string;
@@ -36,7 +36,7 @@ export function mockFetch(handler: Handler, onMultiquery?: (call: Call) => Respo
   };
 }
 
-export function testClient(fetch: typeof globalThis.fetch, options: Partial<IGDBClientOptions> = {}) {
+export function testClient(fetch: typeof globalThis.fetch, options: Partial<IGDBServerClientOptions> = {}) {
   return createIGDB({
     clientId: "test-client",
     clientSecret: "test-secret",

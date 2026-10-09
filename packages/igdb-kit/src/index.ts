@@ -1,6 +1,13 @@
 export { type BatcherOptions, MAX_BLOCKS } from "./batch/batcher";
 export { type CacheStore, type MemoryCacheOptions, memoryCache } from "./cache";
-export { type BatchResult, createIGDB, type IGDBClient, type IGDBClientOptions } from "./client";
+export {
+  type BatchResult,
+  createIGDB,
+  type IGDBClient,
+  type IGDBClientOptions,
+  type IGDBProxyClientOptions,
+  type IGDBServerClientOptions,
+} from "./client";
 export { memoryTokenStore, type StoredToken, type TokenStore } from "./core/auth";
 export * from "./core/errors";
 export {

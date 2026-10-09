@@ -95,6 +95,8 @@ jobs:
           node -e "const { redisLimiter } = require('igdb-kit/redis'); if (typeof redisLimiter !== 'function') process.exit(1)"
           node --input-type=module -e "import { webhookHandler } from 'igdb-kit/webhooks'; if (typeof webhookHandler !== 'function') process.exit(1)"
           node -e "const { parseWebhook } = require('igdb-kit/webhooks'); if (typeof parseWebhook !== 'function') process.exit(1)"
+          node --input-type=module -e "import { igdbProxy } from 'igdb-kit/proxy'; import { createIGDB } from 'igdb-kit'; const h = igdbProxy({ igdb: createIGDB({ clientId: 'a', clientSecret: 'b' }), endpoints: ['games'] }); const r = await h(new Request('http://x/api/igdb/genres', { method: 'POST', body: 'fields name;' })); if (r.status !== 404) process.exit(1)"
+          node -e "const { igdbProxy } = require('igdb-kit/proxy'); const { createIGDB } = require('igdb-kit'); igdbProxy({ igdb: createIGDB({ clientId: 'a', clientSecret: 'b' }) })"
 
   integration:
     name: Integration tests (real IGDB API)
