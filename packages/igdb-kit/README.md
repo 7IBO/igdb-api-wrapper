@@ -3,7 +3,7 @@
 A fully typed IGDB API client for Node.js and Bun.
 
 - **Exact result types.** The type of every response is inferred from the fields you select: nested objects for expanded relations, ids for the others, and every field except `id` is optional because IGDB omits empty fields.
-- **Generated from the official schema.** Entities come from IGDB's `igdbapi.proto`, merged with the API docs for descriptions and `@deprecated` notices. Fields IGDB replaced, such as `category`, are left out because they are never returned. All 81 documented endpoints are included, `executables` and `logos` among them.
+- **Generated from the official schema.** Entities come from IGDB's `igdbapi.proto`, merged with the API docs for descriptions and `@deprecated` notices. Fields IGDB replaced, such as `category`, are left out because they are empty or no longer updated. All 81 documented endpoints are included, `executables` and `logos` among them.
 - **Field paths checked twice.** TypeScript checks them as you type, and they are checked again at runtime before the request leaves. IGDB rejects a whole multiquery for one bad field and silently ignores an unknown `sort` field.
 - **Rate limit done right.** One limiter per client id, shared by every client in the process (4 requests per second, 8 in flight). After a 429 the whole queue pauses and slows down, because IGDB sends no `Retry-After`.
 - **Automatic multiquery.** Queries started at the same time are grouped into `/multiquery` requests of up to 10 blocks, so 30 `findById` calls cost 3 HTTP requests. Batches are sized by estimated response size to stay under IGDB's 10 MB cap. An invalid query or an oversized response is isolated by splitting the batch, so only the faulty query fails. Identical queries in flight are sent once.
@@ -94,7 +94,7 @@ toDate(upcoming[0].date!);                                            // a Date
 
 `GameType`, `GameStatus`, `GameReleaseFormat`, `Genre`, `Theme`, `GameMode`, `PlayerPerspective`, `Platform`, `PlatformType`, `ExternalGameSource`, `PopularityType`, `ReleaseDateRegion`, `DateFormat`, `WebsiteType`, `AgeRatingOrganization`, `LanguageSupportType`, `CharacterGender` and `CharacterSpecie` are generated from the API.
 
-IGDB replaced several fields with reference tables: `games.category` became `game_type`, `release_dates.region` became `release_region`, `external_games.category` became `external_game_source`, and so on. IGDB still accepts the old names but never returns them, so `where category = 0` silently matches nothing. igdb-kit leaves them out of the types and throws a `QueryError` that names the replacement.
+IGDB replaced several fields with reference tables: `games.category` became `game_type`, `release_dates.region` became `release_region`, `external_games.category` became `external_game_source`, and so on. IGDB still accepts the old names but leaves them empty or no longer updates them, so `where category = 0` silently matches nothing. igdb-kit leaves them out of the types and throws a `QueryError` that names the replacement.
 
 Avoid filters three levels deep, such as `involved_companies.company.name`: IGDB times out after about 27 seconds. Look the company id up first, then filter on `involved_companies.company`.
 
@@ -180,6 +180,7 @@ Node.js 20 or later, and Bun. ESM and CommonJS. Types are tested on TypeScript 5
 ```sh
 bun install
 bun run codegen          # regenerate src/generated/schema.ts (--fetch downloads the latest proto and reference tables, with Twitch credentials)
+bun run audit            # check every field against the live API (types, unknown fields), with Twitch credentials
 bun run test             # unit tests
 bun run test:types       # compile-time inference tests
 bun run bench:types      # type-checking cost per query on each TypeScript version
