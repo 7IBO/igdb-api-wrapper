@@ -209,6 +209,10 @@ describe("game filters", () => {
         "(involved_companies.company = (908) & involved_companies.developer = true);",
     );
     expect(() => w((g) => g.releasedIn({ from: new Date("nope") }))).toThrow(/Invalid Date/);
+    expect(w((g) => g.releasedIn({ from: "2026-01-01", to: "2027-01-01", includeCancelled: true }))).toBe(
+      "where release_dates.date >= 1767225600 & release_dates.date < 1798761600;",
+    );
+    expect(() => w((g) => g.releasedIn({ to: Date.now() }))).toThrow(/releasedIn\(\) to .* milliseconds/);
   });
 
   test("only on the root of games", () => {
@@ -231,8 +235,43 @@ describe("timestamps", () => {
     expect(() => igdb.games.where((g) => g.first_release_date.gt(new Date("nope")))).toThrow(/Invalid Date/);
   });
 
-  test("toUnix and toDate convert between Date and seconds", () => {
+  test("timestamp fields take date strings and seconds, and refuse milliseconds", () => {
+    const w = (fn: Parameters<typeof igdb.games.where>[0]) => igdb.games.where(fn).toApicalypse();
+    expect(w((g) => g.first_release_date.gte("2026-01-01"))).toBe("where first_release_date >= 1767225600;");
+    expect(w((g) => g.first_release_date.lt("2026-01-01T00:00:00.999Z"))).toBe(
+      "where first_release_date < 1767225600;",
+    );
+    expect(w((g) => g.first_release_date.eq(1767225600))).toBe("where first_release_date = 1767225600;");
+    expect(w((g) => g.release_dates.date.notIn("2026-01-01", 1767312000))).toBe(
+      "where release_dates.date != (1767225600,1767312000);",
+    );
+    expect(() => w((g) => g.first_release_date.gte(Date.now()))).toThrow(/looks like milliseconds/);
+    expect(() => w((g) => g.first_release_date.gte("soon"))).toThrow(/Invalid first_release_date: "soon"/);
+    // Only timestamps are dates: other numbers are left alone.
+    expect(w((g) => g.total_rating_count.gte(1e12))).toBe("where total_rating_count >= 1000000000000;");
+    expect(igdb.popularity_primitives.where((p) => p.calculated_at.gte("2026-10-01")).toApicalypse()).toBe(
+      "where calculated_at >= 1790812800;",
+    );
+    expect(igdb.companies.where((c) => c.start_date.lt("2000-01-01")).toApicalypse()).toBe(
+      "where start_date < 946684800;",
+    );
+  });
+
+  test("between() is on or after from, before to, and nests in and()", () => {
+    const w = (fn: Parameters<typeof igdb.games.where>[0]) => igdb.games.where(fn).toApicalypse();
+    expect(w((g) => g.first_release_date.between("2026-01-01", new Date("2027-01-01T00:00:00Z")))).toBe(
+      "where first_release_date >= 1767225600 & first_release_date < 1798761600;",
+    );
+    expect(w((g) => or(g.release_dates.date.between(1767225600, 1798761600), g.rating.gte(80)))).toBe(
+      "where (release_dates.date >= 1767225600 & release_dates.date < 1798761600) | rating >= 80;",
+    );
+  });
+
+  test("toUnix and toDate convert between dates and seconds", () => {
     expect(toUnix(new Date("2026-01-01T00:00:00.999Z"))).toBe(1767225600);
+    expect(toUnix("2026-01-01")).toBe(1767225600);
+    expect(toUnix(1767225600)).toBe(1767225600);
+    expect(() => toUnix(Date.now())).toThrow(QueryError);
     expect(toDate(1767225600).toISOString()).toBe("2026-01-01T00:00:00.000Z");
   });
 });

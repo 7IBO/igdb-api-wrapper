@@ -118,7 +118,7 @@ igdb.games.where((g) =>
 );
 ```
 
-IGDB timestamps (`first_release_date`, `release_dates.date`, `updated_at`…) are Unix seconds, not milliseconds. Timestamp fields accept a `Date` in `where`, and `toDate()` / `toUnix()` convert the other way:
+IGDB timestamps (`first_release_date`, `release_dates.date`, `updated_at`…) are Unix seconds, not milliseconds. Everywhere igdb-kit takes a date (`where` on a timestamp field, `releasedIn()`, `releases()`, `sync({ since })`), it accepts a `Date`, a `"YYYY-MM-DD"` or ISO string, or Unix seconds; a number in milliseconds, such as `Date.now()`, throws instead of matching nothing. `between(from, to)` is on or after `from` and before `to`, and `toDate()` / `toUnix()` convert either way:
 
 ```ts
 import { toDate } from "igdb-kit";
@@ -128,6 +128,8 @@ const upcoming = await igdb.release_dates
   .where((r) => r.date.gte(new Date()))                               // date >= 1791504000
   .sort("date", "asc");
 toDate(upcoming[0].date!);                                            // a Date
+
+igdb.games.where((g) => g.first_release_date.between("2026-01-01", "2027-01-01"));
 ```
 
 `GameType`, `GameStatus`, `GameReleaseFormat`, `Genre`, `Theme`, `GameMode`, `PlayerPerspective`, `Platform`, `PlatformType`, `PlatformFamily`, `ExternalGameSource`, `PopularityType`, `ReleaseDateRegion`, `ReleaseDateStatus`, `DateFormat`, `WebsiteType`, `AgeRatingOrganization`, `AgeRatingCategory`, `Language`, `LanguageSupportType`, `Region` (of `game_localizations`), `CompanyStatus`, `CompanySize`, `CompanyType`, `CollectionType`, `CollectionMembershipType`, `CollectionRelationType`, `NetworkType`, `ImageType`, `ArtworkType`, `CharacterGender` and `CharacterSpecie` are generated from the API. Age ratings repeat across organizations, so their keys start with it: `AgeRatingCategory.PEGI_18`, `AgeRatingCategory.ESRB_M`.
@@ -186,7 +188,7 @@ Store ids are strings in IGDB; numbers are accepted. Unknown ids are missing fro
 
 ### Popularity
 
-`popular()` ranks games by one of IGDB's PopScore metrics and returns them in that order with their score. The query's fields and filters apply to the games:
+`popular()` ranks games by one of IGDB's PopScore metrics and returns them in that order with their score. The query's fields and filters apply to the games, and its `limit` (10 by default) and `offset` pick the page of the ranking; `sort` throws, since the ranking sets the order:
 
 ```ts
 import { GameType, PopularityType } from "igdb-kit";
@@ -194,20 +196,20 @@ import { GameType, PopularityType } from "igdb-kit";
 const trending = await igdb.games
   .select("name", "cover.image_id")
   .where((g) => g.game_type.eq(GameType.MainGame))
-  .popular(PopularityType.IGDBPlaying, { limit: 20 });   // { game, value }[]
+  .limit(20)
+  .popular(PopularityType.IGDBPlaying);                  // { game, value }[]
+const next = await igdb.games.limit(20).offset(20).popular(PopularityType.IGDBPlaying);
 ```
 
 The metrics are `IGDBVisits`, `IGDBWantToPlay`, `IGDBPlaying` and `IGDBPlayed`, plus Steam (`Steam24hrPeakPlayers`, `SteamGlobalTopSellers`, `SteamMostWishlistedUpcoming`…) and `Twitch24hrHoursWatched`. Popularity rows are read 500 at a time until enough games pass the filter. The games a filter matches are counted along with the first page: if it falls short and they are at most 10,000, their own rows are read instead, which gives the exact ranking in a few requests (the 20 most visited games released only on Switch 2 take 4 requests, where reading rows in value order found 14 of them in 20). Above 10,000 games, reading stops after `maxRows` rows (5000 by default).
 
-`weightedPopular()` ranks by several metrics at once. Their scales differ by orders of magnitude (IGDB visits top at 0.005, Steam peak players at 0.19), so each is divided by its top value before weighting:
+`weightedPopular()` ranks by several metrics at once, paged the same way. Their scales differ by orders of magnitude (IGDB visits top at 0.005, Steam peak players at 0.19), so each is divided by its top value before weighting:
 
 ```ts
 const top = await igdb.games
   .select("name")
-  .weightedPopular(
-    { [PopularityType.IGDBWantToPlay]: 0.5, [PopularityType.Steam24hrPeakPlayers]: 0.5 },
-    { limit: 20 },
-  );
+  .limit(20)
+  .weightedPopular({ [PopularityType.IGDBWantToPlay]: 0.5, [PopularityType.Steam24hrPeakPlayers]: 0.5 });
 // { game, score, values: { 2: 0.0019, 5: null } }[]
 ```
 
@@ -245,7 +247,7 @@ const october = await igdb.games
 
 `release` is the game's most precise release in the window, then the earliest; `releases` lists them all. IGDB dates are not all days: `precision` is `"day"`, `"month"` (`Oct 2026`), `"quarter"` (`Q4 2026`), `"year"` or `"tbd"`, and `start` and `end` bound the period. A month, quarter or year is in the window when its whole period is, so `Q4 2026` is in October to December but not in October alone; `match: "overlap"` includes every period that overlaps the window. TBD dates are left out unless `precision` includes `"tbd"`, whatever the window.
 
-Release dates are calendar days at 00:00 UTC, so the window is in UTC days: pass `"YYYY-MM-DD"` strings rather than local midnights. By default Offline and Cancelled dates are left out, and dates without a status, more than half of them, are kept. `statuses: [ReleaseDateStatus.FullRelease, null]` picks statuses, `null` standing for "no status".
+Release dates are calendar days at 00:00 UTC, so the window is in UTC days: pass `"YYYY-MM-DD"` strings rather than local midnights. The query's `limit` and `offset`, when set, page the entries. By default Offline and Cancelled dates are left out, and dates without a status, more than half of them, are kept. `statuses: [ReleaseDateStatus.FullRelease, null]` picks statuses, `null` standing for "no status".
 
 A window costs one count, `ceil(dates / 500)` pages read in parallel and `ceil(games / 500)` for the games, packed into multiqueries: a month of upcoming releases (1,700 dates, 1,000 games) takes 3 HTTP requests. Above `maxRows` dates (10,000 by default), it throws instead: page through long periods month by month.
 
@@ -325,7 +327,7 @@ for await (const page of igdb.games.select("*").sync({ since: lastSync })) {
 lastSync = startedAt; // next time, only what changed since this run
 ```
 
-The first page goes out with the count. The other pages are then requested in parallel, which batching packs into multiqueries: each asks for the matches after a row already read, skipping those the pages in between hold, so pages come back full however the ids are spread. Matches added or removed meanwhile shift the pages: repeated rows are dropped and rows a page skipped past are read again, so none is missed. A day of changes on `games` (about 33,000) takes 8 requests and 3 seconds, all 73,000 companies with `*` 26 requests and about 11 seconds, and the 133,000 rows of one popularity type, crowded into a few stretches of ids, 28 requests and 7 seconds. At most `concurrency` pages (40 by default, about 64 MB) are requested or waiting to be read, so a slow consumer does not fill the memory. With `since`, only entities whose `updated_at` is newer come back. Sync requests run at `background` priority, so interactive queries pass first. Pair it with webhooks to stay up to date between runs.
+The first page goes out with the count. The other pages are then requested in parallel, which batching packs into multiqueries: each asks for the matches after a row already read, skipping those the pages in between hold, so pages come back full however the ids are spread. Matches added or removed meanwhile shift the pages: repeated rows are dropped and rows a page skipped past are read again, so none is missed. A day of changes on `games` (about 33,000) takes 8 requests and 3 seconds, all 73,000 companies with `*` 26 requests and about 11 seconds, and the 133,000 rows of one popularity type, crowded into a few stretches of ids, 28 requests and 7 seconds. At most `concurrency` pages (40 by default, about 64 MB) are requested or waiting to be read, so a slow consumer does not fill the memory. With `since` (a `Date`, a date string or Unix seconds), only entities whose `updated_at` is newer come back. Sync requests run at `background` priority, so interactive queries pass first. Pair it with webhooks to stay up to date between runs.
 
 ### Images
 

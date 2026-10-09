@@ -207,6 +207,25 @@ describe("weightedPopular()", () => {
     expect(mock.calls[0]?.body.split("\n")).toHaveLength(2);
   });
 
+  test("the query's limit and offset page the ranking", async () => {
+    const mock = api(small);
+    const igdb = testClient(mock.fetch);
+    const weights = { [PopularityType.IGDBWantToPlay]: 0.5, [PopularityType.IGDBPlaying]: 0.5 };
+    const page = await igdb.games.limit(2).offset(1).weightedPopular(weights);
+    expect(page.map((t) => [t.game.id, t.score])).toEqual([
+      [10, 0.5],
+      [40, 0.25],
+    ]);
+    expect((await igdb.games.offset(3).weightedPopular(weights)).map((t) => t.game.id)).toEqual([30]);
+    expect((await igdb.games.limit(3).weightedPopular(weights, { limit: 1 })).map((t) => t.game.id)).toEqual([
+      20,
+    ]);
+    const calls = mock.calls.length;
+    expect(await igdb.games.limit(0).weightedPopular(weights)).toEqual([]);
+    expect(mock.calls).toHaveLength(calls);
+    await expect(igdb.games.sort("name").weightedPopular(weights)).rejects.toThrow(/remove sort\(\)/);
+  });
+
   test("a where matching nothing stops after the first round", async () => {
     const mock = api(small, { filterAbove: 20_000 });
     const top = await testClient(mock.fetch)

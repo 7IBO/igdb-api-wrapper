@@ -135,12 +135,18 @@ igdb.games.where((g) => g.platforms.any(6, 48));
 igdb.games.where((g) => g.platforms.name.eq("PC"));
 igdb.games.where((g) => g.cover.image_id.eq("abc"));
 igdb.games.where((g) => g.game_type.eq(GameType.MainGame).and(g.platforms.any(Platform.PlayStation5)));
-// Timestamp fields accept a Date, at any depth; other numbers do not.
+// Timestamp fields accept a Date, a date string or seconds, at any depth; other numbers do not.
 igdb.games.where((g) => g.first_release_date.gte(new Date()));
 igdb.games.where((g) => g.release_dates.date.lt(new Date(2030, 0, 1)));
 igdb.games.where((g) => g.first_release_date.gte(1_700_000_000));
+igdb.games.where((g) => g.first_release_date.between("2026-01-01", "2027-01-01"));
+igdb.games.where((g) => g.release_dates.date.in("2026-10-20", new Date(), 1_790_000_000));
 // @ts-expect-error rating is not a timestamp
 igdb.games.where((g) => g.rating.gte(new Date()));
+// @ts-expect-error rating is not a timestamp
+igdb.games.where((g) => g.rating.between(1, 2));
+// @ts-expect-error a string is not a number
+igdb.games.where((g) => g.rating.gte("2026-01-01"));
 // The hidden timestamp key never shows in results.
 expectType<Equal<Extract<keyof NonNullable<typeof q4>, symbol>, never>>();
 // @ts-expect-error string compared to a number
@@ -274,6 +280,8 @@ const popular = await igdb.games.select("name").popular(PopularityType.IGDBPlayi
 expectType<Equal<typeof popular, { game: { id: number; name?: string }; value: number }[]>>();
 // @ts-expect-error only on games
 igdb.platforms.popular(PopularityType.IGDBPlaying);
+// The query's limit and offset page the ranking.
+igdb.games.limit(20).offset(20).popular(PopularityType.IGDBPlaying);
 
 // weightedPopular() keeps the selection, adds the score and each type's value (null: no row).
 const weighted = await igdb.games

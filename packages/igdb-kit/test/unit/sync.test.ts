@@ -59,6 +59,18 @@ describe("sync", () => {
     expect(mock.calls[0]?.body).toContain("where (updated_at >= 2000) & (id > -1)");
   });
 
+  test("since takes Unix seconds or a date string, and refuses milliseconds", async () => {
+    const mock = mockFetch(dataset([1, 2], (id) => id * 1000));
+    const igdb = testClient(mock.fetch);
+    expect((await collect(igdb.games.sync({ since: 2000 }))).flat().map((g) => g.id)).toEqual([2]);
+    expect((await collect(igdb.games.sync({ since: "1970-01-01T00:16:40Z" }))).flat()).toHaveLength(2);
+    expect(mock.calls.map((c) => c.body.match(/updated_at >= \d+/)?.[0])).toEqual([
+      "updated_at >= 2000",
+      "updated_at >= 1000",
+    ]);
+    await expect(igdb.games.sync({ since: Date.now() }).next()).rejects.toThrow(/milliseconds/);
+  });
+
   test("pages come back full wherever the ids lie", async () => {
     // 5,500 matches packed at the start, 500 spread up to a million.
     const ids = [

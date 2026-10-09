@@ -276,6 +276,7 @@ for (const e of enums.values()) {
 // Entities: plain interfaces, relations typed as the target entity. The query layer turns a relation
 // into an id (or id array) unless the relation is expanded in the selected fields.
 const runtimeEntities: string[] = [];
+const runtimeTimestamps: string[] = [];
 for (const [name, fields] of messages) {
   const doc = docsByMessage.get(name);
   const docFields = new Map(doc?.fields.map((f) => [f.name, f]) ?? []);
@@ -294,6 +295,7 @@ for (const [name, fields] of messages) {
   if (timestamps.length) {
     out += `  /** @internal Fields holding a Unix timestamp in seconds. */\n`;
     out += `  readonly [timestampKey]?: ${timestamps.map((f) => JSON.stringify(f.name)).join(" | ")};\n`;
+    runtimeTimestamps.push(`  ${name}: [${timestamps.map((f) => JSON.stringify(f.name)).join(",")}],`);
   }
   const meta: string[] = [];
   for (const f of fields) {
@@ -406,6 +408,11 @@ export type SearchableEndpoint = ${[...SEARCHABLE].map((s) => JSON.stringify(s))
  */
 export const entities: Record<string, Record<string, 0 | string>> = {
 ${runtimeEntities.join("\n")}
+};
+
+/** Fields holding a Unix timestamp in seconds, by entity: \`where\` filters on them take dates. */
+export const timestampFields: Record<string, readonly string[]> = {
+${runtimeTimestamps.join("\n")}
 };
 
 /** Fields IGDB replaced or dropped, with their replacement. They are no longer returned. */

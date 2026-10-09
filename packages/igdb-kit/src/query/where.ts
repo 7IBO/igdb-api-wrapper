@@ -6,7 +6,9 @@ import {
   ReleaseDateRegion,
   ReleaseDateStatus,
   removedFields,
+  timestampFields,
 } from "../generated/schema";
+import { type DateInput, dateSeconds } from "./dates";
 import type { TimestampKeys } from "./types";
 
 type Scalar = string | number | boolean;
@@ -88,18 +90,21 @@ export interface NumberFilter<T extends number = number> extends NullFilter {
 }
 
 /**
- * Filters on a Unix-timestamp field. IGDB counts in seconds; a `Date` is converted for you, so
- * `gte(new Date())` never compares milliseconds to seconds.
+ * Filters on a Unix-timestamp field. Values are {@link DateInput}s: a `Date` or a `"YYYY-MM-DD"` string
+ * is converted to the seconds IGDB counts, so `gte(new Date())` never compares milliseconds to
+ * seconds, and a number is taken as seconds (one in milliseconds throws).
  */
 export interface TimestampFilter extends NullFilter {
-  eq(value: number | Date): Condition;
-  ne(value: number | Date): Condition;
-  gt(value: number | Date): Condition;
-  gte(value: number | Date): Condition;
-  lt(value: number | Date): Condition;
-  lte(value: number | Date): Condition;
-  in(...values: (number | Date)[]): Condition;
-  notIn(...values: (number | Date)[]): Condition;
+  eq(value: DateInput): Condition;
+  ne(value: DateInput): Condition;
+  gt(value: DateInput): Condition;
+  gte(value: DateInput): Condition;
+  lt(value: DateInput): Condition;
+  lte(value: DateInput): Condition;
+  /** `field >= from & field < to`: on or after `from`, before `to`. */
+  between(from: DateInput, to: DateInput): Condition;
+  in(...values: DateInput[]): Condition;
+  notIn(...values: DateInput[]): Condition;
 }
 
 export interface StringFilter extends NullFilter {
@@ -161,10 +166,7 @@ export type WhereFields<E> = {
 /** @internal An Apicalypse literal: a quoted string, a number, `null`, or a `Date` in Unix seconds. */
 export function literal(value: Value | null): string {
   if (value === null) return "null";
-  if (value instanceof Date) {
-    if (Number.isNaN(value.getTime())) throw new QueryError("Invalid Date in where");
-    return String(toUnix(value));
-  }
+  if (value instanceof Date) return String(dateSeconds(value, "where"));
   if (typeof value === "string") return `"${value.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
   if (typeof value === "number" && !Number.isFinite(value)) {
     throw new QueryError(`Invalid number in where: ${value}`);
@@ -177,21 +179,26 @@ const list = (values: Value[], open: string, close: string) => {
   return `${open}${values.map(literal).join(",")}${close}`;
 };
 
-function filterOps(path: string): Record<string, (...args: never[]) => Condition> {
+/** The filters of the field at `path`; on a timestamp field, values are dates (see TimestampFilter). */
+function filterOps(path: string, timestamp = false): Record<string, (...args: never[]) => Condition> {
   const c = (rest: string) => new Condition(`${path} ${rest}`);
   const text = (value: string, before: string, after: string, options?: { caseSensitive?: boolean }) =>
     c(`${options?.caseSensitive ? "=" : "~"} ${before}${literal(value)}${after}`);
+  const value = (v: Value): Value => (timestamp ? dateSeconds(v as DateInput, path) : v);
+  const values = (v: Value[]) => v.map(value);
   return {
     isNull: () => c("= null"),
     notNull: () => c("!= null"),
-    eq: (v: Value) => c(`= ${literal(v)}`),
-    ne: (v: Value) => c(`!= ${literal(v)}`),
-    gt: (v: number | Date) => c(`> ${literal(v)}`),
-    gte: (v: number | Date) => c(`>= ${literal(v)}`),
-    lt: (v: number | Date) => c(`< ${literal(v)}`),
-    lte: (v: number | Date) => c(`<= ${literal(v)}`),
-    in: (...v: Value[]) => c(`= ${list(v, "(", ")")}`),
-    notIn: (...v: Value[]) => c(`!= ${list(v, "(", ")")}`),
+    eq: (v: Value) => c(`= ${literal(value(v))}`),
+    ne: (v: Value) => c(`!= ${literal(value(v))}`),
+    gt: (v: number | Date) => c(`> ${literal(value(v))}`),
+    gte: (v: number | Date) => c(`>= ${literal(value(v))}`),
+    lt: (v: number | Date) => c(`< ${literal(value(v))}`),
+    lte: (v: number | Date) => c(`<= ${literal(value(v))}`),
+    between: (from: Value, to: Value) =>
+      new Condition(`${path} >= ${literal(value(from))} & ${path} < ${literal(value(to))}`, true),
+    in: (...v: Value[]) => c(`= ${list(values(v), "(", ")")}`),
+    notIn: (...v: Value[]) => c(`!= ${list(values(v), "(", ")")}`),
     any: (...v: Scalar[]) => c(`= ${list(v, "(", ")")}`),
     all: (...v: Scalar[]) => c(`= ${list(v, "[", "]")}`),
     none: (...v: Scalar[]) => c(`!= ${list(v, "(", ")")}`),
@@ -221,13 +228,13 @@ export interface ReleasedInOptions {
   /** Count worldwide releases as releases in `region`. Default true. */
   worldwide?: boolean | undefined;
   /**
-   * Released on or after this date (a `Date`, or Unix seconds). IGDB stores a month-only date on its
-   * first day, a quarter on its last day and a year-only date on December 31; TBD releases have no
-   * date and never match `from` or `to`.
+   * Released on or after this date: a `Date`, a `"YYYY-MM-DD"` string or Unix seconds. IGDB stores a
+   * month-only date on its first day, a quarter on its last day and a year-only date on December 31;
+   * TBD releases have no date and never match `from` or `to`.
    */
-  from?: Date | number | undefined;
-  /** Released before this date (a `Date`, or Unix seconds). */
-  to?: Date | number | undefined;
+  from?: DateInput | undefined;
+  /** Released before this date: a `Date`, a `"YYYY-MM-DD"` string or Unix seconds. */
+  to?: DateInput | undefined;
   /**
    * Also count release dates IGDB marks Cancelled or Offline. Default false. Release dates without a
    * status (more than half of them) always count.
@@ -314,8 +321,10 @@ const gameFilters: Record<keyof GameFilters, (...args: never[]) => Condition> = 
       if (options.worldwide !== false) regions.add(ReleaseDateRegion.Worldwide);
       parts.push(`release_dates.release_region = ${ids([...regions], "region")}`);
     }
-    if (options.from !== undefined) parts.push(`release_dates.date >= ${literal(options.from)}`);
-    if (options.to !== undefined) parts.push(`release_dates.date < ${literal(options.to)}`);
+    if (options.from !== undefined)
+      parts.push(`release_dates.date >= ${dateSeconds(options.from, "releasedIn() from")}`);
+    if (options.to !== undefined)
+      parts.push(`release_dates.date < ${dateSeconds(options.to, "releasedIn() to")}`);
     if (!options.includeCancelled) {
       // `status != (4,5)` alone would drop release dates without a status, which IGDB treats as no match.
       const skipped = `${ReleaseDateStatus.Offline},${ReleaseDateStatus.Cancelled}`;
@@ -341,13 +350,11 @@ export function whereProxy(entity: string, path: string[] = []): unknown {
         throw new QueryError(`Unknown field "${[...path, prop].join(".")}" on ${entity}`);
       }
       const target = fields[prop];
-      return target === 0 ? scalarProxy([...path, prop]) : whereProxy(target as string, [...path, prop]);
+      return target === 0
+        ? filterOps([...path, prop].join("."), timestampFields[entity]?.includes(prop))
+        : whereProxy(target as string, [...path, prop]);
     },
   });
-}
-
-function scalarProxy(path: string[]): unknown {
-  return filterOps(path.join("."));
 }
 
 /**
@@ -364,14 +371,4 @@ export function throwIfRemoved(entity: string, field: string, path: string): voi
       ? `"${path}" was replaced by IGDB and is empty or no longer updated: use "${replacement}" instead`
       : `"${path}" was dropped by IGDB and is always empty`,
   );
-}
-
-/** IGDB timestamps are Unix seconds: `toUnix(new Date())` for a filter value. Rounds down. */
-export function toUnix(date: Date): number {
-  return Math.floor(date.getTime() / 1000);
-}
-
-/** A `Date` from an IGDB timestamp (Unix seconds), such as `first_release_date`. */
-export function toDate(seconds: number): Date {
-  return new Date(seconds * 1000);
 }

@@ -8,6 +8,7 @@ import {
   type SearchableEndpoint,
 } from "../generated/schema";
 import { byGame, type GameLinkedEndpoint } from "../links/by-game";
+import { type DateInput, dateSeconds } from "./dates";
 import {
   allIds,
   chunk,
@@ -101,7 +102,10 @@ export interface QueryRunner {
 }
 
 export interface PopularOptions extends ExecuteOptions {
-  /** Number of games to return, 1 to 500. Defaults to 10. */
+  /**
+   * @deprecated Use the query's `limit()`, with `offset()` for the next pages:
+   * `igdb.games.limit(20).popular(type)`. Number of games to return, 0 to 500.
+   */
   limit?: number;
   /**
    * Stop after reading this many popularity rows when a `where` filters most games out. Defaults to
@@ -463,10 +467,11 @@ export class Query<N extends EndpointName, R = { id: number }> extends Executabl
   /**
    * The most popular games for one PopScore metric (`PopularityType.IGDBPlaying`,
    * `PopularityType.Steam24hrPeakPlayers`…), most popular first, each with its score. The selected
-   * fields and the `where` of this query apply to the games: popularity rows are read 500 at a time
-   * until `limit` games match, or `maxRows` rows were read. The games a `where` matches are counted
-   * along with the first page: if it is not enough and they are at most 10,000, their own rows are
-   * read instead, which is exact and takes a few requests. Only on `games`.
+   * fields and the `where` of this query apply to the games, and its `limit` (default 10) and
+   * `offset` pick the page of the ranking; `sort` throws. Popularity rows are read 500 at a time until
+   * enough games match, or `maxRows` rows were read. The games a `where` matches are counted along with
+   * the first page: if it is not enough and they are at most 10,000, their own rows are read instead,
+   * which is exact and takes a few requests. Only on `games`.
    */
   async popular(
     ...[type, options = {}]: N extends "games"
@@ -475,10 +480,11 @@ export class Query<N extends EndpointName, R = { id: number }> extends Executabl
   ): Promise<{ game: R; value: number }[]> {
     if (this.endpoint !== "games") throw new QueryError("popular() is only on games");
     if (this.state.search) throw new QueryError("popular() cannot be combined with search");
-    const { limit = 10, maxRows = 5000, ...execute } = options;
-    if (!Number.isInteger(limit) || limit < 1 || limit > MAX_LIMIT) {
-      throw new QueryError(`limit must be an integer between 1 and ${MAX_LIMIT}, got ${limit}`);
-    }
+    const { limit: deprecatedLimit, maxRows = 5000, ...execute } = options as PopularOptions;
+    const page = this.rankingPage("popular()", deprecatedLimit);
+    if (page.limit === 0) return [];
+    // The games before the page are ranked too.
+    const limit = page.offset + page.limit;
     // Without a filter almost every row matches; a few spare rows cover deleted games.
     const pageSize = this.state.where ? MAX_LIMIT : Math.min(MAX_LIMIT, limit + 10);
     const rows = new Query<EndpointName, { game_id?: number; value?: number }>(
@@ -495,13 +501,13 @@ export class Query<N extends EndpointName, R = { id: number }> extends Executabl
     const seen = new Set<number>();
     for (let offset = 0; offset < maxRows && results.length < limit; offset += pageSize) {
       // The count and first ids of the matches go with the first page.
-      const [page, matches] = await Promise.all([
+      const [read, matches] = await Promise.all([
         rows.limit(pageSize).offset(offset).execute(execute),
         offset === 0 && matching !== undefined ? firstIds(matching, execute) : undefined,
       ]);
       if (matches?.total === 0) return [];
       const ranked: { id: number; value: number }[] = [];
-      for (const row of page) {
+      for (const row of read) {
         if (row.game_id === undefined || seen.has(row.game_id)) continue;
         seen.add(row.game_id);
         ranked.push({ id: row.game_id, value: row.value ?? 0 });
@@ -515,20 +521,44 @@ export class Query<N extends EndpointName, R = { id: number }> extends Executabl
         const game = byId.get(id);
         if (game !== undefined && results.length < limit) results.push({ game, value });
       }
-      if (page.length < pageSize) break;
+      if (read.length < pageSize) break;
       if (
         results.length < limit &&
         matching !== undefined &&
         matches !== undefined &&
         matches.total <= FEW_GAMES
       ) {
-        return this.popularAmong(rows, limit, results, await allIds(matching, matches, execute), execute);
+        const top = await this.popularAmong(
+          rows,
+          limit,
+          results,
+          await allIds(matching, matches, execute),
+          execute,
+        );
+        return top.slice(page.offset);
       }
     }
     // Equal values in id order, as when the rows of few games are read.
-    return results.sort(
-      (a, b) => b.value - a.value || (a.game as { id: number }).id - (b.game as { id: number }).id,
-    );
+    return results
+      .sort((a, b) => b.value - a.value || (a.game as { id: number }).id - (b.game as { id: number }).id)
+      .slice(page.offset);
+  }
+
+  /**
+   * The page of games a ranking returns (`popular()`, `weightedPopular()`): the query's `limit`
+   * (default 10) and `offset`, or the deprecated `limit` option. The ranking sets the order, so a
+   * `sort` throws.
+   */
+  private rankingPage(
+    method: string,
+    deprecatedLimit: number | undefined,
+  ): { limit: number; offset: number } {
+    if (this.state.sort) throw new QueryError(`${method} returns games in popularity order: remove sort()`);
+    const limit = deprecatedLimit ?? this.state.limit ?? 10;
+    if (!Number.isInteger(limit) || limit < 0 || limit > MAX_LIMIT) {
+      throw new QueryError(`limit must be an integer between 0 and ${MAX_LIMIT}, got ${limit}`);
+    }
+    return { limit, offset: this.state.offset ?? 0 };
   }
 
   /**
@@ -547,7 +577,8 @@ export class Query<N extends EndpointName, R = { id: number }> extends Executabl
       chunk(candidates, MAX_LIMIT).map((ids) =>
         rows
           .where(`game_id = (${ids.join(",")})`)
-          .limit(limit)
+          // One row per game: 500 ids have 500 rows at most.
+          .limit(Math.min(limit, MAX_LIMIT))
           .execute(execute),
       ),
     );
@@ -572,9 +603,10 @@ export class Query<N extends EndpointName, R = { id: number }> extends Executabl
    * The most popular games by a weighted mix of PopScore types, such as `{ [PopularityType.IGDBWantToPlay]:
    * 0.6, [PopularityType.IGDBPlaying]: 0.4 }`. Each type is scaled by its top value before weighting;
    * a game without a row in a type scores 0 there and gets `null` in `values`. Negative weights lower
-   * a score. The fields and `where` of this query apply to the games. Each round reads 500 rows per
+   * a score. The fields and `where` of this query apply to the games, and its `limit` (default 10)
+   * and `offset` pick the page of the ranking; `sort` throws. Each round reads 500 rows per
    * positively weighted type, then the other types and the games of the new ids (about 2 multiqueries
-   * per round); it stops once no unread game can enter the top `limit`. The games a `where` matches
+   * per round); it stops once no unread game can enter the page. The games a `where` matches
    * are counted during the first round: if it does not settle the top and they are at most 10,000,
    * their own rows are scored instead. Only on `games`.
    */
@@ -585,36 +617,48 @@ export class Query<N extends EndpointName, R = { id: number }> extends Executabl
   ): Promise<WeightedPopular<R>[]> {
     if (this.endpoint !== "games") throw new QueryError("weightedPopular() is only on games");
     if (this.state.search) throw new QueryError("weightedPopular() cannot be combined with search");
+    const page = this.rankingPage("weightedPopular()", (options as WeightedPopularOptions).limit);
+    if (page.limit === 0) return [];
     const rows = new Query<EndpointName, PopularityRow>(this.runner, "popularity_primitives", {
       fields: ["game_id", "popularity_type", "value"],
       sort: { field: "value", direction: "desc" },
     });
-    return weightedPopular(
+    const ranked = await weightedPopular(
       rows,
       (ids, execute) => this.findByIds(ids, execute),
       weights as PopularityWeights,
-      options as WeightedPopularOptions,
+      // The games before the page are ranked too.
+      { ...(options as WeightedPopularOptions), limit: page.offset + page.limit },
       this.state.where ? gameIds(this as never) : undefined,
     );
+    return ranked.slice(page.offset);
   }
 
   /**
    * The release calendar of a window: one entry per game released in it, with its most precise
    * release and every release in the window (platforms, regions, statuses). Imprecise dates (`Q4
    * 2026`) are labeled by `precision` and included when their period overlaps the window. The fields
-   * and `where` of this query apply to the games. Costs 1 + `ceil(dates / 500)` requests, batched,
-   * plus `ceil(games / 500)`. Only on `games`.
+   * and `where` of this query apply to the games; its `limit` and `offset`, when set, page the entries,
+   * and `sort` throws. Costs 1 + `ceil(dates / 500)` requests, batched, plus `ceil(games / 500)`. Only
+   * on `games`.
    */
   async releases(
     ...[options]: N extends "games" ? [options: ReleasesOptions] : [notGames: "releases() is only on games"]
   ): Promise<ReleaseCalendarEntry<R>[]> {
     if (this.endpoint !== "games") throw new QueryError("releases() is only on games");
     if (this.state.search) throw new QueryError("releases() cannot be combined with search");
+    if (this.state.sort) throw new QueryError("releases() returns games by release date: remove sort()");
     const dates = new Query<EndpointName, ReleaseRow>(this.runner, "release_dates", {
       fields: RELEASE_FIELDS,
       sort: { field: "id", direction: "asc" },
     });
-    return releaseCalendar(dates, (ids, execute) => this.findByIds(ids, execute), options as ReleasesOptions);
+    const entries = await releaseCalendar(
+      dates,
+      (ids, execute) => this.findByIds(ids, execute),
+      options as ReleasesOptions,
+    );
+    const { limit, offset = 0 } = this.state;
+    return limit === undefined ? entries.slice(offset) : entries.slice(offset, offset + limit);
   }
 
   /**
@@ -632,7 +676,8 @@ export class Query<N extends EndpointName, R = { id: number }> extends Executabl
 
   /**
    * Every match, page by page, to copy an endpoint into your own storage. Pass `since` (the time you
-   * started the previous sync) to get only what changed since then. The first page goes out with the
+   * started the previous sync: a `Date`, an ISO string or Unix seconds, like IGDB's `updated_at`) to
+   * get only what changed since then. The first page goes out with the
    * count, in one multiquery. The other pages are then requested in parallel, which automatic
    * batching packs into multiqueries: each asks for the matches after a row read already, skipping
    * those the pages in between hold (`offset`), so pages come back full wherever the ids lie. Each
@@ -643,7 +688,7 @@ export class Query<N extends EndpointName, R = { id: number }> extends Executabl
    */
   async *sync(
     options: SyncOptions &
-      ("updated_at" extends keyof Endpoints[N] ? { since?: Date | number } : { since?: never }) = {},
+      ("updated_at" extends keyof Endpoints[N] ? { since?: DateInput } : { since?: never }) = {},
   ): AsyncGenerator<R[], void, undefined> {
     if (this.state.search) throw new QueryError("sync() cannot be combined with search");
     const { concurrency = 40, cursorThreshold = 0, since: _, ...execute } = options;
@@ -658,10 +703,7 @@ export class Query<N extends EndpointName, R = { id: number }> extends Executabl
       if (!(entities[this.entity] && "updated_at" in (entities[this.entity] as object))) {
         throw new QueryError(`${this.endpoint} has no updated_at field: sync it without since`);
       }
-      const seconds = Math.floor(
-        (options.since instanceof Date ? options.since.getTime() : options.since) / 1000,
-      );
-      query = query.where(`updated_at >= ${seconds}`);
+      query = query.where(`updated_at >= ${dateSeconds(options.since, "since")}`);
     }
 
     // Pages are segments of the matches in id order. Each starts on the last row of the previous one
