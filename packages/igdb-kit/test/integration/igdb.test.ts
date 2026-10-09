@@ -82,6 +82,13 @@ describe.skipIf(!clientId || !clientSecret)("real IGDB API", () => {
     expect((results[1] as PromiseRejectedResult).reason).toBeInstanceOf(QueryError);
   });
 
+  test("sync reads every entity once, in id order", async () => {
+    const seen: number[] = [];
+    for await (const page of igdb.platforms.select("name").sync()) seen.push(...page.map((p) => p.id));
+    expect(seen.length).toBe(await igdb.platforms.count());
+    expect(seen).toEqual([...seen].sort((a, b) => a - b));
+  });
+
   test("webhooks: register, list, re-register and delete", async () => {
     const url = `https://example.com/igdb-kit-ci/${crypto.randomUUID()}`;
     const hooks = await igdb.webhooks.ensure({ url, secret: "ci-secret", endpoints: ["platforms"] });

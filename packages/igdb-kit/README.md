@@ -95,6 +95,30 @@ for await (const game of igdb.games.select("name").iterate()) {
 await igdb.games.select("name").search("zelda").limit(5); // searchable endpoints only, no sort
 ```
 
+### Copying an endpoint: sync
+
+IGDB encourages keeping your own copy. `sync()` reads every match page by page, in id order:
+
+```ts
+const startedAt = new Date();
+for await (const page of igdb.games.select("*").sync({ since: lastSync })) {
+  await db.upsertGames(page); // up to 500 games
+}
+lastSync = startedAt; // next time, only what changed since this run
+```
+
+Large sets are requested as id ranges in parallel, which batching packs into multiqueries: all 73,000 companies take about 20 requests and 6 seconds. With `since`, only entities whose `updated_at` is newer come back. Sync requests run at `background` priority, so interactive queries pass first. Pair it with webhooks to stay up to date between runs.
+
+### Images
+
+```ts
+import { imageUrl } from "igdb-kit";
+
+imageUrl(game.cover?.image_id, "cover_big", { retina: true });
+// https://images.igdb.com/igdb/image/upload/t_cover_big_2x/co1wyy.jpg (undefined if there is no cover)
+imageUrl(game.cover?.url, "cover_big"); // the url field IGDB returns (always t_thumb) works too
+```
+
 ### Batching
 
 Nothing to do: queries started within the same couple of milliseconds are sent together.

@@ -13,6 +13,7 @@ export {
 } from "./core/limiter";
 export type { TransportHooks } from "./core/transport";
 export * from "./generated/schema";
+export { type ImageSize, type ImageUrlOptions, imageUrl } from "./images";
 export {
   Count,
   Executable,
@@ -21,6 +22,7 @@ export {
   Query,
   type QueryRequest,
   Single,
+  type SyncOptions,
   WithCount,
 } from "./query/query";
 export type { FieldPath, ScalarPath, SelectResult } from "./query/types";
