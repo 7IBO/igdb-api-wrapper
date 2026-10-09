@@ -220,7 +220,15 @@ export function createIGDB(options: IGDBClientOptions): IGDBClient {
     },
     searchAll: (term: string, searchOptions?: SearchAllOptions) =>
       new Task((execute) =>
-        searchAll(client.search as Query<"search">, term, { ...searchOptions, ...execute }),
+        searchAll(
+          {
+            search: client.search as Query<"search">,
+            alternative_names: client.alternative_names as Query<"alternative_names">,
+            game_localizations: client.game_localizations as Query<"game_localizations">,
+          },
+          term,
+          { ...searchOptions, ...execute },
+        ),
       ),
     webhooks: new Webhooks((method, path, body, requestOptions) =>
       transport.request(

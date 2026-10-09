@@ -715,3 +715,14 @@ description("genres", 12, "fr");
 ({ locale: "fr", labels: { genres: { 12: "RPG" } } }) satisfies LabelDictionary;
 // @ts-expect-error not a genre id
 ({ locale: "fr", labels: { genres: { 999: "RPG" } } }) satisfies LabelDictionary;
+
+// Language filter and alternative titles in searchAll().
+igdb.games.where((g) => g.supportsLanguage("fr-FR", "audio"));
+igdb.games.where((g) => g.supportsLanguage([12, 8]));
+// @ts-expect-error not a kind of support
+igdb.games.where((g) => g.supportsLanguage(12, "voice"));
+// @ts-expect-error a named filter of games only
+igdb.platforms.where((p) => p.supportsLanguage(12));
+igdb.searchAll("Wiedźmin 3", { alternativeTitles: "auto" });
+// @ts-expect-error true, false or "auto"
+igdb.searchAll("Wiedźmin 3", { alternativeTitles: "always" });

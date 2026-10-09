@@ -37,8 +37,14 @@ const witcherRows = [
   { id: 9628012, name: "Great Witcher", alternative_name: "", game: { id: 99, name: "Great Witcher" } },
 ];
 
-function searchClient(rows: unknown[], total = rows.length) {
+function searchClient(
+  rows: unknown[],
+  total = rows.length,
+  titles: { alternative_names?: unknown[]; game_localizations?: unknown[] } = {},
+) {
   const mock = mockFetch((call: Call) => {
+    if (call.url.endsWith("/alternative_names")) return Response.json(titles.alternative_names ?? []);
+    if (call.url.endsWith("/game_localizations")) return Response.json(titles.game_localizations ?? []);
     const offset = Number(/offset (\d+);/.exec(call.body)?.[1] ?? 0);
     const limit = Number(/limit (\d+);/.exec(call.body)?.[1] ?? 10);
     return Response.json(rows.slice(offset, offset + limit), { headers: { "x-count": String(total) } });
@@ -49,7 +55,11 @@ function searchClient(rows: unknown[], total = rows.length) {
 describe("searchAll", () => {
   test("filters game hits by type and edition, and asks only for the requested kinds", async () => {
     const { igdb, calls } = searchClient([]);
-    await igdb.searchAll("witcher", { kinds: ["game", "character"], select: { game: ["cover.image_id"] } });
+    await igdb.searchAll("witcher", {
+      kinds: ["game", "character"],
+      select: { game: ["cover.image_id"] },
+      alternativeTitles: false,
+    });
     expect(calls).toHaveLength(1);
     expect(calls[0]?.url).toEndWith("/search");
     expect(calls[0]?.body).toBe(
@@ -121,7 +131,102 @@ describe("searchAll", () => {
     const [a, b] = await Promise.all([igdb.searchAll("witcher"), igdb.searchAll("witcher")]);
     expect(a.map((h) => h.id).slice(0, 2)).toEqual([1942, 1940]);
     expect(b).toEqual(a);
-    expect(calls).toHaveLength(1);
+    // The search, then the alternative titles: 6 hits match by name, fewer than the limit.
+    expect(calls.map((call) => call.url.split("/").pop())).toEqual(["search", "multiquery"]);
+  });
+
+  test("finds games by their alternative and localized titles", async () => {
+    const witcher = { id: 1942, name: "The Witcher 3: Wild Hunt", total_rating_count: 5514 };
+    const { igdb, calls } = searchClient([], 0, {
+      alternative_names: [
+        {
+          id: 8058,
+          name: "Wiedźmin 3: Dziki Gon - Serca z kamienia",
+          game: { id: 12503, name: "The Witcher 3: Wild Hunt - Hearts of Stone", total_rating_count: 560 },
+        },
+        { id: 2495, name: "Wiedźmin 3: Dziki Gon", game: witcher },
+        { id: 7, name: "Wiedźmin 3 fan remake" }, // its game was deleted
+      ],
+      game_localizations: [{ id: 181, name: "Wiedźmin 3", game: witcher }],
+    });
+    const hits = await igdb.searchAll("Wiedźmin 3", { select: { game: ["cover.image_id"] } });
+    expect(hits).toEqual([
+      {
+        kind: "game",
+        id: 1942,
+        name: "The Witcher 3: Wild Hunt",
+        alternative_name: "Wiedźmin 3",
+        matched: "alternative_name",
+        game: { id: 1942, name: "The Witcher 3: Wild Hunt" },
+      },
+      {
+        kind: "game",
+        id: 12503,
+        name: "The Witcher 3: Wild Hunt - Hearts of Stone",
+        alternative_name: "Wiedźmin 3: Dziki Gon - Serca z kamienia",
+        matched: "alternative_name",
+        game: { id: 12503, name: "The Witcher 3: Wild Hunt - Hearts of Stone" },
+      },
+    ]);
+    // One multiquery after the search, which found nothing; the same filters and fields.
+    const block =
+      "{ fields name,game.name,game.cover.image_id,game.total_rating_count; " +
+      'where (name ~ *"Wiedźmin 3"*) & game != null & game.game_type = (0,2,4,8,9,10,11) & ' +
+      "game.version_parent = null; limit 100; };";
+    expect(calls).toHaveLength(2);
+    expect(calls[1]?.body).toContain(`query alternative_names "q0" ${block}`);
+    expect(calls[1]?.body).toContain(`query game_localizations "q1" ${block}`);
+  });
+
+  test("titles rank after every name match; a hit found by IGDB's alternative names takes a better one", async () => {
+    const rows = [
+      {
+        id: 1,
+        name: "The Witcher 3 Wild Hunt",
+        alternative_name: "Wiedźmin 3 Dziki Gon TW3",
+        game: { id: 1942, name: "The Witcher 3: Wild Hunt", total_rating_count: 5514 },
+      },
+      { id: 2, name: "Wiedzmin 3 Remake", alternative_name: "", game: { id: 5, name: "Wiedźmin 3 Remake" } },
+    ];
+    const { igdb } = searchClient(rows, 2, {
+      alternative_names: [
+        { id: 3, name: "Wiedźmin 3: Dziki Gon", game: { id: 1942, name: "The Witcher 3: Wild Hunt" } },
+        { id: 4, name: "Wiedźmin 3", game: { id: 5, name: "Wiedźmin 3 Remake" } },
+        // An exact title of an obscure game comes after the name matches, then by match and ratings.
+        { id: 5, name: "Wiedźmin 3", game: { id: 6, name: "Witcher fan game" } },
+        { id: 6, name: " Wielki Wiedźmin 3", game: { id: 7, name: "Great Witcher" } },
+      ],
+    });
+    const hits = await igdb.searchAll("Wiedźmin 3", { kinds: ["game"] });
+    expect(hits.map((h) => [h.id, h.matched, h.alternative_name ?? null])).toEqual([
+      [5, "name", null],
+      [6, "alternative_name", "Wiedźmin 3"],
+      [1942, "alternative_name", "Wiedźmin 3: Dziki Gon"],
+      [7, "alternative_name", "Wielki Wiedźmin 3"],
+    ]);
+  });
+
+  test("alternativeTitles: auto, alongside the search for another script, always or never", async () => {
+    const { igdb, calls } = searchClient(witcherRows);
+    const urls = () => calls.splice(0).map((call) => call.url.split("/").pop());
+    // Enough hits match by name: no titles.
+    await igdb.searchAll("witcher", { limit: 3 });
+    expect(urls()).toEqual(["search"]);
+    // Another script: sent with the search, whatever it finds; the NFKC form too.
+    await igdb.searchAll("ウィッチャー３", { limit: 3 });
+    const sent = calls.map((call) => call.body).join(" ");
+    expect(urls().sort()).toEqual(["multiquery", "search"]);
+    expect(sent).toContain('where (name ~ *"ウィッチャー３"* | name ~ *"ウィッチャー3"*) & game != null');
+    await igdb.searchAll("witcher", { limit: 3, alternativeTitles: true });
+    expect(urls().sort()).toEqual(["multiquery", "search"]);
+    await igdb.searchAll("Wiedźmin", { alternativeTitles: false });
+    await igdb.searchAll("Wiedźmin", { order: "igdb" });
+    await igdb.searchAll("Wiedźmin", { kinds: ["character"] });
+    expect(urls()).toEqual(["search", "search", "search"]);
+    // @ts-expect-error not an option value
+    await expect(igdb.searchAll("x", { alternativeTitles: "yes" }).execute()).rejects.toThrow(
+      /alternativeTitles/,
+    );
   });
 
   test("an exact name comes first, and the search index name counts (VII is indexed as 7)", async () => {

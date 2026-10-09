@@ -87,6 +87,7 @@ export {
   type BooleanFilter,
   Condition,
   type GameFilters,
+  type LanguageSupportKind,
   type NumberFilter,
   or,
   type ReleasedInOptions,

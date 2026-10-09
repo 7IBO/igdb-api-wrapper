@@ -762,6 +762,38 @@ describe.skipIf(!clientId || !clientSecret)("real IGDB API", () => {
     });
   });
 
+  test("supportsLanguage() holds for one language_supports row", async () => {
+    const { audio, raw, any, both } = await igdb.batch({
+      audio: igdb.games.where((g) => g.supportsLanguage("fr-FR", "audio")).count(),
+      raw: igdb.games
+        .where("language_supports.language = 12 & language_supports.language_support_type = 1")
+        .count(),
+      any: igdb.games.where((g) => g.supportsLanguage(Language.French)).count(),
+      both: igdb.games
+        .where((g) => and(g.supportsLanguage("fr", "audio"), g.supportsLanguage("fr", "subtitles")))
+        .count(),
+    });
+    expect(audio).toBe(raw);
+    expect(audio).toBeGreaterThan(10_000);
+    expect(any).toBeGreaterThan(audio * 3);
+    expect(both).toBe(0);
+  });
+
+  test("searchAll() finds games by their alternative and localized titles", async () => {
+    const [polish, japanese, french] = await Promise.all([
+      igdb.searchAll("Wiedźmin 3", { kinds: ["game"], limit: 3 }),
+      igdb.searchAll("ウィッチャー", { kinds: ["game"], limit: 3 }),
+      igdb.searchAll("Pokémon Épée", { kinds: ["game"], limit: 3 }),
+    ]);
+    expect(polish[0]).toMatchObject({
+      id: 1942,
+      matched: "alternative_name",
+      alternative_name: "Wiedźmin 3: Dziki Gon",
+    });
+    expect(japanese[0]?.id).toBe(1942);
+    expect(french[0]).toMatchObject({ id: 37382, name: "Pokémon Sword", alternative_name: "Pokémon Épée" });
+  });
+
   test("eventTime() knows the time zone of every recent event", async () => {
     const events = await igdb.events.select("start_time", "time_zone").sort("id", "desc").limit(500);
     expect(events.length).toBeGreaterThan(100);
