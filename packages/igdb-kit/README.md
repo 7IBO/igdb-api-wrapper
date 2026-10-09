@@ -94,13 +94,14 @@ On `games`, named filters cover the common relation lookups:
 import { and, Platform, ReleaseDateRegion } from "igdb-kit";
 
 igdb.games.where((g) => g.developedBy(908));                           // CD Projekt RED as developer
+igdb.games.where((g) => g.developedBy("CD Projekt RED"));               // the same, by name
 igdb.games.where((g) => and(g.publishedBy(50), g.rating.gte(80)));     // WB Games as (regional) publisher
 igdb.games.where((g) =>
   g.releasedIn({ platform: Platform.NintendoSwitch, region: ReleaseDateRegion.Europe, from: new Date("2021-01-01") }),
 );
 ```
 
-They rely on how IGDB filters arrays of relations: every condition on `involved_companies` (or `release_dates`) in a `where` must hold for the same entry. `developedBy(50)` does not match The Witcher 3, which WB Games only published, and `releasedIn` needs one release date with that platform, region and date together. Worldwide releases count for every region (pass `worldwide: false` to change that), release dates marked Cancelled or Offline are left out (`includeCancelled: true` keeps them), and release dates without a status, more than half of them, count. The flip side: `and(g.developedBy(908), g.publishedBy(50))` asks for one company entry that is both, and matches nothing; run two queries instead. `g.platforms.any()` lists every announced platform, cancelled ones included, where `releasedIn({ platform })` looks at actual release dates. For franchises and series, `g.franchises.any(id)` and `g.collections.any(id)` are enough: the main `franchise` is always in `franchises`, and `collections` matches `collection_memberships` (spin-offs included).
+A name matches a whole company name, ignoring case: "CD Projekt RED" matches, "CD Projekt" or "cd projekt red studio" do not, and "Ubisoft" is not "Ubisoft Montreal". Pass ids or names, not both in one call. They rely on how IGDB filters arrays of relations: every condition on `involved_companies` (or `release_dates`) in a `where` must hold for the same entry. `developedBy(50)` does not match The Witcher 3, which WB Games only published, and `releasedIn` needs one release date with that platform, region and date together. Worldwide releases count for every region (pass `worldwide: false` to change that), release dates marked Cancelled or Offline are left out (`includeCancelled: true` keeps them), and release dates without a status, more than half of them, count. The flip side: `and(g.developedBy(908), g.publishedBy(50))` asks for one company entry that is both, and matches nothing; run two queries instead. `g.platforms.any()` lists every announced platform, cancelled ones included, where `releasedIn({ platform })` looks at actual release dates. For franchises and series, `g.franchises.any(id)` and `g.collections.any(id)` are enough: the main `franchise` is always in `franchises`, and `collections` matches `collection_memberships` (spin-offs included).
 
 Reference tables come with named ids, so you don't hard-code `game_type = 0` or `platforms = 48`:
 
