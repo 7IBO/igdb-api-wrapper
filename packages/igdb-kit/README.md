@@ -206,6 +206,70 @@ Release dates are calendar days at 00:00 UTC, so the window is in UTC days: pass
 
 A window costs one count, `ceil(dates / 500)` pages read in parallel and `ceil(games / 500)` for the games, packed into multiqueries: a month of upcoming releases (1,700 dates, 1,000 games) takes 3 HTTP requests. Above `maxRows` dates (10,000 by default), it throws instead: page through long periods month by month.
 
+### Data linked to games
+
+Many endpoints point to games without the game pointing back: time to beat and popularity carry a `game_id`, and characters, events, collections and franchises list their `games`. `byGame()` fetches them for a list of games, grouped by game id. It works on every endpoint with a `game`, `game_id` or `games` field (`GameLinkedEndpoint`), such as `release_dates`, `websites`, `language_supports`, `external_games` or `involved_companies`:
+
+```ts
+const timeToBeat = await igdb.game_time_to_beats.select("normally").byGame([1942, 1020]);
+timeToBeat.get(1942); // [{ id: 432, normally: 254778 }]: seconds, about 71 h
+timeToBeat.get(1020); // []: no time to beat, the case for most games
+
+const firstDates = await igdb.release_dates.select("date", "platform").sort("date").limit(1).byGame(ids);
+```
+
+Every requested id is in the map, with an empty array when nothing points to the game. The query's `where` applies, and its `sort` and `limit` apply to each game's rows. Every row comes back, not just the first 10. A row linked to several of the games, such as a character, is listed under each of them. Ids are sent 500 per query and pages of 500 rows are read until the end, all batched. A page that comes back full is split using the count, so the 9,000 language rows of 500 games take about 9 requests instead of 18 one after the other.
+
+### Views
+
+A view attaches that data to games under names you choose, with a type for the whole result:
+
+```ts
+const gamePage = igdb.defineView("games", {
+  select: ["name", "cover.image_id", "platforms.name"],
+  with: {
+    timeToBeat: igdb.game_time_to_beats.select("normally", "completely"),
+    characters: igdb.characters.select("name", "mug_shot.image_id"),
+    events: igdb.events.select("name", "start_time"),
+  },
+});
+
+const witcher = await gamePage.findById(1942); // 1 request: the game and its 3 links in one multiquery
+// { id; name?; cover?; platforms?; timeToBeat: {...}[]; characters: {...}[]; events: {...}[] } | null
+const pages = await gamePage.findByIds(ids);
+const top = await gamePage.where((g) => g.rating.gte(90)).sort("rating", "desc").limit(20);
+const found = await gamePage.search("zelda").limit(5);
+```
+
+`findById()` and `findByIds()` send the games and the linked queries together: a game with 6 links costs one multiquery (22 KB for The Witcher 3). A list or a search needs the game ids first, so it takes one more request; a `search` is always sent alone. A key can't hide a game field, so name the link to `collection_memberships` `memberships`, not `collections`.
+
+### Expanding ids later
+
+`expand()` replaces ids you already have with the entities they point to, in one batched call. Ids are deduplicated across rows:
+
+```ts
+const games = await igdb.games.select("name", "platforms", "genres").limit(500);
+const withPlatforms = await igdb.expand(games, "platforms", igdb.platforms.select("name", "abbreviation"));
+// platforms?: { id: number; name?: string; abbreviation?: string }[]
+```
+
+Each entity is one shared object across rows. Ids of rows that no longer exist are dropped: an event can list a deleted game. Reference tables are loaded whole and kept a day in the client's cache, so expanding them again costs no request. These tables are `platforms`, `genres`, `themes`, `game_modes`, `player_perspectives`, `languages`, `regions`, `game_types`, `release_date_statuses` and the others in `REFERENCE_ENDPOINTS`. Change the duration with the target's `cache(ttlMs)`, or fetch by id with `cache(false)`.
+
+### Reusable selections
+
+`defineSelection()` names a set of fields, checked like `select()`, and `ResultOf<>` gives the type of a selection, a query or a view:
+
+```ts
+import { defineSelection, type ResultOf } from "igdb-kit";
+
+export const gameCard = defineSelection("games", "name", "cover.image_id", "platforms.abbreviation");
+export type GameCard = ResultOf<typeof gameCard>;
+
+const games = await igdb.games.select(...gameCard, "summary").limit(10);
+const gamePage = igdb.defineView("games", { select: [...gameCard, "storyline"], with: { /* ... */ } });
+type GamePage = ResultOf<typeof gamePage>;
+```
+
 ### Copying an endpoint: sync
 
 IGDB encourages keeping your own copy. `sync()` reads every match page by page, in id order:

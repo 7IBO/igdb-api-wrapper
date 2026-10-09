@@ -7,6 +7,7 @@ import {
   entities,
   type SearchableEndpoint,
 } from "../generated/schema";
+import { byGame, type GameLinkedEndpoint } from "../links/by-game";
 import {
   type PopularityRow,
   type PopularityWeights,
@@ -77,7 +78,8 @@ export interface PopularOptions extends ExecuteOptions {
   maxRows?: number;
 }
 
-interface QueryState {
+/** @internal */
+export interface QueryState {
   fields: readonly string[];
   where?: string | undefined;
   sort?: { field: string; direction: "asc" | "desc" } | undefined;
@@ -85,6 +87,8 @@ interface QueryState {
   limit?: number | undefined;
   offset?: number | undefined;
   cacheTtlMs?: number | undefined;
+  /** Rows expected back, when it differs from `limit`; only used to estimate the response size. */
+  expectedRows?: number | undefined;
 }
 
 export interface SyncOptions extends ExecuteOptions {
@@ -121,7 +125,8 @@ export abstract class Executable<T> implements PromiseLike<T> {
   }
 }
 
-function validatePath(entity: string, path: string, scalarOnly: boolean): void {
+/** @internal Checks a field path against the schema; `scalarOnly` for `sort`. */
+export function validatePath(entity: string, path: string, scalarOnly: boolean): void {
   const segments = path.split(".");
   let current = entity;
   segments.forEach((segment, index) => {
@@ -150,7 +155,8 @@ export class Query<N extends EndpointName, R = { id: number }> extends Executabl
   constructor(
     protected readonly runner: QueryRunner,
     readonly endpoint: N,
-    private readonly state: QueryState = { fields: [] },
+    /** @internal */
+    readonly state: QueryState = { fields: [] },
   ) {
     super();
   }
@@ -159,7 +165,8 @@ export class Query<N extends EndpointName, R = { id: number }> extends Executabl
     return endpointEntity(this.endpoint);
   }
 
-  private with(patch: Partial<QueryState>): this {
+  /** @internal A copy with some of the state replaced, unvalidated. */
+  with(patch: Partial<QueryState>): this {
     return new Query(this.runner, this.endpoint, { ...this.state, ...patch }) as this;
   }
 
@@ -328,6 +335,24 @@ export class Query<N extends EndpointName, R = { id: number }> extends Executabl
       if (game !== undefined) result.set(uid, game);
     }
     return result;
+  }
+
+  /**
+   * The rows linked to each of these games, as a map from game id to rows: `game_time_to_beats`,
+   * `release_dates`, `websites`… through their `game` (or `game_id`) field, and `characters`,
+   * `events`, `collections`, `franchises` through their `games` array. The fields and `where` of this
+   * query apply; `sort` and `limit` apply to each game's rows, and every row comes back, not just 10.
+   *
+   * Every requested id is in the map, with an empty array when nothing points to it (most games have
+   * no time to beat). A row linked to several of the games is under each of them. Ids are split by
+   * 500 and pages of 500 rows are read until the end, sent together so batching packs them.
+   */
+  byGame(
+    ...[gameIds, options]: N extends GameLinkedEndpoint
+      ? [gameIds: readonly number[], options?: ExecuteOptions]
+      : [notLinked: "byGame() is only on endpoints that point to games"]
+  ): Promise<Map<number, R[]>> {
+    return byGame<R>(this as never, gameIds as readonly number[], options);
   }
 
   /**
@@ -529,7 +554,7 @@ export class Query<N extends EndpointName, R = { id: number }> extends Executabl
 
   /** @internal */
   toRequest(kind: "list" | "count" = "list"): QueryRequest {
-    const { fields, where, sort, search, limit, offset, cacheTtlMs } = this.state;
+    const { fields, where, sort, search, limit, offset, cacheTtlMs, expectedRows } = this.state;
     const lines: string[] = [];
     if (kind === "list" && fields.length) lines.push(`fields ${fields.join(",")};`);
     if (search !== undefined) lines.push(`search ${JSON.stringify(search)};`);
@@ -550,7 +575,7 @@ export class Query<N extends EndpointName, R = { id: number }> extends Executabl
       kind,
       hasSearch: search !== undefined,
       fields,
-      limit: kind === "count" ? 0 : (limit ?? 10),
+      limit: kind === "count" ? 0 : (expectedRows ?? limit ?? 10),
       cacheTtlMs,
     };
   }
@@ -639,11 +664,13 @@ export class WithCount<R> extends Executable<{ data: R[]; total: number }> {
   }
 }
 
-function toId(id: number): number {
+/** @internal */
+export function toId(id: number): number {
   if (!Number.isSafeInteger(id) || id < 0) throw new QueryError(`Invalid id: ${id}`);
   return id;
 }
 
-function endpointEntity(endpoint: EndpointName): string {
+/** @internal */
+export function endpointEntity(endpoint: EndpointName): string {
   return endpoints[endpoint].entity;
 }
