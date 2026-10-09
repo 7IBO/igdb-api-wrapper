@@ -10,7 +10,7 @@ A fully typed [IGDB](https://api-docs.igdb.com/) API client for Node.js and Bun,
 - **Generated from the official schema.** Entities come from IGDB's `igdbapi.proto`, merged with the API docs for descriptions and `@deprecated` notices. Fields IGDB replaced, such as `category`, are left out because they are empty or no longer updated. All 84 endpoints are included, `executables`, `logos` and the tier-restricted `content_safety_*` ones among them.
 - **Field paths checked twice.** TypeScript checks them as you type, and they are checked again at runtime before the request leaves. IGDB rejects a whole multiquery for one bad field and silently ignores an unknown `sort` field.
 - **Rate limit done right.** One limiter per client id, shared by every client in the process (4 requests per second, 8 in flight). After a 429 the whole queue pauses and slows down, because IGDB sends no `Retry-After`.
-- **Automatic multiquery.** Queries started at the same time are grouped into `/multiquery` requests of up to 10 blocks, so 30 `findById` calls cost 3 HTTP requests. Batches are sized by estimated response size to stay under IGDB's 10 MB cap. An invalid query or an oversized response is isolated by splitting the batch, so only the faulty query fails. Identical queries in flight are sent once.
+- **Automatic multiquery.** Queries started at the same time are grouped into `/multiquery` requests of up to 10 blocks, so 30 `findById` calls cost 3 HTTP requests. Batches are sized by estimated response size to stay under IGDB's 10 MB cap, and their bodies stay under its 32,000-byte limit. An invalid query or an oversized response is isolated by splitting the batch, so only the faulty query fails. Identical queries in flight are sent once.
 - **Auth that recovers.** Tokens are fetched once for all concurrent requests, renewed before they expire, and renewed then replayed once after a 401. A token store can be shared across processes, since Twitch keeps only 25 active tokens per app.
 
 > Versions 0.x may change the API between minor releases. See the [changelog](https://github.com/7IBO/igdb-kit/blob/main/packages/igdb-kit/CHANGELOG.md).
@@ -142,7 +142,7 @@ Avoid filters three levels deep, such as `involved_companies.company.name`: IGDB
 await igdb.games.select("name").first();                 // R | null
 await igdb.games.select("name").findById(1942);          // R | null
 await igdb.games.select("name").findByIdOrThrow(1942);   // R, or throws NotFoundError (also firstOrThrow())
-await igdb.games.select("name").findByIds(ids);          // R[], in the order given, split by 500
+await igdb.games.select("name").findByIds(ids);          // R[], in the order given, 500 per request at most
 await igdb.games.where((g) => g.rating.gte(90)).count(); // number
 await igdb.games.select("name").limit(20).withCount();   // { data: R[]; total: number }, one request
 for await (const game of igdb.games.select("name").iterate()) {
@@ -150,6 +150,8 @@ for await (const game of igdb.games.select("name").iterate()) {
 }
 await igdb.games.select("name").search("zelda").limit(5); // searchable endpoints only, no sort
 ```
+
+`findByIds()`, `iterate()` and `sync()` size their pages by weight: 500 rows of a light selection, fewer of a heavy one, so that a page stays near `maxBatchBytes` (4 MB). A game with its media, companies, release dates and websites expanded weighs about 20 KB, so such pages hold about 200 games. The weight of a row starts from a cautious guess and is learned from each response. A page IGDB refuses for its size (above 10 MB, or not built within 29 seconds) is asked again in halves. `iterate({ pageSize })` caps the page at 1 to 500 rows. A query with your own `limit` is never split: lower its `limit` if IGDB answers that the response is too large.
 
 ### Searching everything
 
@@ -323,7 +325,7 @@ for await (const page of igdb.games.select("*").sync({ since: lastSync })) {
 lastSync = startedAt; // next time, only what changed since this run
 ```
 
-Large sets are requested as id ranges in parallel, which batching packs into multiqueries: all 73,000 companies take about 20 requests and 6 seconds. With `since`, only entities whose `updated_at` is newer come back. Sync requests run at `background` priority, so interactive queries pass first. Pair it with webhooks to stay up to date between runs.
+The first page goes out with the count. Large sets are then requested as id ranges in parallel, which batching packs into multiqueries: each range is sized from the share of ids that match, to hold most of a page, and a range that holds more is read on. A day of changes on `games` (about 30,000) takes 12 requests and 5 seconds, all 73,000 companies with `*` about 30 requests and 12 seconds. At most `concurrency` pages (40 by default, about 64 MB) are requested or waiting to be read, so a slow consumer does not fill the memory. With `since`, only entities whose `updated_at` is newer come back. Sync requests run at `background` priority, so interactive queries pass first. Pair it with webhooks to stay up to date between runs.
 
 ### Images
 
@@ -476,7 +478,7 @@ const igdb = createIGDB({ proxyUrl: "/api/igdb" });
 const games = await igdb.games.select("name", "cover.image_id").search("zelda").limit(10);
 ```
 
-The last path segment names the endpoint (`games`, `games/count`, `multiquery`), so batching keeps working. Only Apicalypse reads are forwarded, never the webhooks API. A refused query (endpoint not allowed, `limit` above `maxLimit`, `authorize` returning false) throws a `QueryError` in the browser. `authorize` runs before the body is read, and a body above `maxBodyBytes` (16 KB by default) is answered 413 as soon as it passes the limit: the browser client splits its batch, and a single query that large throws a `PayloadTooLargeError`. For another origin, pass `allowOrigin`; `cacheControl` sets the `Cache-Control` header of answers.
+The last path segment names the endpoint (`games`, `games/count`, `multiquery`), so batching keeps working. Only Apicalypse reads are forwarded, never the webhooks API. A refused query (endpoint not allowed, `limit` above `maxLimit`, `authorize` returning false) throws a `QueryError` in the browser. `authorize` runs before the body is read, and a body above `maxBodyBytes` (16 KB by default) is answered 413 as soon as it passes the limit. The browser client keeps its multiqueries under 16 KB, and a single query that large throws a `PayloadTooLargeError`; if you raise the proxy's `maxBodyBytes`, pass the same value to `createIGDB`. For another origin, pass `allowOrigin`; `cacheControl` sets the `Cache-Control` header of answers.
 
 ### Errors
 
@@ -508,7 +510,8 @@ createIGDB({
   attemptTimeoutMs: 30_000,
   autoBatch: true,            // group concurrent queries into multiqueries
   batchWindowMs: 2,           // how long to wait for more queries before sending
-  maxBatchBytes: 4_000_000,   // target size of one multiquery response
+  maxBatchBytes: 4_000_000,   // target size of one multiquery response, and of a page
+  maxBodyBytes: 32_000,       // largest multiquery body; 16_384 with proxyUrl, like igdbProxy
   cache,                      // CacheStore for cache()d queries; default in memory
   cacheTtlMs,                 // cache every query this long; default only cache()d ones
   hooks: { onRetry, onRateLimited, onTokenRefresh },

@@ -1,9 +1,13 @@
 import { IGDBError, PayloadTooLargeError, QueryError } from "../core/errors";
 import type { Priority } from "../core/limiter";
-import type { ExecuteOptions, QueryRequest, RawResponse } from "../query/query";
+import type { EndpointName } from "../generated/schema";
+import { type ExecuteOptions, MAX_BODY_BYTES, type QueryRequest, type RawResponse } from "../query/query";
 
 /** IGDB accepts at most 10 queries per multiquery. */
 export const MAX_BLOCKS = 10;
+
+/** IGDB refuses responses above 10 MB (413). */
+const RESPONSE_CAP_BYTES = 10_000_000;
 
 export interface BatcherOptions {
   /** Group queries started at the same time into multiqueries. Default true. */
@@ -11,10 +15,16 @@ export interface BatcherOptions {
   /** How long to wait for more queries before sending a batch. Default 2 ms. */
   batchWindowMs?: number | undefined;
   /**
-   * Target size of one multiquery response. IGDB rejects responses above 10 MB (413), after spending
-   * seconds building them, so batches stay well under. Default 4 MB.
+   * Target size of one multiquery response, and of the pages `findByIds()`, `iterate()` and `sync()`
+   * read. IGDB rejects responses above 10 MB (413), after spending seconds building them, so batches
+   * stay well under. Default 4 MB.
    */
   maxBatchBytes?: number | undefined;
+  /**
+   * Largest multiquery body, in bytes: a batch is cut before it. Default 32,000, IGDB's limit, or
+   * 16,384 through `proxyUrl`, the default `maxBodyBytes` of `igdbProxy` (raise both together).
+   */
+  maxBodyBytes?: number | undefined;
 }
 
 export type Send = (path: string, body: string, options: ExecuteOptions) => Promise<RawResponse>;
@@ -26,6 +36,8 @@ interface Entry {
   resolve: (response: RawResponse) => void;
   reject: (error: unknown) => void;
   estimate: number;
+  /** Bytes the query adds to a multiquery body. */
+  blockBytes: number;
 }
 
 /**
@@ -36,22 +48,35 @@ interface Entry {
 export class SizeEstimator {
   private readonly perEntity = new Map<string, number>();
 
-  key(request: QueryRequest): string {
-    return `${request.endpoint}|${[...request.fields].sort().join(",")}`;
+  private key(endpoint: EndpointName, fields: readonly string[]): string {
+    return `${endpoint}|${[...fields].sort().join(",")}`;
   }
 
   estimate(request: QueryRequest): number {
     if (request.kind === "count") return 50;
-    const learned = this.perEntity.get(this.key(request));
-    return 100 + request.limit * (learned ?? this.guess(request.fields));
+    return 100 + request.limit * this.rowBytes(request.endpoint, request.fields);
+  }
+
+  /** Bytes one row of this selection weighs: learned from responses, else a pessimistic guess. */
+  rowBytes(endpoint: EndpointName, fields: readonly string[]): number {
+    return this.perEntity.get(this.key(endpoint, fields)) ?? this.guess(fields);
   }
 
   learn(request: QueryRequest, bytes: number, entities: number): void {
     if (entities === 0 || request.kind === "count") return;
-    const key = this.key(request);
+    const key = this.key(request.endpoint, request.fields);
     const sample = bytes / entities;
     const previous = this.perEntity.get(key);
     this.perEntity.set(key, previous === undefined ? sample : previous * 0.7 + sample * 0.3);
+  }
+
+  /** IGDB refused the response of `request` as above 10 MB: each row weighs at least its share. */
+  learnTooLarge(request: QueryRequest): void {
+    const rows = request.maxRows ?? request.limit;
+    if (request.kind === "count" || rows === 0) return;
+    const key = this.key(request.endpoint, request.fields);
+    const floor = RESPONSE_CAP_BYTES / rows;
+    this.perEntity.set(key, Math.max(this.perEntity.get(key) ?? 0, floor));
   }
 
   /** Pessimistic first guess, corrected after the first response. */
@@ -82,6 +107,7 @@ export class Batcher {
   private readonly autoBatch: boolean;
   private readonly windowMs: number;
   private readonly maxBytes: number;
+  private readonly maxBodyBytes: number;
   private pending: Entry[] = [];
   private readonly pendingByKey = new Map<string, Entry>();
   private readonly inflight = new Map<string, Promise<RawResponse>>();
@@ -94,6 +120,7 @@ export class Batcher {
     this.autoBatch = options.autoBatch ?? true;
     this.windowMs = options.batchWindowMs ?? 2;
     this.maxBytes = options.maxBatchBytes ?? 4_000_000;
+    this.maxBodyBytes = options.maxBodyBytes ?? MAX_BODY_BYTES;
   }
 
   run(request: QueryRequest, options: ExecuteOptions = {}): Promise<RawResponse> {
@@ -125,6 +152,7 @@ export class Batcher {
         resolve,
         reject,
         estimate: this.sizes.estimate(request),
+        blockBytes: blockBytes(request),
       };
       this.pendingByKey.set(key, entry);
       this.pending.push(entry);
@@ -143,27 +171,44 @@ export class Batcher {
   }
 
   private async direct(request: QueryRequest, options: ExecuteOptions): Promise<RawResponse> {
-    const response = await this.send(request.path, request.body, options);
+    let response: RawResponse;
+    try {
+      response = await this.send(request.path, request.body, options);
+    } catch (error) {
+      if (error instanceof PayloadTooLargeError && error.message.startsWith("Response"))
+        this.sizes.learnTooLarge(request);
+      throw error;
+    }
     if (Array.isArray(response.data) && response.bytes) {
       this.sizes.learn(request, response.bytes, response.data.length);
     }
     return response;
   }
 
-  /** Splits entries into groups of at most 10 blocks and `maxBatchBytes` of estimated response. */
+  /**
+   * Splits entries into groups of at most 10 blocks, `maxBatchBytes` of estimated response and
+   * `maxBodyBytes` of multiquery body.
+   */
   private group(entries: Entry[]): Entry[][] {
     const groups: Entry[][] = [];
     let current: Entry[] = [];
     let bytes = 0;
+    let body = 0;
     // Biggest first, so large queries do not end up alone at the end of a batch of small ones.
     for (const entry of [...entries].sort((a, b) => b.estimate - a.estimate)) {
-      if (current.length > 0 && (current.length >= MAX_BLOCKS || bytes + entry.estimate > this.maxBytes)) {
+      const full =
+        current.length >= MAX_BLOCKS ||
+        bytes + entry.estimate > this.maxBytes ||
+        body + entry.blockBytes > this.maxBodyBytes;
+      if (current.length > 0 && full) {
         groups.push(current);
         current = [];
         bytes = 0;
+        body = 0;
       }
       current.push(entry);
       bytes += entry.estimate;
+      body += entry.blockBytes;
     }
     if (current.length > 0) groups.push(current);
     return groups;
@@ -205,6 +250,14 @@ export class Batcher {
     for (const block of (response.data as { name: string; result?: unknown[]; count?: number }[]) ?? []) {
       blocks.set(block.name, block);
     }
+    // Each block's share of the response, in characters, scaled to the bytes of the whole response.
+    const lengths = new Map<string, number>();
+    for (const [name, block] of blocks) {
+      if (block.result?.length) lengths.set(name, JSON.stringify(block.result).length);
+    }
+    let characters = 0;
+    for (const length of lengths.values()) characters += length;
+    const bytesPerCharacter = response.bytes && characters ? Math.max(1, response.bytes / characters) : 1;
     group.forEach((entry, i) => {
       const block = blocks.get(names[i] as string);
       if (!block) {
@@ -216,10 +269,16 @@ export class Batcher {
         return;
       }
       const result = block.result ?? [];
-      if (result.length > 0) this.sizes.learn(entry.request, JSON.stringify(result).length, result.length);
+      const length = lengths.get(names[i] as string);
+      if (length !== undefined) this.sizes.learn(entry.request, length * bytesPerCharacter, result.length);
       settle(entry, { data: result });
     });
   }
+}
+
+/** Bytes of `query <path> "q0" { <body> };` and its line break, as a block of a multiquery. */
+function blockBytes(request: QueryRequest): number {
+  return new TextEncoder().encode(request.body).length + request.path.length + 18;
 }
 
 function settle(entry: Entry, response: RawResponse): void {

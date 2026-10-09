@@ -1,6 +1,6 @@
 import { QueryError } from "../core/errors";
 import { type EndpointName, type Endpoints, endpoints, entities, type Game } from "../generated/schema";
-import { type ExecuteOptions, endpointEntity, MAX_LIMIT, type Query, toId } from "../query/query";
+import { type ExecuteOptions, endpointEntity, type Query, toId, tooHeavy } from "../query/query";
 import type { Unarray } from "../query/types";
 
 /** The field of `E` that points to games: a `game` or `games` relation, or a `game_id` number. */
@@ -47,8 +47,10 @@ type Row = Record<string, unknown> & { id: number };
  * apply to each game's rows; without `sort`, rows are in id order.
  *
  * Ids are sent 500 per query, and the first pages go out together so batching packs them into
- * multiqueries. A query that fills its page is counted, then split into smaller id lists sized from
- * the count and read in parallel; a single game with more than 500 rows is read with an id cursor.
+ * multiqueries. Pages hold 500 rows, fewer when the selected rows are heavy. A query that fills its
+ * page is counted, then split into smaller id lists sized from the count and read in parallel; a
+ * single game with more rows than a page is read with an id cursor. A page IGDB finds too heavy is
+ * split in two by its ids, or read with smaller pages for a single game.
  */
 export async function byGame<R>(
   query: Query<EndpointName, R>,
@@ -66,6 +68,8 @@ export async function byGame<R>(
   const ids = [...new Set(gameIds.map(toId))];
   const result = new Map<number, R[]>(ids.map((id) => [id, []]));
   if (ids.length === 0) return result;
+  /** Ids per query: the filter on 500 games stays far under IGDB's body limit. */
+  const chunkSize = 500;
 
   // The link field is needed to group rows; it is removed again unless the query selected it.
   const selectsLink =
@@ -73,29 +77,46 @@ export async function byGame<R>(
   const base = query.with({
     fields: selectsLink ? fields : [...new Set([...(fields.length ? fields : ["id"]), link])],
     sort: { field: "id", direction: "asc" },
-    limit: MAX_LIMIT,
+    limit: undefined,
     offset: undefined,
   });
+  const rows = base.pageRows();
 
-  const rows = new Map<number, Row>();
+  const found = new Map<number, Row>();
   const keep = (page: Row[]) => {
-    for (const row of page) rows.set(row.id, row);
+    for (const row of page) found.set(row.id, row);
   };
   const filtered = (chunk: number[]) => base.where(`${link} = (${chunk.join(",")})`);
-  const page = (chunk: number[], after: number) =>
-    filtered(chunk)
-      .where(`id > ${after}`)
-      .with({ expectedRows: Math.min(MAX_LIMIT, chunk.length * 4) })
-      .execute(options) as Promise<Row[]>;
+  /** The rest of one game's rows, after `after`, in pages that halve while IGDB finds them too heavy. */
+  const readOn = async (chunk: number[], after: number, pageSize: number) => {
+    for await (const page of filtered(chunk).cursorPages({ ...options, after, pageSize }))
+      keep(page as Row[]);
+  };
 
   const load = async (chunk: number[]): Promise<void> => {
-    let last = await page(chunk, -1);
-    keep(last);
-    if (last.length < MAX_LIMIT) return;
+    let first: Row[];
+    try {
+      first = (await filtered(chunk)
+        .where("id > -1")
+        .limit(rows)
+        .with({ expectedRows: Math.min(rows, chunk.length * 4) })
+        .execute(options)) as Row[];
+    } catch (error) {
+      if (!tooHeavy(error)) throw error;
+      if (chunk.length > 1) {
+        const middle = Math.ceil(chunk.length / 2);
+        await Promise.all([load(chunk.slice(0, middle)), load(chunk.slice(middle))]);
+      } else {
+        await readOn(chunk, -1, Math.max(1, Math.ceil(rows / 2)));
+      }
+      return;
+    }
+    keep(first);
+    if (first.length < rows) return;
     if (chunk.length > 1) {
       // Too many rows for one page: split the ids so each part should fit in one.
       const total = await filtered(chunk).count().execute(options);
-      const size = Math.max(1, Math.floor((MAX_LIMIT * 0.8 * chunk.length) / Math.max(total, 1)));
+      const size = Math.max(1, Math.floor((rows * 0.8 * chunk.length) / Math.max(total, 1)));
       if (size < chunk.length) {
         const parts: number[][] = [];
         for (let i = 0; i < chunk.length; i += size) parts.push(chunk.slice(i, i + size));
@@ -103,16 +124,13 @@ export async function byGame<R>(
         return;
       }
     }
-    while (last.length === MAX_LIMIT) {
-      last = await page(chunk, (last[last.length - 1] as Row).id);
-      keep(last);
-    }
+    await readOn(chunk, (first[first.length - 1] as Row).id, rows);
   };
   const chunks: number[][] = [];
-  for (let i = 0; i < ids.length; i += MAX_LIMIT) chunks.push(ids.slice(i, i + MAX_LIMIT));
+  for (let i = 0; i < ids.length; i += chunkSize) chunks.push(ids.slice(i, i + chunkSize));
   await Promise.all(chunks.map(load));
 
-  for (const row of [...rows.values()].sort((a, b) => a.id - b.id)) {
+  for (const row of [...found.values()].sort((a, b) => a.id - b.id)) {
     // A copy without the link: an identical call in flight shares these rows and still needs it.
     let shown = row;
     if (!selectsLink) {

@@ -1,4 +1,4 @@
-import { NotFoundError, QueryError } from "../core/errors";
+import { NetworkError, NotFoundError, PayloadTooLargeError, QueryError } from "../core/errors";
 import type { Priority } from "../core/limiter";
 import {
   type EndpointName,
@@ -29,6 +29,21 @@ import { type Condition, type NameLookup, throwIfRemoved, type WhereRoot, whereP
 export const MAX_LIMIT = 500;
 /** IGDB rejects request bodies above 32,000 bytes (413), although its message says 32KB. */
 export const MAX_BODY_BYTES = 32_000;
+/** Bytes of pages `sync()` requests or holds at once, at most, about. */
+const SYNC_BYTES_IN_FLIGHT = 64_000_000;
+/** Requests `sync()` sends together, at most: as many as one multiquery holds. */
+const SYNC_WAVE = 10;
+
+/**
+ * @internal IGDB refused a page for its size: a response above 10 MB (413), or one it gave up
+ * building after 29 s (504 "Endpoint request timed out"). The same rows pass in smaller pages.
+ */
+export function tooHeavy(error: unknown): boolean {
+  return (
+    error instanceof PayloadTooLargeError ||
+    (error instanceof NetworkError && error.status === 504 && /timed out/i.test(error.message))
+  );
+}
 
 export interface ExecuteOptions {
   signal?: AbortSignal | undefined;
@@ -54,6 +69,8 @@ export interface QueryRequest {
   fields: readonly string[];
   /** Expected number of entities (the `limit`, 10 by default; 0 for a count). */
   limit: number;
+  /** Most entities the response can hold: the `limit`, 10 by default (0 for a count). */
+  maxRows?: number | undefined;
   /** How long to cache the response: set by `cache()`, else the client's `cacheTtlMs`. 0 disables. */
   cacheTtlMs?: number | undefined;
   /** Company names in `body` that the client turns into ids before sending (`developedBy("Nintendo")`). */
@@ -64,13 +81,18 @@ export interface RawResponse {
   data: unknown;
   /** The `x-count` header: total matches of the `where`, regardless of `limit`. */
   total?: number | undefined;
-  /** Size of the response body, in characters. */
+  /** Size of the response body, in bytes. */
   bytes?: number | undefined;
 }
 
 /** @internal Implemented by the client. */
 export interface QueryRunner {
   run(request: QueryRequest, options?: ExecuteOptions): Promise<RawResponse>;
+  /**
+   * Rows of this selection in one of igdb-kit's own pages (500 at most, fewer once rows are heavy),
+   * and what such a page should weigh, from the sizes learned so far.
+   */
+  pageSize?(endpoint: EndpointName, fields: readonly string[]): { rows: number; bytes: number };
 }
 
 export interface PopularOptions extends ExecuteOptions {
@@ -97,7 +119,10 @@ export interface QueryState {
 }
 
 export interface SyncOptions extends ExecuteOptions {
-  /** Id ranges of 500 requested at once. Default 40, which automatic batching sends as a few multiqueries. */
+  /**
+   * Pages requested or waiting to be read at once. Default 40, which automatic batching sends as a
+   * few multiqueries; fewer when pages are heavy, so that about 64 MB of pages are held.
+   */
   concurrency?: number | undefined;
   /** Up to this many matches, pages are read with an id cursor instead of id ranges. Default 5000. */
   cursorThreshold?: number | undefined;
@@ -181,6 +206,16 @@ export class Query<N extends EndpointName, R = { id: number }> extends Executabl
   /** This query for a lookup by ids: an `offset` would skip the rows asked for, and `sort` is moot. */
   private byIds(): this {
     return this.with({ offset: undefined, sort: undefined });
+  }
+
+  /**
+   * @internal Rows per page when igdb-kit pages through this selection itself: `max` (500), or fewer
+   * so that a page stays near `maxBatchBytes` (4 MB) once rows are heavy. A game with its media,
+   * companies, dates and websites expanded weighs about 20 KB.
+   */
+  pageRows(max: number = MAX_LIMIT): number {
+    const size = this.runner.pageSize?.(this.endpoint, this.state.fields);
+    return Math.max(1, Math.min(max, size?.rows ?? max));
   }
 
   /**
@@ -312,26 +347,38 @@ export class Query<N extends EndpointName, R = { id: number }> extends Executabl
   }
 
   /**
-   * The entities with these ids, in the order given (missing ids are skipped). Splits into chunks of
-   * 500, which `batch` and automatic batching send together. The query's `offset` and `sort` do not
+   * The entities with these ids, in the order given (missing ids are skipped). Splits them into
+   * chunks of 500, fewer when the selected rows are heavy, which `batch` and automatic batching send
+   * together; a chunk IGDB finds too heavy is split in two. The query's `offset` and `sort` do not
    * apply.
    */
   async findByIds(ids: readonly number[], options?: ExecuteOptions): Promise<R[]> {
     const unique = [...new Set(ids.map(toId))];
-    const chunks: number[][] = [];
-    for (let i = 0; i < unique.length; i += MAX_LIMIT) chunks.push(unique.slice(i, i + MAX_LIMIT));
     const query = this.byIds();
-    const pages = await Promise.all(
-      chunks.map((chunk) =>
-        query
-          .where(`id = (${chunk.join(",")})`)
-          .limit(chunk.length)
-          .execute(options),
-      ),
-    );
+    const size = query.pageRows();
+    const chunks: number[][] = [];
+    for (let i = 0; i < unique.length; i += size) chunks.push(unique.slice(i, i + size));
+    const pages = await Promise.all(chunks.map((chunk) => query.readIds(chunk, options)));
     const byId = new Map<number, R>();
     for (const page of pages) for (const item of page) byId.set((item as { id: number }).id, item);
     return ids.flatMap((id) => (byId.has(id) ? [byId.get(id) as R] : []));
+  }
+
+  /** The rows with these ids, read in halves when IGDB finds the response too heavy. */
+  private async readIds(ids: readonly number[], options: ExecuteOptions | undefined): Promise<R[]> {
+    try {
+      return await this.where(`id = (${ids.join(",")})`)
+        .limit(ids.length)
+        .execute(options);
+    } catch (error) {
+      if (ids.length === 1 || !tooHeavy(error)) throw error;
+      const middle = Math.ceil(ids.length / 2);
+      const halves = await Promise.all([
+        this.readIds(ids.slice(0, middle), options),
+        this.readIds(ids.slice(middle), options),
+      ]);
+      return halves.flat();
+    }
   }
 
   /** Number of entities matching the `where` (and `search`). */
@@ -504,26 +551,35 @@ export class Query<N extends EndpointName, R = { id: number }> extends Executabl
   }
 
   /**
-   * Iterates over every match with an id cursor (`where id > last; sort id asc`), `pageSize` at a
-   * time. Stable even if entities are added meanwhile, and fast at any depth unlike `offset`.
+   * Iterates over every match with an id cursor (`where id > last; sort id asc`), `pageSize` (1 to
+   * 500, default 500) at a time, fewer when the selected rows are heavy. Stable even if entities are
+   * added meanwhile, and fast at any depth unlike `offset`.
    */
   async *iterate(options: ExecuteOptions & { pageSize?: number } = {}): AsyncGenerator<R, void, undefined> {
-    for await (const page of this.cursorPages(options.pageSize ?? MAX_LIMIT, options)) yield* page;
+    const { pageSize = MAX_LIMIT } = options;
+    if (!Number.isInteger(pageSize) || pageSize < 1 || pageSize > MAX_LIMIT) {
+      throw new QueryError(`pageSize must be an integer between 1 and ${MAX_LIMIT}, got ${pageSize}`);
+    }
+    for await (const page of this.cursorPages(options)) yield* page;
   }
 
   /**
    * Every match, page by page, to copy an endpoint into your own storage. Pass `since` (the time you
-   * started the previous sync) to get only what changed since then. Large result sets are fetched as
-   * id ranges sent in parallel, which automatic batching packs into multiqueries; small ones with an
-   * id cursor. Requests default to `background` priority so they wait behind interactive ones.
-   * Pages arrive in id order.
+   * started the previous sync) to get only what changed since then. The first page goes out with the
+   * count, in one multiquery. Large result sets are then fetched as id ranges sent in parallel, which
+   * automatic batching packs into multiqueries: each range is sized from the density of matches to
+   * hold most of a page, and one that holds more is read on with an id cursor. At most `concurrency`
+   * pages are requested or waiting at once, about 64 MB. Small result sets are read with an id cursor
+   * only. Requests default to `background` priority so they wait behind interactive ones. Pages
+   * arrive in id order.
    */
   async *sync(
     options: SyncOptions &
       ("updated_at" extends keyof Endpoints[N] ? { since?: Date | number } : { since?: never }) = {},
   ): AsyncGenerator<R[], void, undefined> {
     if (this.state.search) throw new QueryError("sync() cannot be combined with search");
-    const executeOptions: ExecuteOptions = { ...options, priority: options.priority ?? "background" };
+    const { concurrency = 40, cursorThreshold = 5000, since: _, ...execute } = options;
+    const executeOptions: ExecuteOptions = { ...execute, priority: execute.priority ?? "background" };
     let query: Query<N, R> = this.with({
       fields: this.fieldsWithId(),
       sort: undefined,
@@ -540,37 +596,118 @@ export class Query<N extends EndpointName, R = { id: number }> extends Executabl
       query = query.where(`updated_at >= ${seconds}`);
     }
 
-    const total = await query.count().execute(executeOptions);
-    if (total === 0) return;
-    if (total <= (options.cursorThreshold ?? 5000)) {
-      yield* query.cursorPages(MAX_LIMIT, executeOptions);
+    // The count, the highest id and the first page go out together, in one multiquery. The first
+    // page also tells what a row of this selection weighs, before the ranges are sized and packed.
+    const cursor = query.cursorPages(executeOptions);
+    const [total, last, start] = await Promise.all([
+      query.count().execute(executeOptions),
+      query
+        .with({ fields: ["id"], sort: { field: "id", direction: "desc" } })
+        .first()
+        .execute(executeOptions),
+      cursor.next(),
+    ]);
+    if (start.done) return;
+    yield start.value;
+    if (start.value.length >= total) return;
+    if (total <= cursorThreshold) {
+      yield* cursor;
       return;
     }
 
-    const last = await query
-      .with({ fields: ["id"], sort: { field: "id", direction: "desc" } })
-      .first()
-      .execute(executeOptions);
-    const maxId = (last as { id: number } | null)?.id ?? 0;
-    const window = Math.max(1, options.concurrency ?? 40);
-    const pending: Promise<R[]>[] = [];
-    let next = 0;
-    const launch = () => {
-      if (next > maxId) return;
-      const from = next;
-      next += MAX_LIMIT;
-      const page = query
-        .with({ sort: { field: "id", direction: "asc" }, limit: MAX_LIMIT })
-        .where(`id >= ${from} & id < ${from + MAX_LIMIT}`)
-        .execute(executeOptions);
-      page.catch(() => {}); // awaited in order below; avoid unhandled rejections meanwhile
-      pending.push(page);
+    const after = (start.value[start.value.length - 1] as { id: number }).id;
+    const maxId = (last as { id: number } | null)?.id ?? after;
+    const density = (total - start.value.length) / Math.max(1, maxId - after);
+    const pageBytes = this.runner.pageSize?.(query.endpoint, query.state.fields).bytes ?? 0;
+    // Pages being read, or read and not yet yielded. A wave more is read on while the reader waits
+    // (see pump), so the window takes 80% of the bytes allowed.
+    const window = Math.max(
+      1,
+      Math.min(concurrency, Math.floor((SYNC_BYTES_IN_FLIGHT * 0.8) / Math.max(pageBytes, 1))),
+    );
+    // Requests leave in groups, which automatic batching packs into multiqueries.
+    const wave = Math.min(SYNC_WAVE, Math.ceil(window / 4));
+    const ordered = query.with({ sort: { field: "id", direction: "asc" } });
+    const ranges: SyncRange<R>[] = [];
+    let used = 0;
+    let next = after + 1;
+    let stopped = false;
+
+    /** Reads the next page of `range`, halving it when IGDB finds it too heavy. */
+    const read = (range: SyncRange<R>) => {
+      const size = ordered.pageRows(range.cap);
+      used++;
+      // Starts on the next microtask, once `range.reading` is set; still in the same batch.
+      const reading = Promise.resolve().then(async () => {
+        try {
+          const page = await ordered
+            .where(`id > ${range.after} & id < ${range.to}`)
+            .limit(size)
+            .execute(executeOptions);
+          range.more = page.length === size;
+          if (page.length === 0) used--;
+          else {
+            range.pages.push(page);
+            range.after = (page[page.length - 1] as { id: number }).id;
+          }
+        } catch (error) {
+          used--;
+          if (size > 1 && tooHeavy(error)) range.cap = Math.ceil(size / 2);
+          else range.failed = { error };
+        } finally {
+          range.reading = undefined;
+        }
+        pump();
+      });
+      reading.catch(() => {}); // awaited when the range comes first
+      range.reading = reading;
     };
-    for (let i = 0; i < window; i++) launch();
-    while (pending.length > 0) {
-      const page = await (pending.shift() as Promise<R[]>);
-      launch();
-      if (page.length > 0) yield page;
+    /**
+     * Reads on the ranges already started, in order, then starts new ones, up to the window. Waits
+     * until a wave of requests fits, so that they leave together, unless the reader waits on the
+     * first range (`now`): its page then leaves with the next pages of the following ranges, a wave
+     * past the window at most.
+     */
+    const pump = (now = false) => {
+      if (stopped || ranges.some((range) => range.failed)) return;
+      if (!now && window - used < wave) return;
+      for (const range of ranges) {
+        if (used >= (now ? window + wave : window)) break;
+        if (range.more && !range.reading) read(range);
+      }
+      while (next <= maxId && used < window) {
+        const from = next;
+        // About 80% of a page of matches per range, from the page size learned so far.
+        next += Math.max(1, Math.floor((ordered.pageRows() * 0.8) / density));
+        const range: SyncRange<R> = { after: from - 1, to: next, cap: MAX_LIMIT, pages: [], more: true };
+        ranges.push(range);
+        read(range);
+      }
+    };
+
+    try {
+      pump();
+      while (ranges.length > 0) {
+        const head = ranges[0] as SyncRange<R>;
+        const page = head.pages.shift();
+        if (page) {
+          used--;
+          pump();
+          yield page;
+        } else if (head.failed) {
+          throw head.failed.error;
+        } else if (head.reading) {
+          await head.reading;
+        } else if (head.more) {
+          pump(true);
+          if (!head.reading) read(head); // the next page in order is read even past the window
+        } else {
+          ranges.shift();
+          pump();
+        }
+      }
+    } finally {
+      stopped = true;
     }
   }
 
@@ -579,22 +716,38 @@ export class Query<N extends EndpointName, R = { id: number }> extends Executabl
     return fields.length && !fields.includes("id") && !fields.includes("*") ? [...fields, "id"] : fields;
   }
 
-  private async *cursorPages(
-    pageSize: number,
-    options: ExecuteOptions,
+  /**
+   * @internal Every match after the id `after` (default: all), page by page in id order, with an id
+   * cursor. A page holds `pageSize` rows (default 500), fewer when rows are heavy; a page IGDB finds
+   * too heavy is asked again at half the size, and later pages stay at most that size.
+   */
+  async *cursorPages(
+    options: ExecuteOptions & { pageSize?: number | undefined; after?: number | undefined } = {},
   ): AsyncGenerator<R[], void, undefined> {
     if (this.state.search) throw new QueryError("iterate() cannot be combined with search");
+    const { pageSize = MAX_LIMIT, after = -1, ...execute } = options;
     const base = this.with({
       fields: this.fieldsWithId(),
       sort: { field: "id", direction: "asc" },
       offset: undefined,
     });
-    let last = -1;
+    let last = after;
+    let cap = pageSize;
+    let size = base.pageRows(cap);
     for (;;) {
-      const page = await base.where(`id > ${last}`).limit(pageSize).execute(options);
+      let page: R[];
+      try {
+        page = await base.where(`id > ${last}`).limit(size).execute(execute);
+      } catch (error) {
+        if (size === 1 || !tooHeavy(error)) throw error;
+        cap = Math.ceil(size / 2);
+        size = cap;
+        continue;
+      }
       if (page.length > 0) yield page;
-      if (page.length < pageSize) return;
+      if (page.length < size) return;
       last = (page[page.length - 1] as { id: number }).id;
+      size = base.pageRows(cap);
     }
   }
 
@@ -629,6 +782,7 @@ export class Query<N extends EndpointName, R = { id: number }> extends Executabl
       hasSearch: search !== undefined,
       fields,
       limit: kind === "count" ? 0 : (expectedRows ?? limit ?? 10),
+      maxRows: kind === "count" ? 0 : (limit ?? 10),
       cacheTtlMs,
       ...(lookups?.length ? { lookups } : {}),
     };
@@ -716,6 +870,21 @@ export class WithCount<R> extends Executable<{ data: R[]; total: number }> {
     const data = response.data as R[];
     return { data, total: response.total ?? data.length };
   }
+}
+
+/** Ids after `after` and below `to`, read by `sync()` a page at a time. */
+interface SyncRange<R> {
+  after: number;
+  to: number;
+  /** Rows per page at most: halved when IGDB finds a page too heavy. */
+  cap: number;
+  /** Pages read and not yet yielded. */
+  pages: R[][];
+  /** The page being read. */
+  reading?: Promise<void> | undefined;
+  /** The last page was full, so more rows may follow. */
+  more: boolean;
+  failed?: { error: unknown } | undefined;
 }
 
 /** @internal */

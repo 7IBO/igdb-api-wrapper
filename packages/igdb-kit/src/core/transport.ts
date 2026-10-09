@@ -61,6 +61,7 @@ export class Transport {
       const release = await this.options.limiter.acquire({ signal, priority });
       let status: number;
       let text: string;
+      let bytes: number;
       let headers: Headers;
       let token: string | undefined;
       try {
@@ -79,7 +80,10 @@ export class Transport {
         });
         status = res.status;
         headers = res.headers;
-        text = await res.text();
+        // Bytes, not characters: IGDB caps responses at 10 MB, and page sizes are learned from these.
+        const buffer = await res.arrayBuffer();
+        bytes = buffer.byteLength;
+        text = new TextDecoder().decode(buffer);
       } catch (error) {
         release();
         if (signal?.aborted) throw signal.reason;
@@ -100,7 +104,7 @@ export class Transport {
         return {
           data: parseBody(text, headers, { status, endpoint: path, query: body }),
           total: count === null ? undefined : Number(count),
-          bytes: text.length,
+          bytes,
         };
       }
 

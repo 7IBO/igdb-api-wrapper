@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { PayloadTooLargeError, QueryError } from "../../src";
-import { apicalypseError, mockFetch, testClient } from "./helpers";
+import { createIGDB, LocalLimiter, PayloadTooLargeError, QueryError } from "../../src";
+import { apicalypseError, type Call, mockFetch, testClient } from "./helpers";
 
 const echoIds = mockFetch((call) => {
   const id = Number(call.body.match(/id = (\d+)/)?.[1] ?? 0);
@@ -111,6 +111,37 @@ describe("automatic batching", () => {
       ),
     );
     expect(mock.calls.map((c) => c.url.split("/").pop())).toEqual(["games", "games", "games"]);
+  });
+
+  test("batches are cut before IGDB's body limit", async () => {
+    const mock = mockFetch((call) => Response.json([{ id: Number(call.body.match(/id = (\d+)/)?.[1]) }]));
+    const igdb = testClient(mock.fetch);
+    // Ten queries of about 5,000 bytes: 50 KB in one multiquery would be refused (413).
+    const long = (id: number) => igdb.games.where(`id = ${id} & name != "${"x".repeat(5_000)}"`).first();
+    const games = await Promise.all(Array.from({ length: 10 }, (_, i) => long(i + 1)));
+    expect(games.map((g) => g?.id)).toEqual(Array.from({ length: 10 }, (_, i) => i + 1));
+    const sizes = mock.calls.map((c) => new TextEncoder().encode(c.body).length);
+    expect(sizes.every((size) => size <= 32_000)).toBe(true);
+    expect(mock.calls.map((c) => c.body.split("\n").length)).toEqual([6, 4]);
+  });
+
+  test("through a proxy, batches stay under its 16 KB default, or the limit given", async () => {
+    const answer = (call: Call) => Response.json([{ id: Number(call.body.match(/id = (\d+)/)?.[1]) }]);
+    for (const [maxBodyBytes, blocks] of [
+      [undefined, [3, 3, 3, 1]],
+      [32_000, [6, 4]],
+    ] as const) {
+      const mock = mockFetch(answer);
+      const igdb = createIGDB({
+        proxyUrl: "https://app.example/api/igdb",
+        fetch: mock.fetch,
+        limiter: new LocalLimiter({ requestsPerSecond: 1000, maxConcurrent: 1000 }),
+        maxBodyBytes,
+      });
+      const long = (id: number) => igdb.games.where(`id = ${id} & name != "${"x".repeat(5_000)}"`).first();
+      await Promise.all(Array.from({ length: 10 }, (_, i) => long(i + 1)));
+      expect(mock.calls.map((c) => c.body.split("\n").length)).toEqual([...blocks]);
+    }
   });
 
   test("autoBatch: false sends queries alone, but batch() still groups them", async () => {
