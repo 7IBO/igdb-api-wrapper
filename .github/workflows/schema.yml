@@ -19,11 +19,27 @@ jobs:
         with:
           bun-version: 1.4.2
       - run: bun install --frozen-lockfile
+      # --fetch also downloads the reference tables (GameType, Platform...), which needs credentials.
       - run: bun run --filter igdb-kit codegen -- --fetch
+        env:
+          TWITCH_CLIENT_ID: ${{ secrets.TWITCH_CLIENT_ID }}
+          TWITCH_CLIENT_SECRET: ${{ secrets.TWITCH_CLIENT_SECRET }}
       - run: bun run typecheck && bun run test:types
+      # Field-by-field check against the live API; the report goes in the PR body.
+      - run: |
+          cd packages/igdb-kit
+          {
+            echo "Regenerated from the latest igdbapi.proto and reference tables."
+            echo
+            bun run audit || echo "**The audit found problems: fix them before merging.**"
+          } > ../../audit.md
+        env:
+          TWITCH_CLIENT_ID: ${{ secrets.TWITCH_CLIENT_ID }}
+          TWITCH_CLIENT_SECRET: ${{ secrets.TWITCH_CLIENT_SECRET }}
       - uses: peter-evans/create-pull-request@v7
         with:
           branch: chore/schema-update
           title: Update IGDB schema
           commit-message: Update IGDB schema from igdbapi.proto
-          body: Regenerated from the latest `igdbapi.proto`. Check the diff of `src/generated/schema.ts` for new or deprecated fields.
+          body-path: audit.md
+          add-paths: packages/igdb-kit
