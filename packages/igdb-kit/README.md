@@ -411,7 +411,7 @@ const { top, total, ps5 } = await igdb.batch({
 // ps5: { id: number; name?: string } | null
 ```
 
-It also takes views and the methods that take several requests, such as `findByIds()`, `findByGames()` or `popular()`, which return a `Task`: their first requests share the multiquery.
+It also takes views, and the `Task` returned by the methods that take several requests, such as `findByIds()`, `findByGames()` or `popular()`: their first requests share the multiquery.
 
 ```ts
 // 1 HTTP request
