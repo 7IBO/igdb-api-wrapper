@@ -71,4 +71,28 @@ describe("memoryCache", () => {
     await Bun.sleep(5);
     expect(await cache.get("d")).toBeUndefined();
   });
+
+  test("keeps maxBytes of entries at most, and none above a quarter of it", async () => {
+    const cache = memoryCache({ maxBytes: 100 });
+    const value = "x".repeat(19); // 20 with its key
+    for (const key of ["a", "b", "c", "d", "e"]) await cache.set(key, value, 60_000);
+    await cache.get("a");
+    await cache.set("b", "y".repeat(19), 60_000); // replaced, not counted twice
+    expect(await cache.get("c")).toBe(value);
+    await cache.set("f", value, 60_000); // 120: the least recently used, d, goes
+    expect(await cache.get("d")).toBeUndefined();
+    expect(await cache.get("a")).toBe(value);
+    await cache.set("g", "x".repeat(25), 60_000); // 26: not kept, and pushes nothing out
+    expect(await cache.get("g")).toBeUndefined();
+    for (const key of ["a", "b", "c", "e", "f"]) expect(await cache.get(key)).toBeDefined();
+  });
+
+  test("an expired entry frees its bytes", async () => {
+    const cache = memoryCache({ maxBytes: 100 });
+    await cache.set("a", "x".repeat(24), 1);
+    await Bun.sleep(5);
+    expect(await cache.get("a")).toBeUndefined();
+    for (const key of ["b", "c", "d", "e"]) await cache.set(key, "x".repeat(24), 60_000);
+    for (const key of ["b", "c", "d", "e"]) expect(await cache.get(key)).toBeDefined();
+  });
 });
