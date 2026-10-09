@@ -77,6 +77,8 @@ if (q4) {
 expectType<Equal<Awaited<ReturnType<typeof q1.first>>, R1 | null>>();
 expectType<Equal<Awaited<ReturnType<typeof q1.findById>>, R1 | null>>();
 expectType<Equal<Awaited<ReturnType<typeof q1.findByIds>>, R1[]>>();
+expectType<Equal<Awaited<ReturnType<typeof q1.findByIdOrThrow>>, R1>>();
+expectType<Equal<Awaited<ReturnType<typeof q1.firstOrThrow>>, R1>>();
 expectType<Equal<Awaited<ReturnType<typeof q1.count>>, number>>();
 expectType<Equal<Awaited<ReturnType<typeof q1.withCount>>, { data: R1[]; total: number }>>();
 for await (const g of q1.iterate()) expectType<Equal<typeof g, R1>>();

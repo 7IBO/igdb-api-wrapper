@@ -37,6 +37,11 @@ export class QueryError extends IGDBError {
   override name = "QueryError";
 }
 
+/** `firstOrThrow()` / `findByIdOrThrow()` found nothing. */
+export class NotFoundError extends IGDBError {
+  override name = "NotFoundError";
+}
+
 /** The response would exceed IGDB's 10 MB cap. Lower `limit` or select fewer fields. */
 export class PayloadTooLargeError extends IGDBError {
   override name = "PayloadTooLargeError";

@@ -1,4 +1,4 @@
-import { QueryError } from "../core/errors";
+import { NotFoundError, QueryError } from "../core/errors";
 import type { Priority } from "../core/limiter";
 import {
   type EndpointName,
@@ -222,6 +222,17 @@ export class Query<N extends EndpointName, R = { id: number }> extends Executabl
   /** The entity with this id, or null. */
   findById(id: number): Single<R> {
     return this.where(`id = ${toId(id)}`).first();
+  }
+
+  /** The first result; throws `NotFoundError` when nothing matches. */
+  firstOrThrow(): SingleOrThrow<R> {
+    return new SingleOrThrow(this.runner, this.limit(1).toRequest(), `No ${this.endpoint} matched the query`);
+  }
+
+  /** The entity with this id; throws `NotFoundError` when it does not exist (or the `where` excludes it). */
+  findByIdOrThrow(id: number): SingleOrThrow<R> {
+    const query = this.where(`id = ${toId(id)}`).limit(1);
+    return new SingleOrThrow(this.runner, query.toRequest(), `No ${this.endpoint} with id ${id}`);
   }
 
   /**
@@ -495,6 +506,28 @@ export class Single<R> extends Executable<R | null> {
   }
   parse(response: RawResponse): R | null {
     return ((response.data as R[])[0] ?? null) as R | null;
+  }
+}
+
+/** Result of `firstOrThrow()` / `findByIdOrThrow()`. */
+export class SingleOrThrow<R> extends Executable<R> {
+  /** @internal */
+  constructor(
+    protected readonly runner: QueryRunner,
+    private readonly request: QueryRequest,
+    private readonly notFound: string,
+  ) {
+    super();
+  }
+  toRequest(): QueryRequest {
+    return this.request;
+  }
+  parse(response: RawResponse): R {
+    const item = (response.data as R[])[0];
+    if (item === undefined) {
+      throw new NotFoundError(this.notFound, { endpoint: this.request.endpoint, query: this.request.body });
+    }
+    return item;
   }
 }
 

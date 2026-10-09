@@ -23,6 +23,7 @@ export {
   Query,
   type QueryRequest,
   Single,
+  SingleOrThrow,
   type SyncOptions,
   WithCount,
 } from "./query/query";
