@@ -47,6 +47,31 @@ export function imageUrl(
   return `https://images.igdb.com/igdb/image/upload/t_${size}${suffix}/${id}.${options.format ?? "jpg"}`;
 }
 
+/**
+ * A `srcset` for an IGDB image, its size at 1x and 2x for high-density screens:
+ * `<img src={imageUrl(id, "cover_big")} srcSet={imageSrcSet(id, "cover_big")}>`. Undefined when the
+ * id is missing.
+ */
+export function imageSrcSet(
+  imageId: string,
+  size: ImageSize,
+  options?: Omit<ImageUrlOptions, "retina">,
+): string;
+export function imageSrcSet(
+  imageId: string | undefined,
+  size: ImageSize,
+  options?: Omit<ImageUrlOptions, "retina">,
+): string | undefined;
+export function imageSrcSet(
+  imageId: string | undefined,
+  size: ImageSize,
+  options: Omit<ImageUrlOptions, "retina"> = {},
+): string | undefined {
+  if (!imageId) return undefined;
+  const format = options.format;
+  return `${imageUrl(imageId, size, { format })} 1x, ${imageUrl(imageId, size, { format, retina: true })} 2x`;
+}
+
 /** `image_types` id of each `artwork_types` id: the two tables number some types differently. */
 const IMAGE_TYPE_OF_ARTWORK_TYPE: Record<number, number> = {
   1: 1,

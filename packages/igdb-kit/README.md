@@ -338,11 +338,12 @@ The first page goes out with the count. The other pages are then requested in pa
 ### Images
 
 ```ts
-import { imageUrl } from "igdb-kit";
+import { imageSrcSet, imageUrl } from "igdb-kit";
 
 imageUrl(game.cover?.image_id, "cover_big", { retina: true });
 // https://images.igdb.com/igdb/image/upload/t_cover_big_2x/co1wyy.jpg (undefined if there is no cover)
 imageUrl(game.cover?.url, "cover_big"); // the url field IGDB returns (always t_thumb) works too
+imageSrcSet(game.cover?.image_id, "cover_big"); // "…/t_cover_big/co1wyy.jpg 1x, …/t_cover_big_2x/co1wyy.jpg 2x"
 ```
 
 `artworkType()` gives the `ImageType` of an artwork. IGDB fills `image_type` on about half of the artworks and the deprecated `artwork_type` on nearly all, numbered differently (8 is "Infographic" in `artwork_types` and "Main cover" in `image_types`), so it reads `image_type` and falls back to `artwork_type` converted:
@@ -395,6 +396,14 @@ ageRating(game, [AgeRatingOrganization.PEGI, AgeRatingOrganization.ESRB]); // { 
 | `multiplayer(game, platform?)` | Player counts and co-op flags per platform | 0 means unknown, rows that apply to every platform |
 | `parentGame(game)` | `{ relation, game, title }` for editions, DLCs, expansions, remakes, ports... | `version_parent` and `parent_game`, named from `game_type` |
 | `timeToBeat(row, { prefer? })`, `formatPlaytime(seconds)` | `{ seconds, kind, count }`, `"71 hr"` | Rows of `game_time_to_beats` (97% of games have none); localized with `Intl` |
+| `relatedGames(game)`, `relatedGameFields(...fields)` | `{ parent, dlcs, expansions, standalone_expansions, remakes, remasters, expanded_games, ports, forks, bundles }` | Lists are empty rather than undefined; `relatedGameFields("name")` selects them all with their names. A game's own fields cannot show its editions, mods, episodes, seasons, packs and updates: they point to it and no array lists them |
+| `groupByParent(games, { relations? })` | `{ groups: [{ game, members }], missingParents }` | The editions and ports of a list (a company's catalog, search results, a library) under their original. A parent missing from the list is an id to load |
+| `franchisesOf(game)` | `{ main, others }` | IGDB sets `franchise` on 1,348 games and `franchises` on 29,259 |
+| `externalIds(game, source?)`, `externalId(game, source)` | `[{ source, uid, url }]`, `"292030"` | A game's ids in stores and services, several per source (1,830 games have two or three Steam appids), duplicates dropped. IGDB has no PlayStation trophy ids, only store concept ids, and no Nintendo, Ubisoft, EA or Battle.net source |
+| `websiteLinks(game, { kinds? })` | `[{ kind, type, url, trusted }]` | Official site, wikis, social networks and stores, by `kind`. IGDB never marks official sites as trusted, so nothing is dropped for it; social links with no page are |
+| `videoLinks(game)` | `[{ kind, name, video_id, url, embedUrl, thumbnailUrl }]` | YouTube links, with `trailer`, `gameplay`, `teaser`, `intro` or `other` read from the name |
+| `bestImage(game, { prefer? })` | `{ image_id, source, type, width, height, ratio }` | The cover, else a cover artwork, key art or a screenshot (13% of complete games have no cover). `prefer: "background"` gives a wide image for a banner. Never a logo or an icon |
+| `platformVersions(platform, { locale? })` | `[{ version, release, releases }]` | The versions of a console (Slim, Pro, OLED) earliest first, with the date for the user's region |
 
 Data is often missing, and helpers keep "unknown" apart from "no": 79% of games have no age rating, 39% of main games no language data, 94% no multiplayer data. A missing value is `null`, never `undefined`, so results survive `JSON.stringify` (and Next.js props), and references are ids: statuses are `ReleaseDateStatus` ids, store link formats `GameReleaseFormat` ids.
 

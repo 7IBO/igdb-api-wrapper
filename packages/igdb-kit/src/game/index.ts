@@ -21,6 +21,18 @@ export {
   releaseRegionName,
 } from "./display";
 export {
+  type ExternalId,
+  type ExternalIdFields,
+  externalId,
+  externalIds,
+} from "./external-ids";
+export {
+  type BestImage,
+  type BestImageOptions,
+  type BestImageRequires,
+  bestImage,
+} from "./images";
+export {
   type GameLanguage,
   type LanguageFields,
   type LanguageSupport,
@@ -28,6 +40,17 @@ export {
   languages,
   supportsLanguage,
 } from "./languages";
+export {
+  type VideoKind,
+  type VideoLink,
+  type VideoLinkFields,
+  videoLinks,
+  type WebsiteKind,
+  type WebsiteLink,
+  type WebsiteLinkFields,
+  type WebsiteLinksOptions,
+  websiteLinks,
+} from "./links";
 export { type ResolvedLocale, resolveLocale } from "./locale";
 export { type Multiplayer, type MultiplayerFields, multiplayer } from "./multiplayer";
 export {
@@ -41,6 +64,13 @@ export {
   localizedName,
 } from "./names";
 export {
+  type PlatformVersionFields,
+  type PlatformVersionReleases,
+  type PlatformVersionsOptions,
+  type PlatformVersionsRequires,
+  platformVersions,
+} from "./platforms";
+export {
   type FormatPlaytimeOptions,
   formatPlaytime,
   type Playtime,
@@ -50,10 +80,21 @@ export {
   timeToBeat,
 } from "./playtime";
 export {
+  type FranchiseFields,
+  franchisesOf,
+  type GameFranchises,
+  type GameGroup,
+  type GroupByParentOptions,
+  type GroupedGames,
+  groupByParent,
   type ParentGame,
   type ParentGameFields,
   type ParentRelation,
   parentGame,
+  type RelatedGameFields,
+  type RelatedGames,
+  relatedGameFields,
+  relatedGames,
 } from "./relations";
 export {
   type GameRelease,
