@@ -3,7 +3,7 @@
 // the version's changelog section. Missing releases are created (oldest first, so the newest stays
 // "Latest") and edited notes are updated. Run by release.yml on each push to main, once the release
 // job is done; needs GH_TOKEN and the full git history. `--dry-run` prints what it would do without
-// calling GitHub.
+// calling GitHub. A release that fails does not stop the others.
 import { execFileSync } from "node:child_process";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -12,7 +12,37 @@ const dryRun = process.argv.includes("--dry-run");
 const repo = process.env.GITHUB_REPOSITORY ?? "7IBO/igdb-kit";
 
 const run = (command: string, args: string[], input?: string): string =>
-  execFileSync(command, args, { encoding: "utf8", input, stdio: ["pipe", "pipe", "inherit"] }).trim();
+  execFileSync(command, args, { encoding: "utf8", input, stdio: ["pipe", "pipe", "pipe"] }).trim();
+
+/** Runs a gh command, returning its error output instead of throwing. */
+function attempt(args: string[], input: string): string | undefined {
+  try {
+    run("gh", args, input);
+    return undefined;
+  } catch (error) {
+    const { stderr, message } = error as { stderr?: string; message: string };
+    return (stderr || message).trim();
+  }
+}
+
+const head = run("git", ["rev-parse", "HEAD"]);
+let failed = false;
+
+/**
+ * GitHub answers 403 "Resource not accessible by integration" when GITHUB_TOKEN creates the tag of a
+ * version set by an older commit (seen backfilling 0.1.0 to 0.3.0). Those only warn, with the way to
+ * create them; any other failure, or one on the pushed commit, fails the job.
+ */
+function report(tag: string, commit: string | undefined, error: string): void {
+  if (commit !== undefined && commit !== head && /Resource not accessible by integration/.test(error)) {
+    console.log(
+      `::warning::${tag} needs a token allowed to tag older commits: run \`bun scripts/sync-releases.ts\` once with your own gh login. (${error})`,
+    );
+    return;
+  }
+  console.log(`::error::${tag}: ${error}`);
+  failed = true;
+}
 
 interface Section {
   version: string;
@@ -87,7 +117,10 @@ for (const entry of readdirSync("packages")) {
     if (current !== undefined) {
       if (current.trim() === body) continue;
       console.log(`Updating the notes of ${tag}`);
-      if (!dryRun) run("gh", ["release", "edit", tag, "--repo", repo, "--notes-file", "-"], body);
+      const error = dryRun
+        ? undefined
+        : attempt(["release", "edit", tag, "--repo", repo, "--notes-file", "-"], body);
+      if (error) report(tag, undefined, error);
       continue;
     }
     const commit = commitOf(dir, version);
@@ -97,8 +130,7 @@ for (const entry of readdirSync("packages")) {
     }
     console.log(`Creating ${tag} on ${commit.slice(0, 7)}`);
     if (dryRun) continue;
-    run(
-      "gh",
+    const error = attempt(
       [
         "release",
         "create",
@@ -116,5 +148,8 @@ for (const entry of readdirSync("packages")) {
       ],
       body,
     );
+    if (error) report(tag, commit, error);
   }
 }
+
+if (failed) process.exitCode = 1;
