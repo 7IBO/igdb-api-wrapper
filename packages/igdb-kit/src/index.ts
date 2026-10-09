@@ -19,6 +19,7 @@ export {
   Executable,
   type ExecuteOptions,
   MAX_LIMIT,
+  type PopularOptions,
   Query,
   type QueryRequest,
   Single,

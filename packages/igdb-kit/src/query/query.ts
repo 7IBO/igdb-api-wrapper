@@ -56,6 +56,13 @@ export interface QueryRunner {
   run(request: QueryRequest, options?: ExecuteOptions): Promise<RawResponse>;
 }
 
+export interface PopularOptions extends ExecuteOptions {
+  /** Number of games to return, 1 to 500. Defaults to 10. */
+  limit?: number;
+  /** Stop after reading this many popularity rows when a `where` filters most games out. Defaults to 5000. */
+  maxRows?: number;
+}
+
 interface QueryState {
   fields: readonly string[];
   where?: string | undefined;
@@ -248,6 +255,58 @@ export class Query<N extends EndpointName, R = { id: number }> extends Executabl
    */
   withCount(): WithCount<R> {
     return new WithCount(this.runner, this.toRequest());
+  }
+
+  /**
+   * The most popular games for one PopScore metric (`PopularityType.IGDBPlaying`,
+   * `PopularityType.Steam24hrPeakPlayers`…), most popular first, each with its score. The selected
+   * fields and the `where` of this query apply to the games: popularity rows are read 500 at a time
+   * until `limit` games match, or `maxRows` rows were read. Only on `games`.
+   */
+  async popular(
+    ...[type, options = {}]: N extends "games"
+      ? [type: number, options?: PopularOptions]
+      : [notGames: "popular() is only on games"]
+  ): Promise<{ game: R; value: number }[]> {
+    if (this.endpoint !== "games") throw new QueryError("popular() is only on games");
+    if (this.state.search) throw new QueryError("popular() cannot be combined with search");
+    const { limit = 10, maxRows = 5000, ...execute } = options;
+    if (!Number.isInteger(limit) || limit < 1 || limit > MAX_LIMIT) {
+      throw new QueryError(`limit must be an integer between 1 and ${MAX_LIMIT}, got ${limit}`);
+    }
+    // Without a filter almost every row matches; a few spare rows cover deleted games.
+    const pageSize = this.state.where ? MAX_LIMIT : Math.min(MAX_LIMIT, limit + 10);
+    const rows = new Query<EndpointName, { game_id?: number; value?: number }>(
+      this.runner,
+      "popularity_primitives",
+      {
+        fields: ["game_id", "value"],
+        where: `popularity_type = ${toId(type as number)}`,
+        sort: { field: "value", direction: "desc" },
+      },
+    );
+    const results: { game: R; value: number }[] = [];
+    const seen = new Set<number>();
+    for (let offset = 0; offset < maxRows && results.length < limit; offset += pageSize) {
+      const page = await rows.limit(pageSize).offset(offset).execute(execute);
+      const ranked: { id: number; value: number }[] = [];
+      for (const row of page) {
+        if (row.game_id === undefined || seen.has(row.game_id)) continue;
+        seen.add(row.game_id);
+        ranked.push({ id: row.game_id, value: row.value ?? 0 });
+      }
+      const games = await this.with({ sort: undefined, offset: undefined }).findByIds(
+        ranked.map((row) => row.id),
+        execute,
+      );
+      const byId = new Map(games.map((game) => [(game as { id: number }).id, game]));
+      for (const { id, value } of ranked) {
+        const game = byId.get(id);
+        if (game !== undefined && results.length < limit) results.push({ game, value });
+      }
+      if (page.length < pageSize) break;
+    }
+    return results;
   }
 
   /**
