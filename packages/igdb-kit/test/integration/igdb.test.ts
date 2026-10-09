@@ -1,5 +1,5 @@
 // Runs against the real IGDB API. Skipped unless TWITCH_CLIENT_ID and TWITCH_CLIENT_SECRET are set.
-// Uses about 85 requests. The webhook test registers webhooks on example.com and removes them.
+// Uses about 90 requests. The webhook test registers webhooks on example.com and removes them.
 import { describe, expect, test } from "bun:test";
 import {
   AgeRatingCategory,
@@ -351,6 +351,21 @@ describe.skipIf(!clientId || !clientSecret)("real IGDB API", () => {
     for await (const page of igdb.platforms.select("name").sync()) seen.push(...page.map((p) => p.id));
     expect(seen.length).toBe(await igdb.platforms.count());
     expect(seen).toEqual([...seen].sort((a, b) => a - b));
+  });
+
+  test("sync reads matches spread over millions of ids in full pages", async () => {
+    const counting = countingClient();
+    // About 8,500 rows between ids 900,000 and 6,200,000, most of them near the end.
+    const sellers = (client: typeof igdb) =>
+      client.popularity_primitives
+        .select("game_id")
+        .where((p) => p.popularity_type.eq(PopularityType.SteamGlobalTopSellers));
+    const seen: number[] = [];
+    for await (const page of sellers(counting.igdb).sync()) seen.push(...page.map((p) => p.id));
+    // The first page with the count, then the other pages in two multiqueries.
+    expect(counting.requests).toBeLessThanOrEqual(4);
+    expect(seen.every((id, i) => i === 0 || id > (seen[i - 1] as number))).toBe(true);
+    expect(seen.length).toBe(await sellers(igdb).count());
   });
 
   test("webhooks: register, list, re-register and delete", async () => {
