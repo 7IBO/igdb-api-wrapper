@@ -102,7 +102,8 @@ export type IGDBClient = { readonly [K in EndpointName]: Query<K> } & {
    * Today's PopScore rows, one ranked array per type, to store: IGDB keeps only the latest value of
    * each game and type, so a history is built from your own snapshots. `top` reads only the most
    * popular rows of each type (`ceil(top / 500)` requests per type); without it every row is read
-   * (about 700,000 rows: some 280 multiqueries). Runs at `background` priority.
+   * (about 700,000 rows: some 145 multiqueries, 40 s at the default rate limit). Runs at `background`
+   * priority.
    */
   popularitySnapshot(
     options?: PopularitySnapshotOptions,

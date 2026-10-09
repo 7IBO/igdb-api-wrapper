@@ -13,14 +13,18 @@ interface Row {
 }
 
 /**
- * Answers popularity_primitives like IGDB: by type in value order with limit/offset, or by game ids
- * with an id cursor. Games: those whose id is in `games` (others were deleted), filtered by
- * `game_status = 0` to ids above `filterAbove`.
+ * Answers popularity_primitives like IGDB: by type in value or id order with limit/offset, by id
+ * range, or by game ids; counted too, `staleCount` short when rows were added since. Games: ids 1 to
+ * `games` (20,000 by default) but `deleted`, filtered by `game_status = 0` to ids above
+ * `filterAbove`; counted, listed by id, or looked up by ids.
  */
-function api(rows: Row[], options: { deleted?: number[]; filterAbove?: number } = {}) {
+function api(
+  rows: Row[],
+  options: { deleted?: number[]; filterAbove?: number; games?: number; staleCount?: number } = {},
+) {
   return mockFetch((call: Call) => {
     const body = call.body;
-    if (call.url.endsWith("/popularity_primitives")) {
+    if (call.url.includes("/popularity_primitives")) {
       const limit = Number(body.match(/limit (\d+);/)?.[1] ?? 10);
       const offset = Number(body.match(/offset (\d+);/)?.[1] ?? 0);
       const games = body
@@ -29,16 +33,36 @@ function api(rows: Row[], options: { deleted?: number[]; filterAbove?: number } 
         .map(Number);
       const types = (body.match(/popularity_type = \(?([\d,]+)\)?/)?.[1] ?? "").split(",").map(Number);
       const after = Number(body.match(/id > (-?\d+)/)?.[1] ?? -1);
-      let matches = rows.filter((r) => types.includes(r.popularity_type) && r.id > after);
+      const before = Number(body.match(/id < (\d+)/)?.[1] ?? Number.POSITIVE_INFINITY);
+      let matches = rows.filter((r) => types.includes(r.popularity_type) && r.id > after && r.id < before);
       if (games) matches = matches.filter((r) => games.includes(r.game_id));
-      matches.sort(body.includes("sort value desc") ? (a, b) => b.value - a.value : (a, b) => a.id - b.id);
+      if (call.url.endsWith("/count")) {
+        return Response.json({ count: Math.max(0, matches.length - (options.staleCount ?? 0)) });
+      }
+      matches.sort(
+        body.includes("sort value desc")
+          ? (a, b) => b.value - a.value
+          : body.includes("sort id desc")
+            ? (a, b) => b.id - a.id
+            : (a, b) => a.id - b.id,
+      );
       return Response.json(matches.slice(offset, offset + limit));
     }
-    const ids = (body.match(/id = \(([^)]*)\)/)?.[1] ?? "").split(",").map(Number);
     const filtered = body.includes("game_status = 0");
-    const found = ids.filter(
-      (id) => !options.deleted?.includes(id) && (!filtered || id > (options.filterAbove ?? 0)),
-    );
+    const exists = (id: number) =>
+      !options.deleted?.includes(id) && (!filtered || id > (options.filterAbove ?? 0));
+    const all = Array.from({ length: options.games ?? 20_000 }, (_, i) => i + 1).filter(exists);
+    if (call.url.endsWith("/games/count")) return Response.json({ count: all.length });
+    const ids = body
+      .match(/id = \(([^)]*)\)/)?.[1]
+      ?.split(",")
+      .map(Number);
+    if (!ids) {
+      const limit = Number(body.match(/limit (\d+);/)?.[1] ?? 10);
+      const offset = Number(body.match(/offset (\d+);/)?.[1] ?? 0);
+      return Response.json(all.slice(offset, offset + limit).map((id) => ({ id })));
+    }
+    const found = ids.filter(exists);
     return Response.json(found.reverse().map((id) => ({ id, name: `game ${id}` })));
   });
 }
@@ -78,7 +102,7 @@ describe("weightedPopular()", () => {
   });
 
   test("reads more rounds until the top is settled, applying the query's where", async () => {
-    // 2000 games ranked 1..2000; only games above 1200 pass the filter.
+    // 2000 games ranked 1..2000; only games above 1200 pass the filter, 18,800 of the 20,000.
     const rows = rowsOf(
       PopularityType.IGDBVisits,
       Array.from({ length: 2000 }, (_, i) => [i + 1, (2000 - i) / 1e6] as [number, number]),
@@ -100,6 +124,45 @@ describe("weightedPopular()", () => {
       .weightedPopular({ [PopularityType.IGDBVisits]: 1 }, { limit: 3, maxRows: 1000 });
     expect(none).toEqual([]);
     expect(scans(capped)).toHaveLength(2);
+  });
+
+  test("a where matching few games scores their own rows: exact, past maxRows", async () => {
+    // The same 2000 ranked games, but only 2,500 games exist: the 1,300 above 1200 pass the filter.
+    const visits = rowsOf(
+      PopularityType.IGDBVisits,
+      Array.from({ length: 2000 }, (_, i) => [i + 1, (2000 - i) / 1e6] as [number, number]),
+    );
+    const playing = rowsOf(PopularityType.IGDBPlaying, [
+      [1300, 0.007],
+      [5, 0.006],
+    ]);
+    const mock = api([...visits, ...playing], { filterAbove: 1200, games: 2500 });
+    const top = await testClient(mock.fetch)
+      .games.select("name")
+      .where((g) => g.game_status.eq(0))
+      .weightedPopular(
+        { [PopularityType.IGDBVisits]: 0.5, [PopularityType.IGDBPlaying]: 0.5 },
+        { limit: 3, maxRows: 500 },
+      );
+    // Each type scales to its top over every game: Visits to 0.002 (game 1), Playing to 0.007.
+    expect(top.map((t) => t.game.id)).toEqual([1300, 1201, 1202]);
+    const scores = [
+      0.5 * (0.000701 / 0.002) + 0.5 * (0.007 / 0.007),
+      0.5 * (0.0008 / 0.002),
+      0.5 * (0.000799 / 0.002),
+    ];
+    for (const [i, entry] of top.entries()) expect(entry.score).toBeCloseTo(scores[i] as number, 12);
+    expect(top[0]).toMatchObject({
+      game: { id: 1300, name: "game 1300" },
+      values: { 1: 0.000701, 3: 0.007 },
+    });
+    // One round of the scan, then the rows of the 1,299 games not read yet.
+    const bodies = mock.calls.flatMap((c) => c.body.split("\n"));
+    expect(bodies.filter((b) => /sort value desc; limit 500; offset \d+/.test(b))).toHaveLength(2);
+    expect(bodies.some((b) => b.includes("game_id = (1201,1202,"))).toBe(true);
+    // The round with the count and first ids, its rows and games, the other ids, their rows, 2 games.
+    expect(mock.calls).toHaveLength(5);
+    expect(mock.calls[4]?.body).toBe("fields name; where (game_status = 0) & (id = (1201,1202)); limit 2;");
   });
 
   test("stops after one round when the leaders outscore every unread row", async () => {
@@ -140,6 +203,17 @@ describe("weightedPopular()", () => {
     const bodies = mock.calls.map((c) => c.body).join("\n");
     expect(bodies).toContain("where popularity_type = 7; sort value desc; limit 1;");
     expect(bodies).not.toContain("popularity_type = 7; sort value desc; limit 500");
+    // The top of the negative type goes with the first round.
+    expect(mock.calls[0]?.body.split("\n")).toHaveLength(2);
+  });
+
+  test("a where matching nothing stops after the first round", async () => {
+    const mock = api(small, { filterAbove: 20_000 });
+    const top = await testClient(mock.fetch)
+      .games.where((g) => g.game_status.eq(0))
+      .weightedPopular({ [PopularityType.IGDBWantToPlay]: 1 });
+    expect(top).toEqual([]);
+    expect(mock.calls).toHaveLength(1);
   });
 
   test("validates its input", async () => {
@@ -194,8 +268,49 @@ describe("popularitySnapshot()", () => {
         external_popularity_source: 14,
       },
     ]);
-    // Every row: an id cursor per type.
-    expect(mock.calls.some((c) => c.body.includes("sort id asc; limit 500"))).toBe(true);
+    // Every row: pages in id order.
+    expect(mock.calls.some((c) => c.body.includes("sort id asc; limit 500; offset 0;"))).toBe(true);
+  });
+
+  test("counts the types, then reads their pages in id order, two types at a time", async () => {
+    const visits = rowsOf(
+      PopularityType.IGDBVisits,
+      Array.from({ length: 12_345 }, (_, i) => [i + 1, (12_345 - i) / 1e6] as [number, number]),
+    );
+    const mock = api([...visits, ...steam, ...twitch]);
+    const pages = [];
+    for await (const page of testClient(mock.fetch).popularitySnapshot({ types: [1, 5, 34] }))
+      pages.push(page);
+    expect(pages.map((page) => page.length)).toEqual([12_345, 5, 1]);
+    expect(pages[0]?.[12_344]).toMatchObject({ game_id: 12_345, rank: 12_345 });
+    const calls = mock.calls.map((c) => c.body);
+    expect(calls[0]?.match(/popularity_primitives\/count/g)).toHaveLength(3);
+    const lines = calls.flatMap((body) => body.split("\n"));
+    expect(
+      lines.filter((b) => b.includes("popularity_type = 1; sort id asc; limit 500; offset")),
+    ).toHaveLength(25);
+    expect(lines.some((b) => b.includes("id >"))).toBe(false);
+    // Visits and Steam go out together; Twitch once Visits is read.
+    const lastVisits = calls.reduce((last, b, i) => (b.includes("popularity_type = 1;") ? i : last), -1);
+    expect(calls.findIndex((b) => b.includes("popularity_type = 5; sort id asc"))).toBeLessThanOrEqual(
+      lastVisits,
+    );
+    expect(calls.findIndex((b) => b.includes("popularity_type = 34; sort id asc"))).toBeGreaterThan(
+      lastVisits,
+    );
+    expect(mock.calls).toHaveLength(5);
+  });
+
+  test("reads the rows added since the count after the last id read", async () => {
+    const visits = rowsOf(
+      PopularityType.IGDBVisits,
+      Array.from({ length: 700 }, (_, i) => [i + 1, (700 - i) / 1e6] as [number, number]),
+    );
+    const mock = api(visits, { staleCount: 200 });
+    const pages = [];
+    for await (const page of testClient(mock.fetch).popularitySnapshot({ types: [1] })) pages.push(page);
+    expect(pages[0]).toHaveLength(700);
+    expect(mock.calls.some((c) => c.body.includes(`id > ${100_499}`))).toBe(true);
   });
 
   test("top reads only the most popular rows, in value order", async () => {

@@ -1,5 +1,5 @@
 // Runs against the real IGDB API. Skipped unless TWITCH_CLIENT_ID and TWITCH_CLIENT_SECRET are set.
-// Uses about 70 requests. The webhook test registers webhooks on example.com and removes them.
+// Uses about 80 requests. The webhook test registers webhooks on example.com and removes them.
 import { describe, expect, test } from "bun:test";
 import {
   AgeRatingCategory,
@@ -206,6 +206,42 @@ describe.skipIf(!clientId || !clientSecret)("real IGDB API", () => {
     }
     // Many popular games are not on Steam: no row, which is not a measured 0.
     expect(top.some((t) => t.values[PopularityType.Steam24hrPeakPlayers] === null)).toBe(true);
+  });
+
+  test("popular() reads the rows of the few games a where matches: the exact top", async () => {
+    const counting = countingClient();
+    // Games released only on Switch 2: about 120, rare among the most visited.
+    const only = (client: typeof igdb) =>
+      client.games.where((g) => g.platforms.exactly(Platform.NintendoSwitch2));
+    const top = await only(counting.igdb).popular(PopularityType.IGDBVisits, { limit: 20 });
+    expect(top).toHaveLength(20);
+    expect(counting.requests).toBeLessThanOrEqual(5);
+    // The same values from every row of those games.
+    const ids: number[] = [];
+    for await (const game of only(igdb).iterate()) ids.push(game.id);
+    const chunks = Array.from({ length: Math.ceil(ids.length / 500) }, (_, i) =>
+      ids.slice(i * 500, i * 500 + 500),
+    );
+    const rows = await Promise.all(
+      chunks.map((chunk) =>
+        igdb.popularity_primitives
+          .select("value")
+          .where(`popularity_type = ${PopularityType.IGDBVisits} & game_id = (${chunk.join(",")})`)
+          .limit(500),
+      ),
+    );
+    const values = rows.flat().map((r) => r.value ?? 0);
+    expect(top.map((t) => t.value)).toEqual(values.sort((a, b) => b - a).slice(0, 20));
+  });
+
+  test("popularitySnapshot() without top reads every row of a type", async () => {
+    const type = PopularityType.SteamMostWishlistedUpcoming;
+    const total = await igdb.popularity_primitives.where((p) => p.popularity_type.eq(type)).count();
+    const pages = [];
+    for await (const rows of igdb.popularitySnapshot({ types: [type] })) pages.push(rows);
+    expect(pages).toHaveLength(1);
+    expect(new Set(pages[0]?.map((r) => r.game_id)).size).toBe(total);
+    expect(pages[0]?.[0]?.rank).toBe(1);
   });
 
   test("popularitySnapshot() returns ranked rows with their calculation time; IGDB keeps no history", async () => {
