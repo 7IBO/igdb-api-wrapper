@@ -1,5 +1,5 @@
 // Runs against the real IGDB API. Skipped unless TWITCH_CLIENT_ID and TWITCH_CLIENT_SECRET are set.
-// Uses about 65 requests. The webhook test registers webhooks on example.com and removes them.
+// Uses about 70 requests. The webhook test registers webhooks on example.com and removes them.
 import { describe, expect, test } from "bun:test";
 import {
   AgeRatingCategory,
@@ -431,6 +431,22 @@ describe.skipIf(!clientId || !clientSecret)("real IGDB API", () => {
     }
     expect(alone?.platforms?.length).toBeGreaterThan(0);
   });
+
+  test("company filters by name match the same games as by id, and stay on one company entry", async () => {
+    const [byId, byName, byLowerName, twoIds, twoNames] = await Promise.all([
+      igdb.games.where((g) => g.developedBy(908)).count(),
+      igdb.games.where((g) => g.developedBy("CD Projekt RED")).count(),
+      igdb.games.where((g) => g.developedBy("cd projekt red")).count(),
+      igdb.games.where((g) => g.developedBy(908, 26)).count(),
+      igdb.games.where((g) => g.developedBy("CD Projekt RED", "Square Enix")).count(),
+    ]);
+    expect(byId).toBeGreaterThan(30);
+    expect(byName).toBe(byId);
+    expect(byLowerName).toBe(byId);
+    expect(twoNames).toBe(twoIds);
+    // A name is the whole name: "CD Projekt" is not "CD Projekt RED".
+    expect(await igdb.games.where((g) => g.developedBy("CD Projekt")).count()).toBeLessThan(byId);
+  }, 20_000); // IGDB takes about a second per count filtered on a company name
 
   test("game filters match one involved company and one release date for all their conditions", async () => {
     const ids = (q: typeof igdb.games) =>

@@ -170,6 +170,17 @@ describe("game filters", () => {
     expect(() => w((g) => g.developedBy())).toThrow(QueryError);
   });
 
+  test("company roles take company names, matched in full and ignoring case", () => {
+    expect(w((g) => g.developedBy("CD Projekt RED"))).toBe(
+      'where involved_companies.company.name ~ "CD Projekt RED" & involved_companies.developer = true;',
+    );
+    expect(w((g) => g.publishedBy("Square Enix", 'Say "hi"'))).toBe(
+      'where (involved_companies.company.name ~ "Square Enix" | involved_companies.company.name ~ "Say \\"hi\\"") & involved_companies.publisher = true;',
+    );
+    const mixed = [908, "Square Enix"] as unknown as number[];
+    expect(() => w((g) => g.developedBy(...mixed))).toThrow(/ids or company names, not both/);
+  });
+
   test("releasedIn: one release date matching every option, worldwide included, cancelled left out", () => {
     expect(
       w((g) =>

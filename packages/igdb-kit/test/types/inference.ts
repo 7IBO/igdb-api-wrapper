@@ -188,6 +188,9 @@ igdb.games.select("*").exclude("cover.url");
 // Named filters on games, usable with and()/or().
 igdb.games.where((g) => and(g.developedBy(908), g.rating.gte(80)));
 igdb.games.where((g) => g.publishedBy(50, 248).or(g.developedBy(908)));
+igdb.games.where((g) => g.developedBy("CD Projekt RED", "Square Enix"));
+// @ts-expect-error ids and names can't be mixed
+igdb.games.where((g) => g.developedBy(908, "Square Enix"));
 igdb.games.where((g) =>
   g.releasedIn({
     platform: Platform.PlayStation5,
