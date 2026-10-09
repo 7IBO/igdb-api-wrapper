@@ -81,4 +81,11 @@ describe.skipIf(!clientId || !clientSecret)("real IGDB API", () => {
     expect(results.map((r) => r.status)).toEqual(["fulfilled", "rejected", "fulfilled"]);
     expect((results[1] as PromiseRejectedResult).reason).toBeInstanceOf(QueryError);
   });
+
+  test("sync reads every entity once, in id order", async () => {
+    const seen: number[] = [];
+    for await (const page of igdb.platforms.select("name").sync()) seen.push(...page.map((p) => p.id));
+    expect(seen.length).toBe(await igdb.platforms.count());
+    expect(seen).toEqual([...seen].sort((a, b) => a - b));
+  });
 });
