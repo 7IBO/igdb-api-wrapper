@@ -7,8 +7,23 @@ import {
   entities,
   type SearchableEndpoint,
 } from "../generated/schema";
-import type { FieldPath, ScalarKeys, SelectResult } from "./types";
-import { type Condition, throwIfRemoved, type WhereFields, whereProxy } from "./where";
+import { byGame, type GameLinkedEndpoint } from "../links/by-game";
+import {
+  type PopularityRow,
+  type PopularityWeights,
+  type WeightedPopular,
+  type WeightedPopularOptions,
+  weightedPopular,
+} from "./popularity";
+import {
+  RELEASE_FIELDS,
+  type ReleaseCalendarEntry,
+  type ReleaseRow,
+  type ReleasesOptions,
+  releaseCalendar,
+} from "./releases";
+import type { ExcludePath, ExcludeResult, FieldPath, ScalarKeys, SelectResult } from "./types";
+import { type Condition, throwIfRemoved, type WhereRoot, whereProxy } from "./where";
 
 /** IGDB rejects `limit` above 500 (with a 403). */
 export const MAX_LIMIT = 500;
@@ -63,14 +78,18 @@ export interface PopularOptions extends ExecuteOptions {
   maxRows?: number;
 }
 
-interface QueryState {
+/** @internal */
+export interface QueryState {
   fields: readonly string[];
+  exclude?: readonly string[] | undefined;
   where?: string | undefined;
   sort?: { field: string; direction: "asc" | "desc" } | undefined;
   search?: string | undefined;
   limit?: number | undefined;
   offset?: number | undefined;
   cacheTtlMs?: number | undefined;
+  /** Rows expected back, when it differs from `limit`; only used to estimate the response size. */
+  expectedRows?: number | undefined;
 }
 
 export interface SyncOptions extends ExecuteOptions {
@@ -107,7 +126,8 @@ export abstract class Executable<T> implements PromiseLike<T> {
   }
 }
 
-function validatePath(entity: string, path: string, scalarOnly: boolean): void {
+/** @internal Checks a field path against the schema; `scalarOnly` for `sort`. */
+export function validatePath(entity: string, path: string, scalarOnly: boolean): void {
   const segments = path.split(".");
   let current = entity;
   segments.forEach((segment, index) => {
@@ -136,7 +156,8 @@ export class Query<N extends EndpointName, R = { id: number }> extends Executabl
   constructor(
     protected readonly runner: QueryRunner,
     readonly endpoint: N,
-    private readonly state: QueryState = { fields: [] },
+    /** @internal */
+    readonly state: QueryState = { fields: [] },
   ) {
     super();
   }
@@ -145,7 +166,8 @@ export class Query<N extends EndpointName, R = { id: number }> extends Executabl
     return endpointEntity(this.endpoint);
   }
 
-  private with(patch: Partial<QueryState>): this {
+  /** @internal A copy with some of the state replaced, unvalidated. */
+  with(patch: Partial<QueryState>): this {
     return new Query(this.runner, this.endpoint, { ...this.state, ...patch }) as this;
   }
 
@@ -156,15 +178,44 @@ export class Query<N extends EndpointName, R = { id: number }> extends Executabl
    */
   select<P extends string>(...fields: FieldPath<Endpoints[N], P>[]): Query<N, SelectResult<Endpoints[N], P>> {
     for (const field of fields) validatePath(this.entity, field, false);
-    return this.with({ fields: [...new Set(fields as string[])] }) as never;
+    return this.with({ fields: [...new Set(fields as string[])], exclude: undefined }) as never;
   }
 
-  /** Filters with a typed builder (`g => g.rating.gte(80)`) or a raw Apicalypse condition. */
-  where(condition: string | ((fields: WhereFields<Endpoints[N]>) => Condition)): this {
+  /**
+   * Leaves selected fields out of the response, at any depth: `select("*", "cover.*").exclude("summary",
+   * "cover.url")`. Only fields the selection covers are accepted (IGDB rejects the others once a
+   * relation is expanded); `id` is always returned, and an expanded relation is dropped from `select`
+   * instead. Call it after `select`, which resets it.
+   */
+  exclude<P extends string>(...fields: ExcludePath<R, P>[]): Query<N, ExcludeResult<R, P>> {
+    for (const field of fields) this.validateExclude(field);
+    return this.with({
+      exclude: [...new Set([...(this.state.exclude ?? []), ...(fields as string[])])],
+    }) as never;
+  }
+
+  private validateExclude(path: string): void {
+    validatePath(this.entity, path, false);
+    const segments = path.split(".");
+    const parent = segments.slice(0, -1).join(".");
+    const field = segments[segments.length - 1];
+    if (field === "*") throw new QueryError(`IGDB does not allow "*" in exclude ("${path}")`);
+    if (field === "id") throw new QueryError(`IGDB always returns "${path}": it cannot be excluded`);
+    const { fields } = this.state;
+    if (fields.some((f) => f.startsWith(`${path}.`))) {
+      throw new QueryError(`"${path}" is expanded: remove its fields from select() instead of excluding it`);
+    }
+    const covered = fields.includes(path) || fields.includes(parent ? `${parent}.*` : "*");
+    if (!covered) throw new QueryError(`Cannot exclude "${path}": it is not selected`);
+  }
+
+  /**
+   * Filters with a typed builder (`g => g.rating.gte(80)`) or a raw Apicalypse condition. On `games`,
+   * the builder also has named filters: `g.developedBy(908)`, `g.publishedBy(50)`, `g.releasedIn({...})`.
+   */
+  where(condition: string | ((fields: WhereRoot<N>) => Condition)): this {
     const text =
-      typeof condition === "string"
-        ? condition
-        : condition(whereProxy(this.entity) as WhereFields<Endpoints[N]>).text;
+      typeof condition === "string" ? condition : condition(whereProxy(this.entity) as WhereRoot<N>).text;
     const where = this.state.where ? `(${this.state.where}) & (${text})` : text;
     return this.with({ where });
   }
@@ -317,6 +368,24 @@ export class Query<N extends EndpointName, R = { id: number }> extends Executabl
   }
 
   /**
+   * The rows linked to each of these games, as a map from game id to rows: `game_time_to_beats`,
+   * `release_dates`, `websites`… through their `game` (or `game_id`) field, and `characters`,
+   * `events`, `collections`, `franchises` through their `games` array. The fields and `where` of this
+   * query apply; `sort` and `limit` apply to each game's rows, and every row comes back, not just 10.
+   *
+   * Every requested id is in the map, with an empty array when nothing points to it (most games have
+   * no time to beat). A row linked to several of the games is under each of them. Ids are split by
+   * 500 and pages of 500 rows are read until the end, sent together so batching packs them.
+   */
+  byGame(
+    ...[gameIds, options]: N extends GameLinkedEndpoint
+      ? [gameIds: readonly number[], options?: ExecuteOptions]
+      : [notLinked: "byGame() is only on endpoints that point to games"]
+  ): Promise<Map<number, R[]>> {
+    return byGame<R>(this as never, gameIds as readonly number[], options);
+  }
+
+  /**
    * The most popular games for one PopScore metric (`PopularityType.IGDBPlaying`,
    * `PopularityType.Steam24hrPeakPlayers`…), most popular first, each with its score. The selected
    * fields and the `where` of this query apply to the games: popularity rows are read 500 at a time
@@ -366,6 +435,56 @@ export class Query<N extends EndpointName, R = { id: number }> extends Executabl
       if (page.length < pageSize) break;
     }
     return results;
+  }
+
+  /**
+   * The most popular games by a weighted mix of PopScore types, such as `{ [PopularityType.IGDBWantToPlay]:
+   * 0.6, [PopularityType.IGDBPlaying]: 0.4 }`. Each type is scaled by its top value before weighting;
+   * a game without a row in a type scores 0 there and gets `null` in `values`. Negative weights lower
+   * a score. The fields and `where` of this query apply to the games. Each round reads 500 rows per
+   * positively weighted type, then the other types and the games of the new ids (about 3 multiqueries
+   * per round); it stops once no unread game can enter the top `limit`. Only on `games`.
+   */
+  async weightedPopular(
+    ...[weights, options = {}]: N extends "games"
+      ? [weights: PopularityWeights, options?: WeightedPopularOptions]
+      : [notGames: "weightedPopular() is only on games"]
+  ): Promise<WeightedPopular<R>[]> {
+    if (this.endpoint !== "games") throw new QueryError("weightedPopular() is only on games");
+    if (this.state.search) throw new QueryError("weightedPopular() cannot be combined with search");
+    const rows = new Query<EndpointName, PopularityRow>(this.runner, "popularity_primitives", {
+      fields: ["game_id", "popularity_type", "value"],
+      sort: { field: "value", direction: "desc" },
+    });
+    return weightedPopular(
+      rows,
+      (ids, execute) => this.with({ sort: undefined, offset: undefined }).findByIds(ids, execute),
+      weights as PopularityWeights,
+      options as WeightedPopularOptions,
+    );
+  }
+
+  /**
+   * The release calendar of a window: one entry per game released in it, with its most precise
+   * release and every release in the window (platforms, regions, statuses). Imprecise dates (`Q4
+   * 2026`) are labeled by `precision` and included when their period overlaps the window. The fields
+   * and `where` of this query apply to the games. Costs 1 + `ceil(dates / 500)` requests, batched,
+   * plus `ceil(games / 500)`. Only on `games`.
+   */
+  async releases(
+    ...[options]: N extends "games" ? [options: ReleasesOptions] : [notGames: "releases() is only on games"]
+  ): Promise<ReleaseCalendarEntry<R>[]> {
+    if (this.endpoint !== "games") throw new QueryError("releases() is only on games");
+    if (this.state.search) throw new QueryError("releases() cannot be combined with search");
+    const dates = new Query<EndpointName, ReleaseRow>(this.runner, "release_dates", {
+      fields: RELEASE_FIELDS,
+      sort: { field: "id", direction: "asc" },
+    });
+    return releaseCalendar(
+      dates,
+      (ids, execute) => this.with({ sort: undefined, offset: undefined }).findByIds(ids, execute),
+      options as ReleasesOptions,
+    );
   }
 
   /**
@@ -465,9 +584,11 @@ export class Query<N extends EndpointName, R = { id: number }> extends Executabl
 
   /** @internal */
   toRequest(kind: "list" | "count" = "list"): QueryRequest {
-    const { fields, where, sort, search, limit, offset, cacheTtlMs } = this.state;
+    const { fields, exclude, where, sort, search, limit, offset, cacheTtlMs, expectedRows } = this.state;
     const lines: string[] = [];
     if (kind === "list" && fields.length) lines.push(`fields ${fields.join(",")};`);
+    // One line for every excluded field: IGDB rejects a second `exclude` line.
+    if (kind === "list" && exclude?.length) lines.push(`exclude ${exclude.join(",")};`);
     if (search !== undefined) lines.push(`search ${JSON.stringify(search)};`);
     if (where) lines.push(`where ${where};`);
     if (kind === "list") {
@@ -486,7 +607,7 @@ export class Query<N extends EndpointName, R = { id: number }> extends Executabl
       kind,
       hasSearch: search !== undefined,
       fields,
-      limit: kind === "count" ? 0 : (limit ?? 10),
+      limit: kind === "count" ? 0 : (expectedRows ?? limit ?? 10),
       cacheTtlMs,
     };
   }
@@ -575,11 +696,13 @@ export class WithCount<R> extends Executable<{ data: R[]; total: number }> {
   }
 }
 
-function toId(id: number): number {
+/** @internal */
+export function toId(id: number): number {
   if (!Number.isSafeInteger(id) || id < 0) throw new QueryError(`Invalid id: ${id}`);
   return id;
 }
 
-function endpointEntity(endpoint: EndpointName): string {
+/** @internal */
+export function endpointEntity(endpoint: EndpointName): string {
   return endpoints[endpoint].entity;
 }

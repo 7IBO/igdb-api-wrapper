@@ -1,17 +1,27 @@
 // Runs against the real IGDB API. Skipped unless TWITCH_CLIENT_ID and TWITCH_CLIENT_SECRET are set.
-// Uses about 36 requests. The webhook test registers webhooks on example.com and removes them.
+// Uses about 65 requests. The webhook test registers webhooks on example.com and removes them.
 import { describe, expect, test } from "bun:test";
 import {
+  AgeRatingCategory,
   AgeRatingOrganization,
   and,
   createIGDB,
   DateFormat,
+  defineSelection,
+  type EndpointName,
   ExternalGameSource,
+  endpoints,
   GameType,
+  gameLink,
   or,
   Platform,
   PopularityType,
+  type Query,
   QueryError,
+  Region,
+  ReleaseDateRegion,
+  ReleaseDateStatus,
+  SEARCH_GAME_TYPES,
   Theme,
   TierError,
   toDate,
@@ -33,6 +43,26 @@ const clientSecret = process.env.TWITCH_CLIENT_SECRET;
 
 // The describe body runs even when skipped, so only build the client when credentials exist.
 const igdb = clientId && clientSecret ? createIGDB({ clientId, clientSecret }) : (undefined as never);
+
+/** A client of its own (own cache), counting the IGDB responses other than 429. */
+function countingClient() {
+  const counter = { requests: 0 };
+  const client = createIGDB({
+    clientId: clientId as string,
+    clientSecret: clientSecret as string,
+    fetch: (async (input: string | URL | Request, init?: RequestInit) => {
+      const response = await fetch(input, init);
+      if (String(input).includes("api.igdb.com") && response.status !== 429) counter.requests++;
+      return response;
+    }) as typeof fetch,
+  });
+  return {
+    igdb: client,
+    get requests() {
+      return counter.requests;
+    },
+  };
+}
 
 describe.skipIf(!clientId || !clientSecret)("real IGDB API", () => {
   test("select with expansions returns the inferred shape", async () => {
@@ -157,6 +187,97 @@ describe.skipIf(!clientId || !clientSecret)("real IGDB API", () => {
     expect(values).toEqual([...values].sort((a, b) => b - a));
   });
 
+  test("weightedPopular() mixes types scaled to 0..1, with null for a missing row", async () => {
+    const top = await igdb.games
+      .select("name")
+      .where((g) => g.game_type.eq(GameType.MainGame))
+      .weightedPopular(
+        { [PopularityType.IGDBWantToPlay]: 0.5, [PopularityType.Steam24hrPeakPlayers]: 0.5 },
+        { limit: 20 },
+      );
+    expect(top).toHaveLength(20);
+    const scores = top.map((t) => t.score);
+    expect(scores).toEqual([...scores].sort((a, b) => b - a));
+    expect(scores.every((s) => s > 0 && s <= 1)).toBe(true);
+    for (const { values } of top) {
+      expect(Object.keys(values).sort()).toEqual(["2", "5"]);
+      expect(Object.values(values).every((v) => v === null || v >= 0)).toBe(true);
+    }
+    // Many popular games are not on Steam: no row, which is not a measured 0.
+    expect(top.some((t) => t.values[PopularityType.Steam24hrPeakPlayers] === null)).toBe(true);
+  });
+
+  test("popularitySnapshot() returns ranked rows with their calculation time; IGDB keeps no history", async () => {
+    const types = [PopularityType.IGDBPlaying, PopularityType.Steam24hrPeakPlayers];
+    const pages = [];
+    for await (const rows of igdb.popularitySnapshot({ types, top: 10 })) pages.push(rows);
+    expect(pages.map((rows) => rows[0]?.popularity_type)).toEqual(types);
+    expect(pages.map((rows) => rows[0]?.external_popularity_source)).toEqual([121, 1]);
+    for (const rows of pages) {
+      expect(rows.map((r) => r.rank)[0]).toBe(1);
+      // Each type is recomputed in one batch, at most a few days ago.
+      const at = new Set(rows.map((r) => r.calculated_at));
+      expect(at.size).toBe(1);
+      expect(Date.now() / 1000 - ([...at][0] ?? 0)).toBeLessThan(14 * 86_400);
+    }
+    const rows = await igdb.popularity_primitives
+      .select("popularity_type")
+      .where((p) => p.game_id.eq(1942))
+      .limit(50);
+    expect(rows.length).toBe(new Set(rows.map((r) => r.popularity_type)).size);
+  });
+
+  test("releases() in a past window: exact days and months, one entry per game", async () => {
+    const calendar = await igdb.games.select("name").releases({ from: "1998-11-01", to: "1998-12-01" });
+    expect(calendar.length).toBeGreaterThan(100);
+    expect(new Set(calendar.map((e) => e.game.id)).size).toBe(calendar.length);
+    const start = Date.UTC(1998, 10, 1);
+    const end = Date.UTC(1998, 11, 1);
+    for (const { release, releases } of calendar) {
+      expect(["day", "month"]).toContain(release.precision);
+      for (const r of releases) {
+        expect(r.start?.getTime()).toBeGreaterThanOrEqual(start);
+        expect(r.end?.getTime()).toBeLessThanOrEqual(end);
+      }
+    }
+    expect(calendar.some((e) => e.release.precision === "month" && e.release.human === "Nov 1998")).toBe(
+      true,
+    );
+    expect(calendar.some((e) => e.releases.length > 1)).toBe(true);
+  });
+
+  test("releases() in a future quarter: quarter labels, statuses and regions", async () => {
+    const calendar = await igdb.games.releases({
+      from: "2026-10-01",
+      to: "2027-01-01",
+      regions: [ReleaseDateRegion.Japan],
+      precision: ["day", "quarter"],
+    });
+    expect(calendar.length).toBeGreaterThan(0);
+    const releases = calendar.flatMap((e) => e.releases);
+    expect(releases.every((r) => r.region === ReleaseDateRegion.Japan || r.region === 8)).toBe(true);
+    expect(releases.some((r) => r.region === ReleaseDateRegion.Worldwide)).toBe(true);
+    expect(releases.every((r) => r.status !== ReleaseDateStatus.Cancelled)).toBe(true);
+    expect(releases.some((r) => r.status === null)).toBe(true);
+    const quarter = releases.find((r) => r.precision === "quarter");
+    expect(quarter?.human).toBe("Q4 2026");
+    expect(quarter?.start?.toISOString()).toBe("2026-10-01T00:00:00.000Z");
+  });
+
+  test("releases() with TBD dates only", async () => {
+    const calendar = await igdb.games.releases({
+      from: "2026-10-01",
+      to: "2026-10-02",
+      precision: ["tbd"],
+      platforms: [Platform.PlayStation5],
+      statuses: [ReleaseDateStatus.FullRelease],
+    });
+    expect(calendar.length).toBeGreaterThan(0);
+    for (const { release } of calendar) {
+      expect(release).toMatchObject({ precision: "tbd", start: null, end: null, platform: 167, status: 6 });
+    }
+  });
+
   test("findByExternalIds() finds games by Steam app id", async () => {
     const games = await igdb.games
       .select("name")
@@ -272,6 +393,117 @@ describe.skipIf(!clientId || !clientSecret)("real IGDB API", () => {
     expect(results.text.length).toBeGreaterThan(0);
   });
 
+  test("new reference constants match the API", async () => {
+    const { statuses, regions, ratings } = await igdb.batch({
+      statuses: igdb.release_date_statuses.select("name").limit(500),
+      regions: igdb.regions.select("identifier").limit(500),
+      ratings: igdb.age_rating_categories.select("rating", "organization").limit(500),
+    });
+    expect(Object.fromEntries(statuses.map((s) => [s.id, s.name]))).toMatchObject({
+      [ReleaseDateStatus.Cancelled]: "Cancelled",
+      [ReleaseDateStatus.FullRelease]: "Full Release",
+      [ReleaseDateStatus.AdvancedAccess]: "Advanced Access",
+    });
+    expect(regions.find((r) => r.id === Region.Japan)?.identifier).toBe("ja-JP");
+    const pegi18 = ratings.find((r) => r.id === AgeRatingCategory.PEGI_18);
+    expect(pegi18).toMatchObject({ rating: "18", organization: AgeRatingOrganization.PEGI });
+    expect(ratings.find((r) => r.id === AgeRatingCategory.USK_18)?.organization).toBe(
+      AgeRatingOrganization.USK,
+    );
+  });
+
+  test("exclude() drops top-level and nested fields, alone and in a multiquery", async () => {
+    const [alone, batched] = await Promise.all([
+      igdb.games.select("*", "cover.*").exclude("summary", "storyline", "cover.url").findById(1942),
+      igdb.batch({
+        witcher: igdb.games
+          .select("name", "summary", "cover.*")
+          .exclude("summary", "cover.url")
+          .findById(1942),
+        count: igdb.games.count(),
+      }),
+    ]);
+    for (const game of [alone, batched.witcher]) {
+      expect(game?.name).toBe("The Witcher 3: Wild Hunt");
+      expect(game).not.toHaveProperty("summary");
+      expect(typeof game?.cover?.image_id).toBe("string");
+      expect(game?.cover).not.toHaveProperty("url");
+    }
+    expect(alone?.platforms?.length).toBeGreaterThan(0);
+  });
+
+  test("game filters match one involved company and one release date for all their conditions", async () => {
+    const ids = (q: typeof igdb.games) =>
+      q
+        .limit(500)
+        .execute()
+        .then((games) => games.map((g) => g.id));
+    const witcher = igdb.games.where((g) => g.id.in(1942, 214992));
+    const [
+      byCdpr,
+      byWb,
+      publishedByWb,
+      switchBefore2020,
+      switchSince2021,
+      cancelledOnly,
+      withCancelled,
+      platforms,
+    ] = await Promise.all([
+      ids(witcher.where((g) => g.developedBy(908))),
+      ids(witcher.where((g) => g.developedBy(50))), // WB Games only published it
+      ids(witcher.where((g) => g.publishedBy(50))),
+      ids(
+        witcher.where((g) => g.releasedIn({ platform: Platform.NintendoSwitch, to: new Date("2020-01-01") })),
+      ),
+      ids(
+        witcher.where((g) =>
+          g.releasedIn({ platform: Platform.NintendoSwitch, from: new Date("2021-01-01") }),
+        ),
+      ),
+      // 214992: every release date is Cancelled, yet its platforms still list Xbox Series X|S.
+      ids(witcher.where((g) => g.releasedIn({ platform: Platform.XboxSeriesXS }))),
+      ids(witcher.where((g) => g.releasedIn({ platform: Platform.XboxSeriesXS, includeCancelled: true }))),
+      ids(witcher.where((g) => g.platforms.any(Platform.XboxSeriesXS))),
+    ]);
+    expect(byCdpr).toEqual([1942]);
+    expect(byWb).toEqual([]);
+    expect(publishedByWb).toEqual([1942]);
+    expect(switchBefore2020).toEqual([]); // the PS4 release is before 2020, the Switch one is not
+    expect(switchSince2021).toEqual([1942]);
+    expect(cancelledOnly).toEqual([1942]);
+    expect(withCancelled.sort()).toEqual([1942, 214992]);
+    expect(platforms.sort()).toEqual([1942, 214992]);
+  });
+
+  test("searchAll() returns typed hits of several kinds, ranked, without mods", async () => {
+    const witcher = await igdb.searchAll("witcher", {
+      select: { game: ["game_type", "version_parent"] },
+      limit: 30,
+    });
+    expect(witcher[0]).toMatchObject({
+      kind: "game",
+      id: 1942,
+      name: "The Witcher 3: Wild Hunt",
+      matched: "name",
+    });
+    for (const hit of witcher) {
+      expect((hit as unknown as Record<string, { id: number }>)[hit.kind]?.id).toBe(hit.id);
+      if (hit.kind !== "game") continue;
+      expect(SEARCH_GAME_TYPES).toContain(hit.game.game_type as number);
+      expect(hit.game.version_parent).toBeUndefined();
+    }
+    expect(witcher.some((h) => h.kind === "collection")).toBe(true);
+    const [geralt] = await igdb.searchAll("gwynbleidd", { kinds: ["character"] });
+    expect(geralt).toMatchObject({
+      kind: "character",
+      id: 1453,
+      name: "Geralt of Rivia",
+      matched: "alternative_name",
+    });
+    const platforms = await igdb.searchAll("playstation", { kinds: ["platform"], limit: 20 });
+    expect(platforms.map((h) => h.id)).toContain(Platform.PlayStation5);
+  });
+
   test("the search endpoint searches several entity types", async () => {
     const hits = await igdb.search.select("name", "game", "character", "company").search("witcher").limit(20);
     expect(hits.length).toBeGreaterThan(0);
@@ -363,5 +595,77 @@ describe.skipIf(!clientId || !clientSecret)("real IGDB API", () => {
         localizedName(game, region.identifier === "EU" ? "fr-FR" : (region.identifier ?? ""))?.source,
       ).toBe("localization");
     }
+  });
+
+  test("byGame() accepts the game link of every endpoint that has one", async () => {
+    const linked = (Object.keys(endpoints) as EndpointName[]).filter((e) => gameLink(e) !== undefined);
+    expect(linked.length).toBe(24);
+    const maps = await Promise.all(
+      linked.map((e) => (igdb[e] as unknown as Query<"characters">).byGame([1942])),
+    );
+    const rows = Object.fromEntries(linked.map((e, i) => [e, maps[i]?.get(1942)?.length]));
+    expect(rows.release_dates).toBeGreaterThan(0);
+    expect(rows.game_time_to_beats).toBe(1);
+    expect(rows.popularity_primitives).toBeGreaterThan(5); // one row per PopScore type
+    expect(rows.characters).toBeGreaterThan(10);
+    expect(rows.game_versions).toBe(0);
+  });
+
+  test("byGame() groups rows, reads past 500 rows and lists shared rows under each game", async () => {
+    const ttb = await igdb.game_time_to_beats.select("normally").byGame([1942, 999_999_999]);
+    expect(ttb.get(1942)?.[0]?.normally).toBeGreaterThan(200_000); // seconds, about 70 h
+    expect(ttb.get(999_999_999)).toEqual([]);
+    // Games 109 and 9630 have the most characters in IGDB (362 and 273): more than one page.
+    const chars = await igdb.characters.select("name").byGame([109, 9630, 1942]);
+    expect(chars.get(109)?.length).toBeGreaterThan(300);
+    expect(chars.get(9630)?.length).toBeGreaterThan(200);
+    expect(Object.keys(chars.get(1942)?.[0] ?? {}).sort()).toEqual(["id", "name"]);
+    // Characters of the Mario franchise: about 950 games, some characters in several of them.
+    const mario = await igdb.franchises.select("games").findByIdOrThrow(845);
+    const byGame = await igdb.characters.select("name").byGame(mario.games ?? []);
+    expect(byGame.size).toBe(mario.games?.length ?? -1);
+    const counts = new Map<number, number>();
+    for (const rows of byGame.values()) for (const c of rows) counts.set(c.id, (counts.get(c.id) ?? 0) + 1);
+    expect([...counts.values()].some((n) => n > 1)).toBe(true);
+  });
+
+  test("a view loads a game and its links in one request", async () => {
+    const counted = countingClient();
+    const card = defineSelection("games", "name", "cover.image_id");
+    const page = counted.igdb.defineView("games", {
+      select: [...card, "platforms.name"],
+      with: {
+        timeToBeat: counted.igdb.game_time_to_beats.select("normally"),
+        characters: counted.igdb.characters.select("name"),
+        events: counted.igdb.events.select("name"),
+        popularity: counted.igdb.popularity_primitives.select("popularity_type", "value"),
+      },
+    });
+    const witcher = await page.findById(1942);
+    expect(counted.requests).toBe(1);
+    expect(witcher?.name).toBe("The Witcher 3: Wild Hunt");
+    expect(witcher?.timeToBeat).toHaveLength(1);
+    expect(witcher?.characters.length).toBeGreaterThan(10);
+    expect(witcher?.events.length).toBeGreaterThan(0);
+    const found = await page.search("witcher 3").limit(3);
+    expect(counted.requests).toBe(3); // the search alone, then the links
+    expect(found.every((g) => Array.isArray(g.characters))).toBe(true);
+  });
+
+  test("expand() caches reference tables and drops ids of deleted rows", async () => {
+    const counted = countingClient();
+    const games = await counted.igdb.games.select("name", "platforms").findByIds([1942, 1020]);
+    const first = await counted.igdb.expand(games, "platforms", counted.igdb.platforms.select("name"));
+    expect(first[0]?.platforms?.some((p) => p.name === "PC (Microsoft Windows)")).toBe(true);
+    expect(counted.requests).toBe(2);
+    await counted.igdb.expand(games, "platforms", counted.igdb.platforms.select("name"));
+    expect(counted.requests).toBe(2); // from the cache
+    // This event lists game 139713, which no longer exists.
+    const [event] = await igdb.events
+      .select("games")
+      .where((e) => e.games.any(139713))
+      .limit(1);
+    const [expanded] = await igdb.expand(event ? [event] : [], "games", igdb.games.select("name"));
+    expect(expanded?.games?.length).toBe((event?.games?.length ?? 0) - 1);
   });
 });

@@ -63,6 +63,15 @@ Queries are immutable and awaitable. They are compiled to Apicalypse, which you 
 | `"*"` | every field, relations as ids |
 | `"involved_companies.company.name"` | nested as deep as you need |
 
+`exclude()` leaves selected fields out, at any depth, and removes them from the result type. It is the way to take "everything but" with `*`, for example to keep `sync()` copies small:
+
+```ts
+const games = await igdb.games.select("*", "cover.*").exclude("summary", "storyline", "cover.url");
+// no summary or storyline; cover without url
+```
+
+Only fields the selection covers can be excluded: IGDB rejects the others once a relation is expanded, ignores unknown ones, and always returns `id`. To drop an expanded relation, remove it from `select`.
+
 ### Filtering
 
 ```ts
@@ -78,6 +87,20 @@ igdb.games.where("rating > 80");                                       // raw Ap
 ```
 
 Each field only offers the operators that fit its type, and enum fields only accept their values.
+
+On `games`, named filters cover the common relation lookups:
+
+```ts
+import { and, Platform, ReleaseDateRegion } from "igdb-kit";
+
+igdb.games.where((g) => g.developedBy(908));                           // CD Projekt RED as developer
+igdb.games.where((g) => and(g.publishedBy(50), g.rating.gte(80)));     // WB Games as (regional) publisher
+igdb.games.where((g) =>
+  g.releasedIn({ platform: Platform.NintendoSwitch, region: ReleaseDateRegion.Europe, from: new Date("2021-01-01") }),
+);
+```
+
+They rely on how IGDB filters arrays of relations: every condition on `involved_companies` (or `release_dates`) in a `where` must hold for the same entry. `developedBy(50)` does not match The Witcher 3, which WB Games only published, and `releasedIn` needs one release date with that platform, region and date together. Worldwide releases count for every region (pass `worldwide: false` to change that), release dates marked Cancelled or Offline are left out (`includeCancelled: true` keeps them), and release dates without a status, more than half of them, count. The flip side: `and(g.developedBy(908), g.publishedBy(50))` asks for one company entry that is both, and matches nothing; run two queries instead. `g.platforms.any()` lists every announced platform, cancelled ones included, where `releasedIn({ platform })` looks at actual release dates. For franchises and series, `g.franchises.any(id)` and `g.collections.any(id)` are enough: the main `franchise` is always in `franchises`, and `collections` matches `collection_memberships` (spin-offs included).
 
 Reference tables come with named ids, so you don't hard-code `game_type = 0` or `platforms = 48`:
 
@@ -106,7 +129,7 @@ const upcoming = await igdb.release_dates
 toDate(upcoming[0].date!);                                            // a Date
 ```
 
-`GameType`, `GameStatus`, `GameReleaseFormat`, `Genre`, `Theme`, `GameMode`, `PlayerPerspective`, `Platform`, `PlatformType`, `ExternalGameSource`, `PopularityType`, `ReleaseDateRegion`, `DateFormat`, `WebsiteType`, `AgeRatingOrganization`, `LanguageSupportType`, `CharacterGender` and `CharacterSpecie` are generated from the API.
+`GameType`, `GameStatus`, `GameReleaseFormat`, `Genre`, `Theme`, `GameMode`, `PlayerPerspective`, `Platform`, `PlatformType`, `PlatformFamily`, `ExternalGameSource`, `PopularityType`, `ReleaseDateRegion`, `ReleaseDateStatus`, `DateFormat`, `WebsiteType`, `AgeRatingOrganization`, `AgeRatingCategory`, `Language`, `LanguageSupportType`, `Region` (of `game_localizations`), `CompanyStatus`, `CompanySize`, `CompanyType`, `CollectionType`, `CollectionMembershipType`, `CollectionRelationType`, `NetworkType`, `ImageType`, `CharacterGender` and `CharacterSpecie` are generated from the API. Age ratings repeat across organizations, so their keys start with it: `AgeRatingCategory.PEGI_18`, `AgeRatingCategory.ESRB_M`.
 
 IGDB replaced several fields with reference tables: `games.category` became `game_type`, `release_dates.region` became `release_region`, `external_games.category` became `external_game_source`, and so on. IGDB still accepts the old names but leaves them empty or no longer updates them, so `where category = 0` silently matches nothing. igdb-kit leaves them out of the types and throws a `QueryError` that names the replacement.
 
@@ -127,7 +150,24 @@ for await (const game of igdb.games.select("name").iterate()) {
 await igdb.games.select("name").search("zelda").limit(5); // searchable endpoints only, no sort
 ```
 
-### Store ids
+### Searching everything
+
+`searchAll()` searches games, characters, collections, platforms and themes at once, through IGDB's `search` endpoint, and returns hits narrowed by `kind`, with the fields you select for each kind:
+
+```ts
+const hits = await igdb.searchAll("witcher", {
+  kinds: ["game", "character", "collection"],              // default: all five
+  select: { game: ["cover.image_id", "first_release_date"], character: ["mug_shot.image_id"] },
+  limit: 10,
+});
+for (const hit of hits) {
+  if (hit.kind === "game") hit.game.cover?.image_id;      // { id, name?, cover?, first_release_date? }
+  hit.name;                                                // display name, for every kind
+  hit.matched;                                             // "name" | "alternative_name"
+}
+```
+
+IGDB returns the most recently indexed matches first, so last week's mods come before the original (153 of the 381 game matches for "zelda" are mods). `searchAll` leaves out mods, DLCs, bundles, packs, updates and editions by default (`gameTypes`, `editions`), reads every match (500 per request, up to `maxRows`, 2000 by default) and ranks them: exact name, then names starting with the term, then names containing its words, then alternative names; ties go to the most rated games. `order: "igdb"` keeps IGDB's order in a single request. Companies are not in the search index, and rows pointing to deleted entities or to people are dropped. `alternative_name` holds every alternative name joined into one string.
 
 `findByExternalIds()` finds games from their id on Steam, GOG, Epic, Xbox, PlayStation Store… (`ExternalGameSource`), for example to match a Steam library:
 
@@ -155,6 +195,120 @@ const trending = await igdb.games
 ```
 
 The metrics are `IGDBVisits`, `IGDBWantToPlay`, `IGDBPlaying` and `IGDBPlayed`, plus Steam (`Steam24hrPeakPlayers`, `SteamGlobalTopSellers`, `SteamMostWishlistedUpcoming`…) and `Twitch24hrHoursWatched`. Popularity rows are read 500 at a time until enough games pass the filter, up to `maxRows` (5000 by default).
+
+`weightedPopular()` ranks by several metrics at once. Their scales differ by orders of magnitude (IGDB visits top at 0.005, Steam peak players at 0.19), so each is divided by its top value before weighting:
+
+```ts
+const top = await igdb.games
+  .select("name")
+  .weightedPopular(
+    { [PopularityType.IGDBWantToPlay]: 0.5, [PopularityType.Steam24hrPeakPlayers]: 0.5 },
+    { limit: 20 },
+  );
+// { game, score, values: { 2: 0.0019, 5: null } }[]
+```
+
+`values` holds each metric's raw value, and `null` when IGDB has no row for the game: a third of the 500 most played games have no Steam row, which is not the same as a measured 0. Such a game scores 0 for that metric. Negative weights lower a score (`SteamNegativeReviews: -0.2`). Each round reads 500 rows per positively weighted metric, then the other metrics and the games of the new ids, in about 2 multiqueries; it stops as soon as no unread game can enter the top, usually after one round.
+
+IGDB keeps only the latest value of each game and metric, so a trend needs your own history. `popularitySnapshot()` returns rows ready to store, one ranked array per metric:
+
+```ts
+for await (const rows of igdb.popularitySnapshot({ top: 1000 })) {
+  await db.insertPopularity(rows); // { game_id, popularity_type, value, rank, calculated_at, external_popularity_source }[]
+}
+```
+
+Key the history on `game_id`, `popularity_type` and `calculated_at`: each metric is recomputed on its own schedule (IGDB's daily, Steam's and Twitch's on other days), so running a snapshot twice the same day stores nothing new. `top` reads the 1000 most popular rows of each of the 11 metrics in 3 requests; without it, every row (about 700,000) is read with an id cursor per metric, the metrics' pages packed together: about 280 multiqueries, a bit over a minute at the default rate limit. `types` picks the metrics.
+
+### Release calendar
+
+`releases()` lists the games released in a window, one entry per game however many platforms, regions and statuses it has there:
+
+```ts
+import { Platform, ReleaseDateRegion, ReleaseDateStatus } from "igdb-kit";
+
+const october = await igdb.games
+  .select("name", "cover.image_id")
+  .where((g) => g.game_type.eq(GameType.MainGame))
+  .releases({
+    from: "2026-10-01",
+    to: "2026-11-01",                          // exclusive
+    platforms: [Platform.PlayStation5, Platform.PCMicrosoftWindows],
+    regions: [ReleaseDateRegion.Europe],       // worldwide releases count too
+  });
+// { game, release, releases }[], by date
+// release: { precision: "day", start: Date, end: Date, human: "Oct 20, 2026", platform, region, status }
+```
+
+`release` is the game's most precise release in the window, then the earliest; `releases` lists them all. IGDB dates are not all days: `precision` is `"day"`, `"month"` (`Oct 2026`), `"quarter"` (`Q4 2026`), `"year"` or `"tbd"`, and `start` and `end` bound the period. A month, quarter or year is in the window when its whole period is, so `Q4 2026` is in October to December but not in October alone; `match: "overlap"` includes every period that overlaps the window. TBD dates are left out unless `precision` includes `"tbd"`, whatever the window.
+
+Release dates are calendar days at 00:00 UTC, so the window is in UTC days: pass `"YYYY-MM-DD"` strings rather than local midnights. By default Offline and Cancelled dates are left out, and dates without a status, more than half of them, are kept. `statuses: [ReleaseDateStatus.FullRelease, null]` picks statuses, `null` standing for "no status".
+
+A window costs one count, `ceil(dates / 500)` pages read in parallel and `ceil(games / 500)` for the games, packed into multiqueries: a month of upcoming releases (1,700 dates, 1,000 games) takes 3 HTTP requests. Above `maxRows` dates (10,000 by default), it throws instead: page through long periods month by month.
+
+### Data linked to games
+
+Many endpoints point to games without the game pointing back: time to beat and popularity carry a `game_id`, and characters, events, collections and franchises list their `games`. `byGame()` fetches them for a list of games, grouped by game id. It works on every endpoint with a `game`, `game_id` or `games` field (`GameLinkedEndpoint`), such as `release_dates`, `websites`, `language_supports`, `external_games` or `involved_companies`:
+
+```ts
+const timeToBeat = await igdb.game_time_to_beats.select("normally").byGame([1942, 1020]);
+timeToBeat.get(1942); // [{ id: 432, normally: 254778 }]: seconds, about 71 h
+timeToBeat.get(1020); // []: no time to beat, the case for most games
+
+const firstDates = await igdb.release_dates.select("date", "platform").sort("date").limit(1).byGame(ids);
+```
+
+Every requested id is in the map, with an empty array when nothing points to the game. The query's `where` applies, and its `sort` and `limit` apply to each game's rows. Every row comes back, not just the first 10. A row linked to several of the games, such as a character, is listed under each of them. Ids are sent 500 per query and pages of 500 rows are read until the end, all batched. A page that comes back full is split using the count, so the 9,000 language rows of 500 games take about 9 requests instead of 18 one after the other.
+
+### Views
+
+A view attaches that data to games under names you choose, with a type for the whole result:
+
+```ts
+const gamePage = igdb.defineView("games", {
+  select: ["name", "cover.image_id", "platforms.name"],
+  with: {
+    timeToBeat: igdb.game_time_to_beats.select("normally", "completely"),
+    characters: igdb.characters.select("name", "mug_shot.image_id"),
+    events: igdb.events.select("name", "start_time"),
+  },
+});
+
+const witcher = await gamePage.findById(1942); // 1 request: the game and its 3 links in one multiquery
+// { id; name?; cover?; platforms?; timeToBeat: {...}[]; characters: {...}[]; events: {...}[] } | null
+const pages = await gamePage.findByIds(ids);
+const top = await gamePage.where((g) => g.rating.gte(90)).sort("rating", "desc").limit(20);
+const found = await gamePage.search("zelda").limit(5);
+```
+
+`findById()` and `findByIds()` send the games and the linked queries together: a game with 6 links costs one multiquery (22 KB for The Witcher 3). A list or a search needs the game ids first, so it takes one more request; a `search` is always sent alone. A key can't hide a game field, so name the link to `collection_memberships` `memberships`, not `collections`.
+
+### Expanding ids later
+
+`expand()` replaces ids you already have with the entities they point to, in one batched call. Ids are deduplicated across rows:
+
+```ts
+const games = await igdb.games.select("name", "platforms", "genres").limit(500);
+const withPlatforms = await igdb.expand(games, "platforms", igdb.platforms.select("name", "abbreviation"));
+// platforms?: { id: number; name?: string; abbreviation?: string }[]
+```
+
+Each entity is one shared object across rows. Ids of rows that no longer exist are dropped: an event can list a deleted game. Reference tables are loaded whole and kept a day in the client's cache, so expanding them again costs no request. These tables are `platforms`, `genres`, `themes`, `game_modes`, `player_perspectives`, `languages`, `regions`, `game_types`, `release_date_statuses` and the others in `REFERENCE_ENDPOINTS`. Change the duration with the target's `cache(ttlMs)`, or fetch by id with `cache(false)`.
+
+### Reusable selections
+
+`defineSelection()` names a set of fields, checked like `select()`, and `ResultOf<>` gives the type of a selection, a query or a view:
+
+```ts
+import { defineSelection, type ResultOf } from "igdb-kit";
+
+export const gameCard = defineSelection("games", "name", "cover.image_id", "platforms.abbreviation");
+export type GameCard = ResultOf<typeof gameCard>;
+
+const games = await igdb.games.select(...gameCard, "summary").limit(10);
+const gamePage = igdb.defineView("games", { select: [...gameCard, "storyline"], with: { /* ... */ } });
+type GamePage = ResultOf<typeof gamePage>;
+```
 
 ### Copying an endpoint: sync
 

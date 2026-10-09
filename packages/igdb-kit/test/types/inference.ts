@@ -1,5 +1,21 @@
 // Compile-time tests: `tsc -p test/types` fails if an inferred type drifts.
-import { createIGDB, ExternalGameSource, GameType, Platform, PopularityType } from "../../src";
+import {
+  type AgeRatingCategory,
+  and,
+  createIGDB,
+  defineSelection,
+  ExternalGameSource,
+  type GameLinkedEndpoint,
+  GameType,
+  type Language,
+  Platform,
+  PopularityType,
+  ReleaseDateRegion,
+  ReleaseDateStatus,
+  type ResultOf,
+  type SearchHit,
+} from "../../src";
+import type { Prettify } from "../../src/query/types";
 import { type Equal, expectType } from "./helpers";
 
 const igdb = createIGDB({ clientId: "x", clientSecret: "y" });
@@ -137,6 +153,89 @@ igdb.games.select("category");
 // @ts-expect-error and in sort
 igdb.release_dates.sort("region");
 
+// exclude() removes fields from the result, nested ones included, and only accepts selected fields.
+const x1 = igdb.games
+  .select("name", "summary", "cover.image_id", "cover.url", "platforms.*")
+  .exclude("summary", "cover.url");
+type X1 = Awaited<typeof x1>[number];
+expectType<Equal<X1["cover"], { id: number; image_id?: string } | undefined>>();
+expectType<Equal<"summary" extends keyof X1 ? true : false, false>>();
+const x2 = igdb.games.select("*", "cover.*").exclude("storyline", "cover.checksum").exclude("cover.url");
+type X2 = NonNullable<Awaited<ReturnType<typeof x2.first>>>;
+expectType<Equal<Extract<keyof X2, "storyline">, never>>();
+expectType<Equal<Extract<keyof NonNullable<X2["cover"]>, "url" | "checksum">, never>>();
+expectType<Equal<X2["name"], string | undefined>>();
+const x3 = igdb.games
+  .select("name", "platforms.name", "platforms.abbreviation")
+  .exclude("platforms.abbreviation");
+expectType<
+  Equal<
+    Awaited<typeof x3>[number],
+    { id: number; name?: string; platforms?: { id: number; name?: string }[] }
+  >
+>();
+// @ts-expect-error not selected
+igdb.games.select("name").exclude("summary");
+// @ts-expect-error IGDB always returns id
+igdb.games.select("*").exclude("id");
+// @ts-expect-error an expanded relation is removed from select, not excluded
+igdb.games.select("cover.*").exclude("cover");
+// @ts-expect-error no wildcard in exclude
+igdb.games.select("cover.*").exclude("cover.*");
+// @ts-expect-error cover is not expanded
+igdb.games.select("*").exclude("cover.url");
+
+// Named filters on games, usable with and()/or().
+igdb.games.where((g) => and(g.developedBy(908), g.rating.gte(80)));
+igdb.games.where((g) => g.publishedBy(50, 248).or(g.developedBy(908)));
+igdb.games.where((g) =>
+  g.releasedIn({
+    platform: Platform.PlayStation5,
+    region: ReleaseDateRegion.Europe,
+    from: new Date(),
+    to: 1_900_000_000,
+  }),
+);
+// @ts-expect-error only on games
+igdb.platforms.where((p) => p.developedBy(1));
+// @ts-expect-error not on nested relations
+igdb.games.where((g) => g.similar_games.developedBy(1));
+
+// searchAll() returns hits narrowed by kind, with the fields selected per kind.
+const hits = await igdb.searchAll("zelda", {
+  kinds: ["game", "character"],
+  select: { game: ["cover.image_id", "first_release_date"], character: ["mug_shot.image_id"] },
+});
+for (const hit of hits) {
+  expectType<Equal<typeof hit.kind, "game" | "character">>();
+  expectType<Equal<typeof hit.matched, "name" | "alternative_name">>();
+  if (hit.kind === "game") {
+    expectType<
+      Equal<
+        typeof hit.game,
+        { id: number; name?: string; cover?: { id: number; image_id?: string }; first_release_date?: number }
+      >
+    >();
+  } else {
+    expectType<
+      Equal<typeof hit.character, { id: number; name?: string; mug_shot?: { id: number; image_id?: string } }>
+    >();
+  }
+}
+const all = await igdb.searchAll("mario");
+expectType<Equal<(typeof all)[number]["kind"], "game" | "character" | "collection" | "platform" | "theme">>();
+expectType<Equal<Extract<(typeof all)[number], { kind: "theme" }>["theme"], { id: number; name?: string }>>();
+expectType<Equal<SearchHit<"platform">["platform"]["id"], number>>();
+// @ts-expect-error unknown field of a character
+igdb.searchAll("mario", { select: { character: ["nope"] } });
+// @ts-expect-error companies are not in the search index
+igdb.searchAll("ubisoft", { kinds: ["company"] });
+
+// New reference constants.
+expectType<Equal<typeof ReleaseDateStatus.Cancelled, 5>>();
+expectType<Equal<typeof AgeRatingCategory.PEGI_18, 12>>();
+expectType<Equal<typeof Language.French, 12>>();
+
 // Reference constants are values and the entity types of their endpoint at once.
 expectType<Equal<typeof GameType.MainGame, 0>>();
 const gameType: GameType = { id: 0, type: "Main Game" } as GameType;
@@ -172,11 +271,139 @@ expectType<Equal<typeof popular, { game: { id: number; name?: string }; value: n
 // @ts-expect-error only on games
 igdb.platforms.popular(PopularityType.IGDBPlaying);
 
+// weightedPopular() keeps the selection, adds the score and each type's value (null: no row).
+const weighted = await igdb.games
+  .select("name")
+  .weightedPopular({ [PopularityType.IGDBWantToPlay]: 0.6, [PopularityType.IGDBPlaying]: 0.4 });
+expectType<
+  Equal<
+    typeof weighted,
+    { game: { id: number; name?: string }; score: number; values: Record<number, number | null> }[]
+  >
+>();
+// @ts-expect-error only on games
+igdb.platforms.weightedPopular({ [PopularityType.IGDBPlaying]: 1 });
+
+// popularitySnapshot() yields rows ready to store.
+for await (const rows of igdb.popularitySnapshot({ top: 100 })) {
+  expectType<
+    Equal<
+      (typeof rows)[number],
+      {
+        game_id: number;
+        popularity_type: number;
+        value: number;
+        rank: number;
+        calculated_at: number | null;
+        external_popularity_source: number | null;
+      }
+    >
+  >();
+}
+
+// releases() keeps the selection of the games and types each release.
+const calendar = await igdb.games.select("name", "cover.image_id").releases({
+  from: "2026-10-01",
+  to: new Date("2026-11-01"),
+  statuses: [ReleaseDateStatus.FullRelease, null],
+});
+expectType<
+  Equal<
+    (typeof calendar)[number]["game"],
+    { id: number; name?: string; cover?: { id: number; image_id?: string } }
+  >
+>();
+expectType<
+  Equal<(typeof calendar)[number]["release"]["precision"], "day" | "month" | "quarter" | "year" | "tbd">
+>();
+expectType<Equal<(typeof calendar)[number]["release"]["start"], Date | null>>();
+expectType<Equal<(typeof calendar)[number]["release"]["status"], number | null>>();
+// @ts-expect-error not a precision
+igdb.games.releases({ from: "2026-10-01", to: "2026-11-01", precision: ["week"] });
+// @ts-expect-error a window is required
+igdb.games.releases({ from: "2026-10-01" });
+// @ts-expect-error only on games
+igdb.platforms.releases({ from: "2026-10-01", to: "2026-11-01" });
+
 // findByExternalIds() maps store ids to games with the selection; only on games.
 const bySteamId = await igdb.games.select("name").findByExternalIds(ExternalGameSource.Steam, ["292030"]);
 expectType<Equal<typeof bySteamId, Map<string, { id: number; name?: string }>>>();
 // @ts-expect-error only on games
 igdb.platforms.findByExternalIds(ExternalGameSource.Steam, ["1"]);
+
+// byGame() groups rows of endpoints that point to games, by game id.
+const ttbByGame = await igdb.game_time_to_beats.select("normally").byGame([1942]);
+expectType<Equal<typeof ttbByGame, Map<number, { id: number; normally?: number }[]>>>();
+const charactersByGame = await igdb.characters.select("name", "mug_shot.image_id").byGame([1942]);
+expectType<
+  Equal<
+    typeof charactersByGame,
+    Map<number, { id: number; name?: string; mug_shot?: { id: number; image_id?: string } }[]>
+  >
+>();
+igdb.release_dates.byGame([1]);
+igdb.collections.byGame([1]);
+// @ts-expect-error genres do not point to games
+igdb.genres.byGame([1]);
+// @ts-expect-error the search endpoint needs a search term
+igdb.search.byGame([1]);
+expectType<
+  Equal<
+    Extract<GameLinkedEndpoint, "events" | "popularity_primitives" | "games">,
+    "events" | "popularity_primitives"
+  >
+>();
+
+// Selections are named, reusable and typed.
+const gameCard = defineSelection("games", "name", "cover.image_id");
+type GameCard = ResultOf<typeof gameCard>;
+expectType<Equal<GameCard, { id: number; name?: string; cover?: { id: number; image_id?: string } }>>();
+const withCard = igdb.games.select(...gameCard, "summary");
+expectType<Equal<ResultOf<typeof withCard>, Prettify<GameCard & { summary?: string }>>>();
+expectType<Equal<ResultOf<ReturnType<typeof withCard.first>>, ResultOf<typeof withCard>>>();
+// @ts-expect-error unknown field
+defineSelection("games", "nom");
+
+// Views attach linked rows to games under their keys.
+const gamePage = igdb.defineView("games", {
+  select: [...gameCard, "summary"],
+  with: {
+    timeToBeat: igdb.game_time_to_beats.select("normally"),
+    characters: igdb.characters.select("name"),
+  },
+});
+type GamePage = {
+  id: number;
+  name?: string;
+  cover?: { id: number; image_id?: string };
+  summary?: string;
+  timeToBeat: { id: number; normally?: number }[];
+  characters: { id: number; name?: string }[];
+};
+expectType<Equal<Awaited<ReturnType<typeof gamePage.findById>>, GamePage | null>>();
+expectType<Equal<Awaited<ReturnType<typeof gamePage.findByIds>>, GamePage[]>>();
+expectType<Equal<Awaited<ReturnType<ReturnType<typeof gamePage.where>["limit"]>>, GamePage[]>>();
+expectType<Equal<ResultOf<typeof gamePage>, GamePage>>();
+gamePage.where((g) => g.rating.gte(90)).sort("rating", "desc");
+gamePage.search("zelda");
+// @ts-expect-error unknown field in a view's select
+igdb.defineView("games", { select: ["nom"] });
+// @ts-expect-error a key that hides a game field
+igdb.defineView("games", { with: { name: igdb.characters.select("name") } });
+
+// expand() swaps ids for the target's rows, keeping arrays and optionality.
+const listed = await igdb.games.select("name", "platforms", "cover").limit(5);
+const expanded = await igdb.expand(listed, "platforms", igdb.platforms.select("name"));
+expectType<
+  Equal<
+    typeof expanded,
+    { id: number; name?: string; platforms?: { id: number; name?: string }[]; cover?: number }[]
+  >
+>();
+const withCover = await igdb.expand(listed, "cover", igdb.covers.select("image_id"));
+expectType<Equal<(typeof withCover)[number]["cover"], { id: number; image_id?: string } | undefined>>();
+// @ts-expect-error name holds no ids
+igdb.expand(listed, "name", igdb.platforms);
 
 // Webhook deliveries narrow by endpoint and operation.
 import { webhookHandler } from "../../src/webhooks";

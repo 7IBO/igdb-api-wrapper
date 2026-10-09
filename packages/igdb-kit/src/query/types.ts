@@ -80,3 +80,37 @@ export type SelectResult<E, P extends string> = Prettify<
 >;
 
 export type Prettify<T> = { [K in keyof T]: T[K] } & {};
+
+type Entry<T> = Unarray<NonNullable<T>>;
+/** Keys of a result that hold a nested object (an expanded relation). */
+type ExpandedKeys<R> = { [K in keyof R & string]-?: Entry<R[K]> extends Scalar ? never : K }[keyof R &
+  string];
+/** Keys of a result that hold a scalar or an id, except `id`, which IGDB always returns. */
+type LeafKeys<R> = Exclude<keyof R & string, ExpandedKeys<R> | "id">;
+type ExcludeSuggestions<R> = LeafKeys<R> | `${ExpandedKeys<R>}.${string}`;
+
+/**
+ * Validates a path for `exclude()` against the current result `R`, so only selected fields are
+ * offered. IGDB rejects excluding an expanded relation itself, a `*`, or a field the selection does
+ * not cover once a relation is expanded, and always returns `id`.
+ */
+export type ExcludePath<R, P extends string> = P extends `${infer Head}.${infer Rest}`
+  ? Head extends ExpandedKeys<R>
+    ? `${Head}.${ExcludePath<Entry<R[Head]>, Rest>}`
+    : ExcludeSuggestions<R>
+  : P extends LeafKeys<R>
+    ? P
+    : ExcludeSuggestions<R>;
+
+/** The result `R` without the excluded paths `P`, at any depth. */
+export type ExcludeResult<R, P extends string> = Prettify<{
+  [K in keyof R as K extends P ? never : K]: K extends ExpandedKeys<R>
+    ? [SubPaths<P, K>] extends [never]
+      ? R[K]
+      : ExcludeEntry<NonNullable<R[K]>, SubPaths<P, K>>
+    : R[K];
+}>;
+
+type ExcludeEntry<T, P extends string> = T extends readonly (infer U)[]
+  ? ExcludeResult<U, P>[]
+  : ExcludeResult<T, P>;
