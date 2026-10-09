@@ -7,6 +7,9 @@ on:
   schedule:
     # Nightly, so a change on IGDB's side shows up even without commits.
     - cron: "0 3 * * *"
+  # The release workflow starts CI this way on the "Version packages" PR: pushes made with
+  # GITHUB_TOKEN trigger no workflow, so its required checks would never report.
+  workflow_dispatch:
 
 permissions:
   contents: read

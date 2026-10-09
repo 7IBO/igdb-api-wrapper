@@ -9,6 +9,7 @@ on:
 concurrency: release
 
 permissions:
+  actions: write
   contents: write
   pull-requests: write
   id-token: write
@@ -28,6 +29,7 @@ jobs:
       - run: bun install --frozen-lockfile
       - run: bun run build
       - uses: changesets/action@v1
+        id: changesets
         with:
           version: bunx changeset version
           publish: bunx changeset publish
@@ -36,3 +38,8 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           NPM_CONFIG_PROVENANCE: "true"
+      - name: Run CI on the Version packages PR
+        if: steps.changesets.outputs.pullRequestNumber
+        run: gh workflow run ci.yml --ref changeset-release/main
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
