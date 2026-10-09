@@ -898,6 +898,26 @@ igdb.platforms.family(6);
 const gone = await igdb.games.removed([1942]);
 expectType<Equal<typeof gone, { id: number; reason: string | null; replacement: number | null }[]>>();
 
+// Matching a store title.
+const matches = await igdb.games
+  .select("name")
+  .match({ name: "DARK SOULS III", platforms: ["PS4", 48], year: 2016 });
+expectType<
+  Equal<
+    typeof matches,
+    {
+      game: { id: number; name?: string };
+      score: number;
+      title: string;
+      matched: "name" | "alternative_name" | "localized_name";
+    }[]
+  >
+>();
+// @ts-expect-error match() is a games method
+igdb.platforms.match({ name: "PS5" });
+// @ts-expect-error name is required
+igdb.games.match({ year: 2016 });
+
 import { endpointSchema, type FieldSchema, jsonSchema } from "../../src/schema";
 
 endpointSchema("games").fields satisfies FieldSchema[];

@@ -1022,6 +1022,36 @@ describe.skipIf(!clientId || !clientSecret)("real IGDB API", () => {
     expect(gone[1]).toEqual({ id: 999_999_999, reason: null, replacement: null });
   });
 
+  test("games.match() finds store titles by name, alternative or localized title, platform and year", async () => {
+    const [souls] = await igdb.games
+      .select("name")
+      .match({ name: "DARK SOULS™ III", platforms: ["PS4"], year: 2016 });
+    expect(souls).toEqual({
+      game: { id: 11133, name: "Dark Souls III" },
+      score: 1,
+      title: "Dark Souls III",
+      matched: "name",
+    });
+    // Doom (2016) among the games named Doom, with another field read for the candidates.
+    const doom = await igdb.games
+      .select("name", "slug")
+      .limit(2)
+      .match({ name: "DOOM", platforms: [48], year: 2016 });
+    expect(doom[0]?.game).toEqual({ id: 7351, name: "Doom", slug: "doom--2" });
+    expect(doom.length).toBeLessThanOrEqual(2);
+    expect((doom[1]?.score ?? 0) < 1).toBe(true);
+    const [sword] = await igdb.games.match({ name: "Pokémon Épée", platforms: ["Nintendo Switch"] });
+    expect(sword).toMatchObject({ game: { id: 37382 }, matched: "alternative_name", title: "Pokémon Épée" });
+    // The edition named by the title, then the game.
+    const witcher = await igdb.games
+      .where("game_type != 14")
+      .match({ name: "The Witcher® 3: Wild Hunt - GOTY Edition" });
+    expect(witcher.slice(0, 2).map((m) => [m.game.id, m.score])).toEqual([
+      [22439, 1],
+      [1942, 0.95],
+    ]);
+  }, 15_000);
+
   test("expand() caches reference tables and drops ids of deleted rows", async () => {
     const counted = countingClient();
     const games = await counted.igdb.games.select("name", "platforms").findByIds([1942, 1020]);

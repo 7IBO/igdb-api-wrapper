@@ -80,11 +80,14 @@ const targets: Record<string, string> = {
   collection: "collections",
   company: "companies",
   parent: "companies",
+  platform: "platforms",
+  release_dates: "release_dates",
 };
 
 /**
  * A small IGDB over in-memory tables that follows relations: `where` with `path = (ids)`, `path =
- * value` and `id > n` joined by `&` and `|` (`collection.games = (1)` reads the collection's games),
+ * value`, `path ~ "text"` (equal, ignoring case) and `id > n` joined by `&` and `|`
+ * (`collection.games = (1)` reads the collection's games), `search` (names with every word),
  * `fields` with expanded paths (`game.name`), `sort id asc`, `limit` and `/count`.
  */
 export function relationalFake(tables: Record<string, Row[]>) {
@@ -122,9 +125,22 @@ export function relationalFake(tables: Record<string, Row[]>) {
     const path = call.url.split("/v4/")[1] ?? "";
     const [endpoint, count] = path.split("/") as [string, string | undefined];
     let rows = tables[endpoint] ?? [];
+    const search = call.body.match(/search ("(?:[^"\\]|\\.)*");/)?.[1];
+    if (search) {
+      // Like IGDB's, it reads "7" as "VII".
+      const words = (JSON.parse(search) as string).toLowerCase().replace(/\b7\b/g, "vii").split(/\s+/);
+      rows = rows.filter((row) =>
+        words.every((word) =>
+          String(row.name ?? "")
+            .toLowerCase()
+            .includes(word),
+        ),
+      );
+    }
     const where = call.body.match(/where (.*?);/)?.[1];
     if (where) {
       const code = where
+        .replace(/([\w.]+) ~ ("(?:[^"\\]|\\.)*")/g, 'M(r,"$1",$2)')
         .replace(/([\w.]+) = \(([^)]*)\)/g, 'H(r,"$1",[$2])')
         .replace(/([\w.]+) = (true|false|\d+)/g, 'H(r,"$1",[$2])')
         .replace(/id > (-?\d+)/g, "(r.id > $1)")
@@ -132,8 +148,14 @@ export function relationalFake(tables: Record<string, Row[]>) {
         .replaceAll("|", "||");
       const has = (row: Row, field: string, wanted: unknown[]) =>
         values(row, field).some((v) => wanted.includes(v));
-      const test = new Function("H", "r", `return ${code};`) as (h: typeof has, row: Row) => boolean;
-      rows = rows.filter((row) => test(has, row));
+      const equal = (row: Row, field: string, wanted: string) =>
+        values(row, field).some((v) => typeof v === "string" && v.toLowerCase() === wanted.toLowerCase());
+      const test = new Function("H", "M", "r", `return ${code};`) as (
+        h: typeof has,
+        m: typeof equal,
+        row: Row,
+      ) => boolean;
+      rows = rows.filter((row) => test(has, equal, row));
     }
     if (count) return Response.json({ count: rows.length });
     if (call.body.includes("sort id asc")) rows = [...rows].sort((a, b) => a.id - b.id);
