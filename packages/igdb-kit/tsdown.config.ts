@@ -6,6 +6,7 @@ export default defineConfig({
     redis: "src/redis/index.ts",
     webhooks: "src/webhooks/index.ts",
     proxy: "src/proxy/index.ts",
+    game: "src/game/index.ts",
   },
   format: ["esm", "cjs"],
   dts: true,

@@ -100,6 +100,8 @@ jobs:
           node -e "const { parseWebhook } = require('igdb-kit/webhooks'); if (typeof parseWebhook !== 'function') process.exit(1)"
           node --input-type=module -e "import { igdbProxy } from 'igdb-kit/proxy'; import { createIGDB } from 'igdb-kit'; const h = igdbProxy({ igdb: createIGDB({ clientId: 'a', clientSecret: 'b' }), endpoints: ['games'] }); const r = await h(new Request('http://x/api/igdb/genres', { method: 'POST', body: 'fields name;' })); if (r.status !== 404) process.exit(1)"
           node -e "const { igdbProxy } = require('igdb-kit/proxy'); const { createIGDB } = require('igdb-kit'); igdbProxy({ igdb: createIGDB({ clientId: 'a', clientSecret: 'b' }) })"
+          node --input-type=module -e "import { releaseDate } from 'igdb-kit/game'; if (releaseDate({ release_dates: [{ id: 1, date: 0, date_format: 0, release_region: 8, platform: 6 }] }).year !== 1970) process.exit(1)"
+          node -e "const { formatPlaytime } = require('igdb-kit/game'); if (formatPlaytime(7200, { locale: 'en-US' }) !== '2 hr') process.exit(1)"
 
   integration:
     name: Integration tests (real IGDB API)

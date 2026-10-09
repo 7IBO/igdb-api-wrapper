@@ -1,0 +1,244 @@
+import { ExternalGameSource, GameReleaseFormat } from "../generated/schema";
+import { idOf, type Ref, type Requires, type RequiresIfSelected } from "./select";
+
+/** Stores recognized from a link's address. */
+export type Store =
+  | "steam"
+  | "epic"
+  | "gog"
+  | "playstation"
+  | "xbox"
+  | "nintendo"
+  | "apple"
+  | "google_play"
+  | "amazon"
+  | "amazon_luna"
+  | "meta"
+  | "itch"
+  | "gamejolt"
+  | "utomik"
+  | "kartridge"
+  | "focus_entertainment";
+
+/** Fields of `websites` that {@link storeLinks} reads when `websites` is selected. */
+export type WebsiteFields = "websites.url" | "websites.trusted";
+/** Fields of `external_games` that {@link storeLinks} reads when `external_games` is selected. */
+export type ExternalGameFields =
+  | "external_games.uid"
+  | "external_games.url"
+  | "external_games.external_game_source"
+  | "external_games.platform"
+  | "external_games.countries"
+  | "external_games.game_release_format";
+
+interface WebsiteRow {
+  url?: string | undefined;
+  trusted?: boolean | undefined;
+}
+
+interface ExternalGameRow {
+  uid?: string | undefined;
+  url?: string | undefined;
+  external_game_source?: Ref | undefined;
+  platform?: Ref | undefined;
+  countries?: readonly number[] | undefined;
+  game_release_format?: Ref | undefined;
+}
+
+/** A game whose selection lets {@link storeLinks} work. */
+export interface StoreLinksInput {
+  websites?: readonly WebsiteRow[] | undefined;
+  external_games?: readonly ExternalGameRow[] | undefined;
+}
+
+type StoreLinksRequires<G> = RequiresIfSelected<G, "websites", WebsiteFields> &
+  RequiresIfSelected<G, "external_games", ExternalGameFields> &
+  ("websites" extends keyof G
+    ? unknown
+    : "external_games" extends keyof G
+      ? unknown
+      : Requires<G, WebsiteFields>);
+
+export interface StoreLink {
+  store: Store;
+  url: string;
+  /** `websites.trusted`; undefined for a link that only comes from `external_games`. */
+  trusted: boolean | undefined;
+  source: "website" | "external_game";
+  /** True when IGDB has no URL and it was built from the store id (Steam, Google Play, Amazon). */
+  built: boolean;
+  /** `Platform` id, set by IGDB on Amazon products only. */
+  platform: number | undefined;
+  /** ISO 3166-1 numeric country codes (840 for the US), set by IGDB on Amazon products only. */
+  countries: readonly number[] | undefined;
+  /** Set by IGDB on Amazon products only. */
+  format: "digital" | "physical" | undefined;
+}
+
+export interface StoreLinksOptions {
+  /** Only these stores. */
+  stores?: readonly Store[] | undefined;
+}
+
+interface StoreDef {
+  host: RegExp;
+  /** The product id in a URL, so that two addresses of one product count once. */
+  key?: RegExp;
+}
+
+// Hosts verified against IGDB's websites and external_games. Archived copies (web.archive.org),
+// typos and the closed Xbox 360 Marketplace are not store links.
+const stores: Record<Store, StoreDef> = {
+  steam: { host: /^store\.steampowered\.com$/, key: /\/app\/(\d+)/ },
+  epic: { host: /^(store\.|www\.)?epicgames\.com$/, key: /\/(?:p|product)\/([^/?#]+)/ },
+  gog: { host: /^(www\.)?gog\.com$/, key: /\/game\/([^/?#]+)/ },
+  playstation: { host: /^store\.playstation\.com$/, key: /\/(?:concept|product)\/([^/?#]+)/ },
+  xbox: { host: /^((www|apps)\.)?(xbox|microsoft)\.com$/, key: /\/((?=[a-z]*\d)[0-9a-z]{12})(?=[/?#]|$)/i },
+  nintendo: {
+    host: /^(www\.|store\.|ec\.)?nintendo\.(com|co\.jp|co\.uk|de|fr|es|it|nl|be|ch|at|pt|com\.au|co\.nz|com\.hk|co\.kr)$/,
+  },
+  apple: { host: /^(apps|itunes)\.apple\.com$/, key: /\/id(\d+)/ },
+  google_play: { host: /^play\.google\.com$/, key: /[?&]id=([^&#]+)/ },
+  amazon_luna: { host: /^(play|luna)\.amazon\.com$/, key: /[?&]gid=([^&#]+)/ },
+  amazon: {
+    host: /^(www\.)?amazon\.(com|co\.uk|fr|de|it|es|jp|co\.jp|in|ca|com\.mx|com\.br|com\.au|nl|se|pl)$/,
+    key: /\/dp\/([0-9A-Z]{10})/,
+  },
+  meta: { host: /^(www\.)?(meta|oculus)\.com$/, key: /\/(\d{9,})(?=[/?#]|$)/ },
+  itch: { host: /^[a-z0-9-]+\.itch\.io$/ },
+  gamejolt: { host: /^(www\.)?gamejolt\.com$/, key: /\/(\d+)\/?(?:[?#]|$)/ },
+  utomik: { host: /^(www\.)?utomik\.com$/ },
+  kartridge: { host: /^(www\.)?kartridge\.com$/ },
+  focus_entertainment: { host: /^store\.focus-entmt\.com$/, key: /\/product\/(\d+)/ },
+};
+
+// Amazon domains seen on IGDB's URLs for products sold in a single country.
+const amazonDomains: Record<number, string> = {
+  840: "amazon.com",
+  826: "amazon.co.uk",
+  250: "amazon.fr",
+  276: "amazon.de",
+  380: "amazon.it",
+  724: "amazon.es",
+  392: "amazon.co.jp",
+};
+
+/** The store a URL belongs to, from its host; undefined for anything else. */
+export function storeOf(url: string): Store | undefined {
+  const host = hostOf(url);
+  if (!host) return undefined;
+  for (const [store, def] of Object.entries(stores) as [Store, StoreDef][]) {
+    if (def.host.test(host)) return store;
+  }
+  return undefined;
+}
+
+/**
+ * Store pages of a game, from `websites` and `external_games`, one per product. The store comes
+ * from the link's address, not from its declared type: IGDB has Steam links to web.archive.org and
+ * Xbox links typed as Epic. When `external_games` has no URL, it is built from the store id for
+ * Steam, Google Play and single-country Amazon products. Links from `websites` come first, trusted
+ * ones before the others (IGDB never marks Xbox, PlayStation and Nintendo links as trusted).
+ *
+ * ```ts
+ * const game = await igdb.games.select("websites.url", "websites.trusted").findByIdOrThrow(1942);
+ * storeLinks(game).map((l) => l.store); // ["epic", "steam", "gog", "xbox", "playstation", "nintendo"]
+ * ```
+ */
+export function storeLinks<G extends object>(
+  game: G & StoreLinksRequires<G>,
+  options: StoreLinksOptions = {},
+): StoreLink[] {
+  const input = game as StoreLinksInput;
+  const candidates: Candidate[] = [];
+  const websites = [...(input.websites ?? [])].sort(
+    (a, b) => Number(b.trusted === true) - Number(a.trusted === true),
+  );
+  for (const site of websites) {
+    if (site.url)
+      candidates.push({
+        ...noDetails,
+        url: site.url,
+        trusted: site.trusted,
+        source: "website",
+        built: false,
+      });
+  }
+  for (const row of input.external_games ?? []) {
+    const url = row.url ?? buildUrl(row);
+    if (!url) continue;
+    const format = idOf(row.game_release_format);
+    candidates.push({
+      url,
+      trusted: undefined,
+      source: "external_game",
+      built: row.url === undefined,
+      platform: idOf(row.platform),
+      countries: row.countries,
+      format:
+        format === GameReleaseFormat.Digital
+          ? "digital"
+          : format === GameReleaseFormat.Physical
+            ? "physical"
+            : undefined,
+    });
+  }
+
+  const links = new Map<string, StoreLink>();
+  for (const candidate of candidates) {
+    const store = storeOf(candidate.url);
+    if (!store || (options.stores && !options.stores.includes(store))) continue;
+    const key = `${store} ${productKey(store, candidate.url)}`;
+    const kept = links.get(key);
+    if (!kept) {
+      links.set(key, { ...candidate, store });
+      continue;
+    }
+    kept.platform ??= candidate.platform;
+    kept.countries ??= candidate.countries;
+    kept.format ??= candidate.format;
+  }
+  return [...links.values()];
+}
+
+type Candidate = Omit<StoreLink, "store">;
+
+const noDetails = { platform: undefined, countries: undefined, format: undefined };
+
+function buildUrl(row: ExternalGameRow): string | undefined {
+  if (!row.uid) return undefined;
+  const uid = encodeURIComponent(row.uid);
+  switch (idOf(row.external_game_source)) {
+    case ExternalGameSource.Steam:
+      return `https://store.steampowered.com/app/${uid}`;
+    case ExternalGameSource.Android:
+      return `https://play.google.com/store/apps/details?id=${uid}`;
+    case ExternalGameSource.Amazon: {
+      const domain = row.countries?.length === 1 ? amazonDomains[row.countries[0] as number] : undefined;
+      return domain ? `https://${domain}/dp/${uid}` : undefined;
+    }
+    default:
+      return undefined;
+  }
+}
+
+function hostOf(url: string): string | undefined {
+  try {
+    return new URL(url).hostname.toLowerCase();
+  } catch {
+    return undefined;
+  }
+}
+
+/** Identifies one product of a store, whatever the form of its URL (locale, slug, trailing slash). */
+function productKey(store: Store, url: string): string {
+  const id = stores[store].key?.exec(url)?.[1];
+  if (id) return store === "amazon" ? `${hostOf(url)?.replace(/^www\./, "")}/${id}` : id.toLowerCase();
+  const parsed = new URL(url);
+  const path = parsed.pathname
+    .toLowerCase()
+    .split("/")
+    .filter((segment, i) => segment && !(i === 1 && /^[a-z]{2}(-[a-z]{2})?$/.test(segment)))
+    .join("/");
+  return `${parsed.hostname.replace(/^www\./, "")}/${path}`;
+}

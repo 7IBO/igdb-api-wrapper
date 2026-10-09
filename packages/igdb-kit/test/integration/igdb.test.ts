@@ -1,11 +1,12 @@
 // Runs against the real IGDB API. Skipped unless TWITCH_CLIENT_ID and TWITCH_CLIENT_SECRET are set.
-// Uses about 60 requests. The webhook test registers webhooks on example.com and removes them.
+// Uses about 65 requests. The webhook test registers webhooks on example.com and removes them.
 import { describe, expect, test } from "bun:test";
 import {
   AgeRatingCategory,
   AgeRatingOrganization,
   and,
   createIGDB,
+  DateFormat,
   defineSelection,
   type EndpointName,
   ExternalGameSource,
@@ -25,6 +26,16 @@ import {
   TierError,
   toDate,
 } from "../../src";
+import {
+  ageRating,
+  companies,
+  languages,
+  localizedName,
+  parentGame,
+  releaseDate,
+  storeLinks,
+  timeToBeat,
+} from "../../src/game";
 import { igdbProxy } from "../../src/proxy";
 
 const clientId = process.env.TWITCH_CLIENT_ID;
@@ -497,6 +508,93 @@ describe.skipIf(!clientId || !clientSecret)("real IGDB API", () => {
     const hits = await igdb.search.select("name", "game", "character", "company").search("witcher").limit(20);
     expect(hits.length).toBeGreaterThan(0);
     expect(hits.some((h) => typeof h.game === "number")).toBe(true);
+  });
+  test("game helpers read a real game page", async () => {
+    const { witcher, hades, erdtree, ttb } = await igdb.batch({
+      witcher: igdb.games
+        .select(
+          "name",
+          "first_release_date",
+          "release_dates.*",
+          "involved_companies.company.name",
+          "involved_companies.developer",
+          "involved_companies.publisher",
+          "involved_companies.porting",
+          "involved_companies.supporting",
+          "websites.url",
+          "websites.trusted",
+          "external_games.uid",
+          "external_games.url",
+          "external_games.external_game_source",
+          "external_games.platform",
+          "external_games.countries",
+          "external_games.game_release_format",
+          "age_ratings.organization",
+          "age_ratings.rating_category",
+          "age_ratings.rating_content_descriptions.description",
+          "game_localizations.name",
+          "game_localizations.region",
+          "alternative_names.name",
+          "alternative_names.comment",
+          "language_supports.language.locale",
+          "language_supports.language_support_type",
+        )
+        .findById(1942),
+      // Early access in 2018, 1.0 in 2020.
+      hades: igdb.games.select("first_release_date", "release_dates.*").findById(113112),
+      erdtree: igdb.games.select("game_type", "parent_game.name", "version_parent").findById(240009),
+      ttb: igdb.game_time_to_beats
+        .select("hastily", "normally", "completely", "count")
+        .where((t) => t.game_id.eq(1942))
+        .first(),
+    });
+    if (!witcher || !hades || !erdtree) throw new Error("game not found");
+
+    expect(releaseDate(witcher)?.date?.getTime()).toBe((witcher.first_release_date ?? 0) * 1000);
+    expect(releaseDate(hades)).toMatchObject({ status: "full_release", year: 2020 });
+    expect(releaseDate(hades)?.date?.getTime()).toBe((hades.first_release_date ?? 0) * 1000);
+    expect(releaseDate(hades, { statuses: ["early_access"] })?.year).toBe(2018);
+
+    expect(companies(witcher).developers.map((c) => c.name)).toContain("CD Projekt RED");
+    expect(companies(witcher).publishers.length).toBeGreaterThan(1);
+    const links = storeLinks(witcher);
+    expect(links.find((l) => l.store === "steam")?.url).toContain("/app/292030");
+    expect(new Set(links.map((l) => `${l.store} ${l.url}`)).size).toBe(links.length);
+    expect(ageRating(witcher, AgeRatingOrganization.PEGI)).toMatchObject({ label: "18", minimumAge: 18 });
+    expect(localizedName(witcher, "ja-JP")?.source).toBe("localization");
+    expect(languages(witcher).find((l) => l.language.locale === "en-US")?.audio).toBe(true);
+    expect(parentGame(erdtree)).toMatchObject({
+      relation: "expansion",
+      game: { id: 119133, name: "Elden Ring" },
+    });
+    expect(timeToBeat(ttb)?.seconds).toBeGreaterThan(36_000);
+  });
+
+  test("game helpers know every reference row they map", async () => {
+    const { statuses, formats, categories, regions } = await igdb.batch({
+      statuses: igdb.release_date_statuses.select("name").limit(500),
+      formats: igdb.date_formats.select("format").limit(500),
+      categories: igdb.age_rating_categories.select("rating", "organization").limit(500),
+      regions: igdb.regions.select("identifier").limit(500),
+    });
+    for (const status of statuses) {
+      const row = { id: 1, date: 0, date_format: 0, release_region: 8, platform: 6, status: status.id };
+      const release = releaseDate({ release_dates: [row] });
+      expect(release?.status).not.toBe("other");
+    }
+    expect(formats.map((f) => f.id).sort()).toEqual(Object.values(DateFormat).sort());
+    for (const category of categories) {
+      const rating = { id: 1, organization: category.organization ?? 0, rating_category: category.id };
+      expect(ageRating({ age_ratings: [rating] }, rating.organization)?.label).toBe(
+        category.rating as string,
+      );
+    }
+    for (const region of regions) {
+      const game = { name: "x", game_localizations: [{ id: 1, name: "y", region: region.id }] };
+      expect(
+        localizedName(game, region.identifier === "EU" ? "fr-FR" : (region.identifier ?? ""))?.source,
+      ).toBe("localization");
+    }
   });
 
   test("byGame() accepts the game link of every endpoint that has one", async () => {

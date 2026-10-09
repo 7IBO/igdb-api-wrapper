@@ -60,6 +60,16 @@
         "default": "./dist/proxy.cjs"
       }
     },
+    "./game": {
+      "import": {
+        "types": "./dist/game.d.ts",
+        "default": "./dist/game.js"
+      },
+      "require": {
+        "types": "./dist/game.d.cts",
+        "default": "./dist/game.cjs"
+      }
+    },
     "./package.json": "./package.json"
   },
   "keywords": [

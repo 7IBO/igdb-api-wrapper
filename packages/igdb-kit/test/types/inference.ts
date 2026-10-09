@@ -434,3 +434,83 @@ import { igdbProxy } from "../../src/proxy";
 igdbProxy({ igdb, endpoints: ["games", "covers"] });
 // @ts-expect-error unknown endpoint
 igdbProxy({ igdb, endpoints: ["gamez"] });
+
+// igdb-kit/game: helpers require the fields they read and accept any richer selection.
+import {
+  ageRating,
+  companies,
+  languages,
+  localizedName,
+  multiplayer,
+  parentGame,
+  releaseDate,
+  storeLinks,
+  timeToBeat,
+} from "../../src/game";
+
+const page = await igdb.games
+  .select(
+    "name",
+    "cover.image_id",
+    "release_dates.*",
+    "involved_companies.company.name",
+    "involved_companies.developer",
+    "involved_companies.publisher",
+    "involved_companies.porting",
+    "involved_companies.supporting",
+    "websites.url",
+    "websites.trusted",
+    "age_ratings.organization",
+    "age_ratings.rating_category.rating",
+    "age_ratings.rating_content_descriptions.description",
+    "language_supports.language.locale",
+    "language_supports.language_support_type",
+    "multiplayer_modes.*",
+    "game_type",
+    "parent_game.name",
+    "version_parent",
+  )
+  .findByIdOrThrow(1942);
+const release = releaseDate(page, { region: 1 });
+if (release) expectType<Equal<typeof release.row.human, string | undefined>>();
+expectType<Equal<ReturnType<typeof companies<typeof page>>["developers"], { id: number; name?: string }[]>>();
+storeLinks(page);
+ageRating(page, 2);
+const language = languages(page)[0];
+if (language) expectType<Equal<typeof language.language, { id: number; locale?: string }>>();
+expectType<Equal<ReturnType<typeof multiplayer<typeof page>>, ReturnType<typeof multiplayer>>>();
+const parent = parentGame(page);
+if (parent) expectType<Equal<typeof parent.game, number | { id: number; name?: string }>>();
+localizedName(page, "ja-JP");
+
+const datesOnly = await igdb.games.select("release_dates.date", "release_dates.human").findByIdOrThrow(1);
+// @ts-expect-error release_dates.status, .platform... are not selected
+releaseDate(datesOnly);
+const dateIds = await igdb.games.select("release_dates").findByIdOrThrow(1);
+// @ts-expect-error release_dates are ids, not expanded
+releaseDate(dateIds);
+// @ts-expect-error involved_companies is not selected
+companies(datesOnly);
+// @ts-expect-error neither websites nor external_games is selected
+storeLinks(datesOnly);
+const websitesOnly = await igdb.games.select("websites.url").findByIdOrThrow(1);
+// @ts-expect-error websites.trusted is not selected
+storeLinks(websitesOnly);
+const descriptorIds = await igdb.games
+  .select(
+    "age_ratings.organization",
+    "age_ratings.rating_category",
+    "age_ratings.rating_content_descriptions",
+  )
+  .findByIdOrThrow(1);
+// @ts-expect-error descriptors are read as text: select rating_content_descriptions.description
+ageRating(descriptorIds, 2);
+// @ts-expect-error alternative_names is selected without its comment
+localizedName(await igdb.games.select("name", "alternative_names.name").findByIdOrThrow(1), "ja");
+// @ts-expect-error multiplayer_modes is not expanded
+multiplayer(await igdb.games.select("multiplayer_modes").findByIdOrThrow(1));
+
+const ttb = await igdb.game_time_to_beats.select("hastily", "normally", "completely", "count").first();
+timeToBeat(ttb);
+// @ts-expect-error count is not selected
+timeToBeat(await igdb.game_time_to_beats.select("hastily", "normally", "completely").first());
