@@ -1,6 +1,6 @@
 import type { ExecuteOptions, RawResponse } from "../query/query";
 import type { TokenProvider } from "./auth";
-import { errorFromResponse, IGDBError, NetworkError, RateLimitError } from "./errors";
+import { errorFromResponse, IGDBError, type IGDBErrorOptions, NetworkError, RateLimitError } from "./errors";
 import type { Limiter } from "./limiter";
 import { backoffDelay, sleep } from "./util";
 
@@ -87,6 +87,7 @@ export class Transport {
         if (!(await this.backoff(path, attempt, deadline, error, signal))) {
           throw new NetworkError(`Request to ${path} failed: ${errorMessage(error)}`, {
             cause: error,
+            endpoint: path,
             query: body,
           });
         }
@@ -97,7 +98,7 @@ export class Transport {
       if (status >= 200 && status < 300) {
         const count = headers.get("x-count");
         return {
-          data: parseBody(text, headers),
+          data: parseBody(text, headers, { status, endpoint: path, query: body }),
           total: count === null ? undefined : Number(count),
           bytes: text.length,
         };
@@ -118,6 +119,7 @@ export class Transport {
         throw status === 429
           ? new RateLimitError(`Still rate limited after retrying ${path}`, {
               status,
+              endpoint: path,
               query: body,
               cause: error,
             })
@@ -141,10 +143,19 @@ export class Transport {
   }
 }
 
-function parseBody(text: string, headers: Headers): unknown {
+function parseBody(text: string, headers: Headers, context: IGDBErrorOptions): unknown {
+  const type = headers.get("content-type");
   // Webhook tests answer in plain text.
-  if (headers.get("content-type")?.startsWith("text/plain") && !/^\s*[[{]/.test(text)) return text;
-  return JSON.parse(text);
+  if (type?.startsWith("text/plain") && !/^\s*[[{]/.test(text)) return text;
+  try {
+    return JSON.parse(text);
+  } catch (error) {
+    // Typically a proxy URL that answers with an HTML page.
+    throw new IGDBError(
+      `Response of ${context.endpoint} is not JSON${type ? ` (${type})` : ""}: ${text.slice(0, 100)}`,
+      { ...context, cause: error },
+    );
+  }
 }
 
 function errorMessage(error: unknown): string {

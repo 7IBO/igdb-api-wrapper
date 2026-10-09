@@ -139,6 +139,20 @@ describe("byGame()", () => {
     expect(byGame.get(20)?.[0] === byGame.get(10)?.[0]).toBe(true);
   });
 
+  test("identical calls in flight share one request, and each gets its rows", async () => {
+    const mock = fakeIgdb({ release_dates: releaseDates });
+    const igdb = testClient(mock.fetch);
+    const query = igdb.release_dates.select("date");
+    const [a, b] = await Promise.all([query.byGame([10, 20]), query.byGame([10, 20])]);
+    const expected: [number, { id: number; date?: number }[]][] = [
+      [10, [{ id: 1, date: 300 }, { id: 2, date: 100 }, { id: 5 }]],
+      [20, [{ id: 3, date: 200 }]],
+    ];
+    expect([...a]).toEqual(expected);
+    expect([...b]).toEqual(expected);
+    expect(mock.calls).toHaveLength(1);
+  });
+
   test("handles expanded links and game_id keys", async () => {
     const expanded = characters.map((c) => ({
       ...c,
@@ -243,6 +257,15 @@ describe("defineView()", () => {
     expect(mock.calls[0]?.url).toEndWith("/multiquery");
     expect(mock.calls[0]?.body.split("\n")).toHaveLength(3);
     expect(await view(igdb).findById(404)).toBeNull();
+  });
+
+  test("the same game loaded twice at once has its links both times", async () => {
+    const mock = fakeIgdb(tables);
+    const igdb = testClient(mock.fetch);
+    const [a, b] = await Promise.all([view(igdb).findById(10), view(igdb).findById(10)]);
+    expect(a?.characters).toHaveLength(2);
+    expect(b).toEqual(a);
+    expect(mock.calls).toHaveLength(1);
   });
 
   test("findByIds keeps the order and gives every game its links, empty or not", async () => {

@@ -27,8 +27,8 @@ import { type Condition, type NameLookup, throwIfRemoved, type WhereRoot, whereP
 
 /** IGDB rejects `limit` above 500 (with a 403). */
 export const MAX_LIMIT = 500;
-/** IGDB rejects request bodies above 32 KB (413). */
-export const MAX_BODY_BYTES = 32 * 1024;
+/** IGDB rejects request bodies above 32,000 bytes (413), although its message says 32KB. */
+export const MAX_BODY_BYTES = 32_000;
 
 export interface ExecuteOptions {
   signal?: AbortSignal | undefined;
@@ -178,6 +178,11 @@ export class Query<N extends EndpointName, R = { id: number }> extends Executabl
     return new Query(this.runner, this.endpoint, { ...this.state, ...patch }) as this;
   }
 
+  /** This query for a lookup by ids: an `offset` would skip the rows asked for, and `sort` is moot. */
+  private byIds(): this {
+    return this.with({ offset: undefined, sort: undefined });
+  }
+
   /**
    * Fields to return, as paths: `"name"`, `"cover.image_id"`, `"platforms.*"`, `"*"`. Selecting a
    * sub-field of a relation expands it; otherwise a relation comes back as an id. Replaces any
@@ -286,9 +291,11 @@ export class Query<N extends EndpointName, R = { id: number }> extends Executabl
     return new Single(this.runner, this.limit(1).toRequest());
   }
 
-  /** The entity with this id, or null. */
+  /** The entity with this id, or null. The query's `offset` and `sort` do not apply. */
   findById(id: number): Single<R> {
-    return this.where(`id = ${toId(id)}`).first();
+    return this.byIds()
+      .where(`id = ${toId(id)}`)
+      .first();
   }
 
   /** The first result; throws `NotFoundError` when nothing matches. */
@@ -298,21 +305,26 @@ export class Query<N extends EndpointName, R = { id: number }> extends Executabl
 
   /** The entity with this id; throws `NotFoundError` when it does not exist (or the `where` excludes it). */
   findByIdOrThrow(id: number): SingleOrThrow<R> {
-    const query = this.where(`id = ${toId(id)}`).limit(1);
+    const query = this.byIds()
+      .where(`id = ${toId(id)}`)
+      .limit(1);
     return new SingleOrThrow(this.runner, query.toRequest(), `No ${this.endpoint} with id ${id}`);
   }
 
   /**
    * The entities with these ids, in the order given (missing ids are skipped). Splits into chunks of
-   * 500, which `batch` and automatic batching send together.
+   * 500, which `batch` and automatic batching send together. The query's `offset` and `sort` do not
+   * apply.
    */
   async findByIds(ids: readonly number[], options?: ExecuteOptions): Promise<R[]> {
     const unique = [...new Set(ids.map(toId))];
     const chunks: number[][] = [];
     for (let i = 0; i < unique.length; i += MAX_LIMIT) chunks.push(unique.slice(i, i + MAX_LIMIT));
+    const query = this.byIds();
     const pages = await Promise.all(
       chunks.map((chunk) =>
-        this.where(`id = (${chunk.join(",")})`)
+        query
+          .where(`id = (${chunk.join(",")})`)
           .limit(chunk.length)
           .execute(options),
       ),
@@ -365,10 +377,7 @@ export class Query<N extends EndpointName, R = { id: number }> extends Executabl
         }
       }),
     );
-    const games = await this.with({ sort: undefined, offset: undefined }).findByIds(
-      [...gameOf.values()],
-      options,
-    );
+    const games = await this.findByIds([...gameOf.values()], options);
     const byId = new Map(games.map((game) => [(game as { id: number }).id, game]));
     const result = new Map<string, R>();
     for (const uid of unique) {
@@ -434,7 +443,7 @@ export class Query<N extends EndpointName, R = { id: number }> extends Executabl
         seen.add(row.game_id);
         ranked.push({ id: row.game_id, value: row.value ?? 0 });
       }
-      const games = await this.with({ sort: undefined, offset: undefined }).findByIds(
+      const games = await this.findByIds(
         ranked.map((row) => row.id),
         execute,
       );
@@ -469,7 +478,7 @@ export class Query<N extends EndpointName, R = { id: number }> extends Executabl
     });
     return weightedPopular(
       rows,
-      (ids, execute) => this.with({ sort: undefined, offset: undefined }).findByIds(ids, execute),
+      (ids, execute) => this.findByIds(ids, execute),
       weights as PopularityWeights,
       options as WeightedPopularOptions,
     );
@@ -491,11 +500,7 @@ export class Query<N extends EndpointName, R = { id: number }> extends Executabl
       fields: RELEASE_FIELDS,
       sort: { field: "id", direction: "asc" },
     });
-    return releaseCalendar(
-      dates,
-      (ids, execute) => this.with({ sort: undefined, offset: undefined }).findByIds(ids, execute),
-      options as ReleasesOptions,
-    );
+    return releaseCalendar(dates, (ids, execute) => this.findByIds(ids, execute), options as ReleasesOptions);
   }
 
   /**
@@ -609,8 +614,12 @@ export class Query<N extends EndpointName, R = { id: number }> extends Executabl
       if (offset !== undefined) lines.push(`offset ${offset};`);
     }
     const body = lines.join(" ");
-    if (new TextEncoder().encode(body).length > MAX_BODY_BYTES) {
-      throw new QueryError(`Query body exceeds IGDB's 32 KB limit; split long id lists (findByIds does it)`);
+    const bytes = new TextEncoder().encode(body).length;
+    if (bytes > MAX_BODY_BYTES) {
+      throw new QueryError(
+        `Query body is ${bytes} bytes, above IGDB's limit of ${MAX_BODY_BYTES}: split long id lists (findByIds does it)`,
+        { endpoint: this.endpoint },
+      );
     }
     return {
       endpoint: this.endpoint,

@@ -1,5 +1,6 @@
 import { type Forward, forwardKey, type IGDBClient } from "../client";
 import { AuthError, IGDBError, NetworkError, RateLimitError } from "../core/errors";
+import { readBodyCapped } from "../core/util";
 import { type EndpointName, endpoints } from "../generated/schema";
 
 export interface ProxyOptions {
@@ -11,9 +12,15 @@ export interface ProxyOptions {
   maxLimit?: number | undefined;
   /** Allow multiqueries, which the client sends when it batches. Default true. */
   multiquery?: boolean | undefined;
-  /** Largest request body accepted, in bytes. Default 16 KB. */
+  /**
+   * Largest request body accepted, in bytes. A larger one is answered 413 as soon as it passes the
+   * limit, which the browser client splits its batches on. Default 16 KB.
+   */
   maxBodyBytes?: number | undefined;
-  /** Called for every query before it is sent. Return false to answer 403 (e.g. no session cookie). */
+  /**
+   * Called for every request before its body is read. Return false to answer 403 (e.g. no session
+   * cookie).
+   */
   authorize?: ((request: Request) => boolean | Promise<boolean>) | undefined;
   /** Origins allowed to call the proxy from another site. Default: same origin only (no CORS headers). */
   allowOrigin?: string | readonly string[] | ((origin: string) => boolean) | undefined;
@@ -61,6 +68,7 @@ export function igdbProxy(options: ProxyOptions): (request: Request) => Promise<
     }
     try {
       if (request.method !== "POST") throw new Refused(405, "Only POST is accepted");
+      if (options.authorize && !(await options.authorize(request))) throw new Refused(403, "Not authorized");
       const path = pathOf(request.url);
       const body = await readBody(request, maxBodyBytes);
       if (path === "multiquery") {
@@ -70,7 +78,6 @@ export function igdbProxy(options: ProxyOptions): (request: Request) => Promise<
         checkEndpoint(path.replace(/\/count$/, ""), allowed);
       }
       checkLimits(body, maxLimit);
-      if (options.authorize && !(await options.authorize(request))) throw new Refused(403, "Not authorized");
 
       const response = await forward(path, body, { cacheTtlMs: options.cacheTtlMs, signal: request.signal });
       return Response.json(response.data, {
@@ -109,11 +116,9 @@ function pathOf(url: string): string {
 }
 
 async function readBody(request: Request, maxBytes: number): Promise<string> {
-  const declared = Number(request.headers.get("content-length"));
-  if (declared > maxBytes) throw new Refused(400, `Query larger than ${maxBytes} bytes`);
-  const body = await request.text();
-  if (new TextEncoder().encode(body).length > maxBytes)
-    throw new Refused(400, `Query larger than ${maxBytes} bytes`);
+  const body = await readBodyCapped(request, maxBytes);
+  if (body === undefined)
+    throw new Refused(413, `Request body larger than ${maxBytes} bytes, this proxy's maximum`);
   return body;
 }
 

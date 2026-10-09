@@ -451,7 +451,7 @@ const handler = webhookHandler<"games" | "platforms">({
 Bun.serve({ routes: { "/igdb": { POST: handler } } }); // or Hono: app.post("/igdb", (c) => handler(c.req.raw))
 ```
 
-It answers 401 on a wrong secret and 500 when `onEvent` throws, so IGDB retries. With Express, use `parseWebhook({ headers: req.headers, body: req.body, url: req.url }, secret)`. `igdb.webhooks` also has `register`, `list`, `get`, `delete` and `test`.
+It checks the secret before reading the body, and answers 401 when it is wrong, 413 on a body above `maxBodyBytes` (1 MB by default), and 500 when `onEvent` throws, so IGDB retries. With Express, use `parseWebhook({ headers: req.headers, body: req.body, url: req.url }, secret)`. `igdb.webhooks` also has `register`, `list`, `get`, `delete` and `test`.
 
 ### In the browser: proxy
 
@@ -476,22 +476,23 @@ const igdb = createIGDB({ proxyUrl: "/api/igdb" });
 const games = await igdb.games.select("name", "cover.image_id").search("zelda").limit(10);
 ```
 
-The last path segment names the endpoint (`games`, `games/count`, `multiquery`), so batching keeps working. Only Apicalypse reads are forwarded, never the webhooks API. A refused query (endpoint not allowed, `limit` above `maxLimit`, `authorize` returning false) throws a `QueryError` in the browser. For another origin, pass `allowOrigin`; `cacheControl` sets the `Cache-Control` header of answers.
+The last path segment names the endpoint (`games`, `games/count`, `multiquery`), so batching keeps working. Only Apicalypse reads are forwarded, never the webhooks API. A refused query (endpoint not allowed, `limit` above `maxLimit`, `authorize` returning false) throws a `QueryError` in the browser. `authorize` runs before the body is read, and a body above `maxBodyBytes` (16 KB by default) is answered 413 as soon as it passes the limit: the browser client splits its batch, and a single query that large throws a `PayloadTooLargeError`. For another origin, pass `allowOrigin`; `cacheControl` sets the `Cache-Control` header of answers.
 
 ### Errors
 
-All errors extend `IGDBError` and carry `status`, `details` (IGDB's own error entries) and the `query` that failed.
+All errors extend `IGDBError` and carry `status`, `endpoint`, `details` (IGDB's own error entries) and the `query` that failed.
 
 | Error | When |
 |---|---|
 | `QueryError` | Invalid field, syntax or type error, `limit` above 500 (IGDB answers 403 for that), unknown endpoint |
-| `PayloadTooLargeError` | The response would exceed IGDB's 10 MB cap, or the request body exceeds 32 KB |
+| `PayloadTooLargeError` | The response would exceed IGDB's 10 MB cap, or the request body exceeds 32,000 bytes: the message says which |
 | `QueryTimeoutError` | IGDB gave up after about 27 s (408) |
 | `TierError` | Data outside your API access tier (the `content_safety_*` endpoints) |
 | `AuthError` | Bad credentials, or a token still refused after one renewal |
 | `RateLimitError` | Still 429 when the retry budget ran out |
-| `NotFoundError` | `findByIdOrThrow()` or `firstOrThrow()` found nothing |
+| `NotFoundError` | `findByIdOrThrow()` or `firstOrThrow()` found nothing, or a company name in `developedBy()` / `publishedBy()` matches no company (`suggestions` lists close names) |
 | `NetworkError` | 5xx or network failure that persisted |
+| `IGDBError` | A response that is not JSON, such as a `proxyUrl` answering with an HTML page |
 
 429, 5xx and network errors are retried with backoff until `retryTimeoutMs` (30 s by default) runs out. Every request accepts an `AbortSignal`: `query.execute({ signal })`.
 

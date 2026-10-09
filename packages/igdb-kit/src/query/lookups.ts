@@ -70,8 +70,12 @@ export async function resolveLookups(
     const ids = [...new Set(lookup.names.flatMap((name) => idsOf.get(name) ?? []))].sort((a, b) => a - b);
     body = body.split(lookup.text).join(`${lookup.field} = (${ids.join(",")})`);
   }
-  if (new TextEncoder().encode(body).length > MAX_BODY_BYTES) {
-    throw new QueryError("Query body exceeds IGDB's 32 KB limit once company names are replaced by ids");
+  const bytes = new TextEncoder().encode(body).length;
+  if (bytes > MAX_BODY_BYTES) {
+    throw new QueryError(
+      `Query body is ${bytes} bytes once company names are replaced by ids, above IGDB's limit of ${MAX_BODY_BYTES}`,
+      { endpoint: request.endpoint },
+    );
   }
   return { ...request, body, lookups: undefined };
 }

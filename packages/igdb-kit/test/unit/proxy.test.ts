@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { createIGDB, IGDBError, LocalLimiter, QueryError } from "../../src";
+import { createIGDB, IGDBError, LocalLimiter, PayloadTooLargeError, QueryError } from "../../src";
 import { igdbProxy, type ProxyOptions } from "../../src/proxy";
 import { apicalypseError, type Call, mockFetch, testClient } from "./helpers";
 
@@ -38,6 +38,22 @@ function setup(options: Omit<ProxyOptions, "igdb"> = {}) {
 
 const post = (path: string, body: string, headers: Record<string, string> = {}) =>
   new Request(`${ORIGIN}/api/igdb/${path}`, { method: "POST", body, headers });
+
+/** A request whose body never ends, sent in 64-byte chunks, counting the chunks read. */
+function endless(path: string, headers: Record<string, string> = {}) {
+  const read = { chunks: 0 };
+  const body = new ReadableStream<Uint8Array>(
+    {
+      pull(controller) {
+        read.chunks++;
+        controller.enqueue(new TextEncoder().encode(" ".repeat(64)));
+      },
+    },
+    { highWaterMark: 0 },
+  );
+  const init = { method: "POST", body, headers, duplex: "half" };
+  return { request: new Request(`${ORIGIN}/api/igdb/${path}`, init as RequestInit), read };
+}
 
 describe("browser client through igdbProxy", () => {
   test("queries reach IGDB with the server's credentials only", async () => {
@@ -106,6 +122,28 @@ describe("browser client through igdbProxy", () => {
     expect(api.calls).toHaveLength(1);
   });
 
+  test("a batch above maxBodyBytes is split, a query above it fails as PayloadTooLargeError", async () => {
+    // Two blocks make a 97-byte multiquery, one block is 26 bytes.
+    const { api, browser } = setup({ maxBodyBytes: 60 });
+    const [a, b] = await Promise.all([
+      browser.games.select("name").where((g) => g.id.eq(1)),
+      browser.games.select("name").where((g) => g.id.eq(2)),
+    ]);
+    expect(a).toEqual([{ id: 1, name: "Game 1" }]);
+    expect(b).toEqual([{ id: 2, name: "Game 2" }]);
+    expect(api.calls.map((c) => c.url)).toEqual([
+      "https://api.igdb.com/v4/games",
+      "https://api.igdb.com/v4/games",
+    ]);
+    const error = (await browser
+      .raw("games", `fields name; where name = "${"x".repeat(60)}";`)
+      .catch((e) => e)) as PayloadTooLargeError;
+    expect(error).toBeInstanceOf(PayloadTooLargeError);
+    expect(error.message).toBe(
+      "Request body too large on games: Refused by proxy: Request body larger than 60 bytes, this proxy's maximum",
+    );
+  });
+
   test("authorize() can refuse a request", async () => {
     const { api, browser } = setup({ authorize: (request) => request.headers.has("cookie") });
     expect(
@@ -133,13 +171,10 @@ describe("igdbProxy requests", () => {
     expect((await handler(post("nope", "fields *;"))).status).toBe(404);
   });
 
-  test("rejects malformed multiqueries and oversized bodies", async () => {
+  test("rejects malformed multiqueries", async () => {
     const { api, handler } = setup({ maxBodyBytes: 100 });
     expect((await handler(post("multiquery", 'query games "a" { fields name;'))).status).toBe(400);
     expect((await handler(post("multiquery", 'fields name; query games "a" { fields name; };'))).status).toBe(
-      400,
-    );
-    expect((await handler(post("games", `fields name; where name = "${"x".repeat(100)}";`))).status).toBe(
       400,
     );
     const ok = await handler(
@@ -147,6 +182,36 @@ describe("igdbProxy requests", () => {
     );
     expect(ok.status).toBe(200);
     expect(api.calls).toHaveLength(1);
+  });
+
+  test("answers 413 to a body above maxBodyBytes, reading no further", async () => {
+    const { api, handler } = setup({ maxBodyBytes: 100 });
+    const over = await handler(post("games", `fields name; where name = "${"x".repeat(100)}";`));
+    expect(over.status).toBe(413);
+    expect(await over.json()).toEqual([
+      {
+        title: "Refused by proxy",
+        status: 413,
+        cause: "Request body larger than 100 bytes, this proxy's maximum",
+      },
+    ]);
+    // Without content-length, reading stops past the limit; with a larger one declared, nothing is read.
+    const streamed = endless("games");
+    expect((await handler(streamed.request)).status).toBe(413);
+    expect(streamed.read.chunks).toBe(2);
+    const declared = endless("games", { "content-length": "1000" });
+    expect((await handler(declared.request)).status).toBe(413);
+    expect(declared.read.chunks).toBe(0);
+    // Exactly 100 bytes pass.
+    expect((await handler(post("games", `fields name; where name = "${"x".repeat(71)}";`))).status).toBe(200);
+    expect(api.calls).toHaveLength(1);
+  });
+
+  test("authorize() runs before the body is read", async () => {
+    const { handler } = setup({ authorize: () => false });
+    const { request, read } = endless("games");
+    expect((await handler(request)).status).toBe(403);
+    expect(read.chunks).toBe(0);
   });
 
   test("multiquery can be turned off", async () => {
