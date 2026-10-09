@@ -83,4 +83,14 @@ describe("imageUrl", () => {
     );
     expect(imageUrl(undefined, "720p")).toBeUndefined();
   });
+
+  test("accepts the url field IGDB returns", () => {
+    expect(imageUrl("//images.igdb.com/igdb/image/upload/t_thumb/co1wyy.jpg", "cover_big")).toBe(
+      "https://images.igdb.com/igdb/image/upload/t_cover_big/co1wyy.jpg",
+    );
+    expect(imageUrl("https://images.igdb.com/igdb/image/upload/t_720p/sc6abc.png", "1080p")).toBe(
+      "https://images.igdb.com/igdb/image/upload/t_1080p/sc6abc.jpg",
+    );
+    expect(() => imageUrl("https://example.com/a/b.jpg")).toThrow(/Not an IGDB image/);
+  });
 });

@@ -18,9 +18,13 @@ export interface ImageUrlOptions {
   format?: "jpg" | "png" | "webp" | undefined;
 }
 
+/** Matches the `url` field IGDB returns: `//images.igdb.com/igdb/image/upload/t_thumb/co1wyy.jpg`. */
+const IGDB_URL = /^(?:https?:)?\/\/images\.igdb\.com\/igdb\/image\/upload\/t_[^/]+\/([^/.]+)\.\w+$/;
+
 /**
- * URL of an IGDB image from its `image_id` (covers, screenshots, artworks, logos...). Returns
- * undefined when the id is missing, since IGDB omits empty fields:
+ * URL of an IGDB image from its `image_id` (covers, screenshots, artworks, logos...), or from the
+ * `url` field IGDB returns (always `t_thumb`, without protocol). Returns undefined when the input is
+ * missing, since IGDB omits empty fields:
  * `imageUrl(game.cover?.image_id, "cover_big", { retina: true })`.
  */
 export function imageUrl(imageId: string, size?: ImageSize, options?: ImageUrlOptions): string;
@@ -35,6 +39,8 @@ export function imageUrl(
   options: ImageUrlOptions = {},
 ): string | undefined {
   if (!imageId) return undefined;
+  const id = IGDB_URL.exec(imageId)?.[1] ?? imageId;
+  if (id.includes("/")) throw new TypeError(`Not an IGDB image id or URL: ${imageId}`);
   const suffix = options.retina ? "_2x" : "";
-  return `https://images.igdb.com/igdb/image/upload/t_${size}${suffix}/${imageId}.${options.format ?? "jpg"}`;
+  return `https://images.igdb.com/igdb/image/upload/t_${size}${suffix}/${id}.${options.format ?? "jpg"}`;
 }

@@ -102,6 +102,7 @@ import { imageUrl } from "igdb-kit";
 
 imageUrl(game.cover?.image_id, "cover_big", { retina: true });
 // https://images.igdb.com/igdb/image/upload/t_cover_big_2x/co1wyy.jpg (undefined if there is no cover)
+imageUrl(game.cover?.url, "cover_big"); // the url field IGDB returns (always t_thumb) works too
 ```
 
 ### Batching
