@@ -1,16 +1,21 @@
 // Runs against the real IGDB API. Skipped unless TWITCH_CLIENT_ID and TWITCH_CLIENT_SECRET are set.
-// Uses about 45 requests. The webhook test registers webhooks on example.com and removes them.
+// Uses about 55 requests. The webhook test registers webhooks on example.com and removes them.
 import { describe, expect, test } from "bun:test";
 import {
   AgeRatingCategory,
   AgeRatingOrganization,
   and,
   createIGDB,
+  defineSelection,
+  type EndpointName,
   ExternalGameSource,
+  endpoints,
   GameType,
+  gameLink,
   or,
   Platform,
   PopularityType,
+  type Query,
   QueryError,
   Region,
   ReleaseDateStatus,
@@ -26,6 +31,26 @@ const clientSecret = process.env.TWITCH_CLIENT_SECRET;
 
 // The describe body runs even when skipped, so only build the client when credentials exist.
 const igdb = clientId && clientSecret ? createIGDB({ clientId, clientSecret }) : (undefined as never);
+
+/** A client of its own (own cache), counting the IGDB responses other than 429. */
+function countingClient() {
+  const counter = { requests: 0 };
+  const client = createIGDB({
+    clientId: clientId as string,
+    clientSecret: clientSecret as string,
+    fetch: (async (input: string | URL | Request, init?: RequestInit) => {
+      const response = await fetch(input, init);
+      if (String(input).includes("api.igdb.com") && response.status !== 429) counter.requests++;
+      return response;
+    }) as typeof fetch,
+  });
+  return {
+    igdb: client,
+    get requests() {
+      return counter.requests;
+    },
+  };
+}
 
 describe.skipIf(!clientId || !clientSecret)("real IGDB API", () => {
   test("select with expansions returns the inferred shape", async () => {
@@ -380,5 +405,77 @@ describe.skipIf(!clientId || !clientSecret)("real IGDB API", () => {
     const hits = await igdb.search.select("name", "game", "character", "company").search("witcher").limit(20);
     expect(hits.length).toBeGreaterThan(0);
     expect(hits.some((h) => typeof h.game === "number")).toBe(true);
+  });
+
+  test("byGame() accepts the game link of every endpoint that has one", async () => {
+    const linked = (Object.keys(endpoints) as EndpointName[]).filter((e) => gameLink(e) !== undefined);
+    expect(linked.length).toBe(24);
+    const maps = await Promise.all(
+      linked.map((e) => (igdb[e] as unknown as Query<"characters">).byGame([1942])),
+    );
+    const rows = Object.fromEntries(linked.map((e, i) => [e, maps[i]?.get(1942)?.length]));
+    expect(rows.release_dates).toBeGreaterThan(0);
+    expect(rows.game_time_to_beats).toBe(1);
+    expect(rows.popularity_primitives).toBeGreaterThan(5); // one row per PopScore type
+    expect(rows.characters).toBeGreaterThan(10);
+    expect(rows.game_versions).toBe(0);
+  });
+
+  test("byGame() groups rows, reads past 500 rows and lists shared rows under each game", async () => {
+    const ttb = await igdb.game_time_to_beats.select("normally").byGame([1942, 999_999_999]);
+    expect(ttb.get(1942)?.[0]?.normally).toBeGreaterThan(200_000); // seconds, about 70 h
+    expect(ttb.get(999_999_999)).toEqual([]);
+    // Games 109 and 9630 have the most characters in IGDB (362 and 273): more than one page.
+    const chars = await igdb.characters.select("name").byGame([109, 9630, 1942]);
+    expect(chars.get(109)?.length).toBeGreaterThan(300);
+    expect(chars.get(9630)?.length).toBeGreaterThan(200);
+    expect(Object.keys(chars.get(1942)?.[0] ?? {}).sort()).toEqual(["id", "name"]);
+    // Characters of the Mario franchise: about 950 games, some characters in several of them.
+    const mario = await igdb.franchises.select("games").findByIdOrThrow(845);
+    const byGame = await igdb.characters.select("name").byGame(mario.games ?? []);
+    expect(byGame.size).toBe(mario.games?.length ?? -1);
+    const counts = new Map<number, number>();
+    for (const rows of byGame.values()) for (const c of rows) counts.set(c.id, (counts.get(c.id) ?? 0) + 1);
+    expect([...counts.values()].some((n) => n > 1)).toBe(true);
+  });
+
+  test("a view loads a game and its links in one request", async () => {
+    const counted = countingClient();
+    const card = defineSelection("games", "name", "cover.image_id");
+    const page = counted.igdb.defineView("games", {
+      select: [...card, "platforms.name"],
+      with: {
+        timeToBeat: counted.igdb.game_time_to_beats.select("normally"),
+        characters: counted.igdb.characters.select("name"),
+        events: counted.igdb.events.select("name"),
+        popularity: counted.igdb.popularity_primitives.select("popularity_type", "value"),
+      },
+    });
+    const witcher = await page.findById(1942);
+    expect(counted.requests).toBe(1);
+    expect(witcher?.name).toBe("The Witcher 3: Wild Hunt");
+    expect(witcher?.timeToBeat).toHaveLength(1);
+    expect(witcher?.characters.length).toBeGreaterThan(10);
+    expect(witcher?.events.length).toBeGreaterThan(0);
+    const found = await page.search("witcher 3").limit(3);
+    expect(counted.requests).toBe(3); // the search alone, then the links
+    expect(found.every((g) => Array.isArray(g.characters))).toBe(true);
+  });
+
+  test("expand() caches reference tables and drops ids of deleted rows", async () => {
+    const counted = countingClient();
+    const games = await counted.igdb.games.select("name", "platforms").findByIds([1942, 1020]);
+    const first = await counted.igdb.expand(games, "platforms", counted.igdb.platforms.select("name"));
+    expect(first[0]?.platforms?.some((p) => p.name === "PC (Microsoft Windows)")).toBe(true);
+    expect(counted.requests).toBe(2);
+    await counted.igdb.expand(games, "platforms", counted.igdb.platforms.select("name"));
+    expect(counted.requests).toBe(2); // from the cache
+    // This event lists game 139713, which no longer exists.
+    const [event] = await igdb.events
+      .select("games")
+      .where((e) => e.games.any(139713))
+      .limit(1);
+    const [expanded] = await igdb.expand(event ? [event] : [], "games", igdb.games.select("name"));
+    expect(expanded?.games?.length).toBe((event?.games?.length ?? 0) - 1);
   });
 });

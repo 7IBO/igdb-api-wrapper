@@ -3,15 +3,19 @@ import {
   type AgeRatingCategory,
   and,
   createIGDB,
+  defineSelection,
   ExternalGameSource,
+  type GameLinkedEndpoint,
   GameType,
   type Language,
   Platform,
   PopularityType,
   ReleaseDateRegion,
   type ReleaseDateStatus,
+  type ResultOf,
   type SearchHit,
 } from "../../src";
+import type { Prettify } from "../../src/query/types";
 import { type Equal, expectType } from "./helpers";
 
 const igdb = createIGDB({ clientId: "x", clientSecret: "y" });
@@ -272,6 +276,80 @@ const bySteamId = await igdb.games.select("name").findByExternalIds(ExternalGame
 expectType<Equal<typeof bySteamId, Map<string, { id: number; name?: string }>>>();
 // @ts-expect-error only on games
 igdb.platforms.findByExternalIds(ExternalGameSource.Steam, ["1"]);
+
+// byGame() groups rows of endpoints that point to games, by game id.
+const ttbByGame = await igdb.game_time_to_beats.select("normally").byGame([1942]);
+expectType<Equal<typeof ttbByGame, Map<number, { id: number; normally?: number }[]>>>();
+const charactersByGame = await igdb.characters.select("name", "mug_shot.image_id").byGame([1942]);
+expectType<
+  Equal<
+    typeof charactersByGame,
+    Map<number, { id: number; name?: string; mug_shot?: { id: number; image_id?: string } }[]>
+  >
+>();
+igdb.release_dates.byGame([1]);
+igdb.collections.byGame([1]);
+// @ts-expect-error genres do not point to games
+igdb.genres.byGame([1]);
+// @ts-expect-error the search endpoint needs a search term
+igdb.search.byGame([1]);
+expectType<
+  Equal<
+    Extract<GameLinkedEndpoint, "events" | "popularity_primitives" | "games">,
+    "events" | "popularity_primitives"
+  >
+>();
+
+// Selections are named, reusable and typed.
+const gameCard = defineSelection("games", "name", "cover.image_id");
+type GameCard = ResultOf<typeof gameCard>;
+expectType<Equal<GameCard, { id: number; name?: string; cover?: { id: number; image_id?: string } }>>();
+const withCard = igdb.games.select(...gameCard, "summary");
+expectType<Equal<ResultOf<typeof withCard>, Prettify<GameCard & { summary?: string }>>>();
+expectType<Equal<ResultOf<ReturnType<typeof withCard.first>>, ResultOf<typeof withCard>>>();
+// @ts-expect-error unknown field
+defineSelection("games", "nom");
+
+// Views attach linked rows to games under their keys.
+const gamePage = igdb.defineView("games", {
+  select: [...gameCard, "summary"],
+  with: {
+    timeToBeat: igdb.game_time_to_beats.select("normally"),
+    characters: igdb.characters.select("name"),
+  },
+});
+type GamePage = {
+  id: number;
+  name?: string;
+  cover?: { id: number; image_id?: string };
+  summary?: string;
+  timeToBeat: { id: number; normally?: number }[];
+  characters: { id: number; name?: string }[];
+};
+expectType<Equal<Awaited<ReturnType<typeof gamePage.findById>>, GamePage | null>>();
+expectType<Equal<Awaited<ReturnType<typeof gamePage.findByIds>>, GamePage[]>>();
+expectType<Equal<Awaited<ReturnType<ReturnType<typeof gamePage.where>["limit"]>>, GamePage[]>>();
+expectType<Equal<ResultOf<typeof gamePage>, GamePage>>();
+gamePage.where((g) => g.rating.gte(90)).sort("rating", "desc");
+gamePage.search("zelda");
+// @ts-expect-error unknown field in a view's select
+igdb.defineView("games", { select: ["nom"] });
+// @ts-expect-error a key that hides a game field
+igdb.defineView("games", { with: { name: igdb.characters.select("name") } });
+
+// expand() swaps ids for the target's rows, keeping arrays and optionality.
+const listed = await igdb.games.select("name", "platforms", "cover").limit(5);
+const expanded = await igdb.expand(listed, "platforms", igdb.platforms.select("name"));
+expectType<
+  Equal<
+    typeof expanded,
+    { id: number; name?: string; platforms?: { id: number; name?: string }[]; cover?: number }[]
+  >
+>();
+const withCover = await igdb.expand(listed, "cover", igdb.covers.select("image_id"));
+expectType<Equal<(typeof withCover)[number]["cover"], { id: number; image_id?: string } | undefined>>();
+// @ts-expect-error name holds no ids
+igdb.expand(listed, "name", igdb.platforms);
 
 // Webhook deliveries narrow by endpoint and operation.
 import { webhookHandler } from "../../src/webhooks";

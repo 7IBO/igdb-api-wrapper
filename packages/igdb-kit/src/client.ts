@@ -1,10 +1,12 @@
 import { Batcher, type BatcherOptions } from "./batch/batcher";
 import { type CacheStore, cacheKey, memoryCache, parseResponse, serializeResponse } from "./cache";
 import { TokenProvider, type TokenStore } from "./core/auth";
-import { IGDBError } from "./core/errors";
+import { IGDBError, QueryError } from "./core/errors";
 import { type Limiter, type LocalLimiterOptions, sharedLimiter } from "./core/limiter";
 import { Transport, type TransportHooks } from "./core/transport";
-import { type EndpointName, endpoints } from "./generated/schema";
+import { type EndpointName, endpoints, type Game } from "./generated/schema";
+import { type Expanded, expand, type IdKeys } from "./links/expand";
+import { type NoGameFields, View, type ViewLinks } from "./links/view";
 import {
   type Executable,
   type ExecuteOptions,
@@ -14,6 +16,7 @@ import {
   type RawResponse,
 } from "./query/query";
 import { type SearchAll, type SearchAllOptions, searchAll } from "./query/search-all";
+import type { FieldPath, SelectResult } from "./query/types";
 import { Webhooks } from "./webhooks/api";
 
 interface CommonClientOptions extends BatcherOptions {
@@ -88,6 +91,37 @@ export type IGDBClient = { readonly [K in EndpointName]: Query<K> } & {
   webhooks: Webhooks;
   /** Sends a raw Apicalypse body to a path (`games`, `games/count`, `multiquery`). */
   raw<T = unknown>(path: string, body: string, options?: ExecuteOptions): Promise<T>;
+  /**
+   * Defines games with data from other endpoints attached, each under its key: time to beat,
+   * characters, release dates, websites… (any endpoint that points to games, see `byGame()`).
+   *
+   * ```ts
+   * const gamePage = igdb.defineView("games", {
+   *   select: ["name", "cover.image_id"],
+   *   with: {
+   *     timeToBeat: igdb.game_time_to_beats.select("normally", "completely"),
+   *     characters: igdb.characters.select("name", "mug_shot.image_id"),
+   *   },
+   * });
+   * await gamePage.findById(1942);                    // one multiquery
+   * await gamePage.where((g) => g.rating.gte(90)).limit(20); // games, then all their links at once
+   * ```
+   */
+  defineView<P extends string = never, W extends ViewLinks = Record<never, never>>(
+    endpoint: "games",
+    definition: { select?: readonly FieldPath<Game, P>[]; with?: W & NoGameFields },
+  ): View<SelectResult<Game, P>, W>;
+  /**
+   * Replaces the ids under `key` in each row by the entities `target` returns, in one batched call:
+   * `igdb.expand(games, "platforms", igdb.platforms.select("name"))`. Reference tables (platforms,
+   * genres, themes, languages…) are loaded whole and cached for a day, so they usually cost nothing.
+   */
+  expand<T extends object, K extends IdKeys<T>, N extends EndpointName, E>(
+    rows: readonly T[],
+    key: K,
+    target: Query<N, E>,
+    options?: ExecuteOptions,
+  ): Promise<Expanded<T, K, E>[]>;
 };
 
 /** Sends a query as is, without batching, through the cache. Used by `igdb-kit/proxy`. */
@@ -146,6 +180,12 @@ export function createIGDB(options: IGDBClientOptions): IGDBClient {
     ),
     raw: async (path: string, body: string, runOptions?: ExecuteOptions) =>
       (await transport.send(path, body, runOptions)).data,
+    defineView: (endpoint: string, definition: { select?: readonly string[]; with?: ViewLinks }) => {
+      if (endpoint !== "games") throw new QueryError(`Views are defined on games, not ${endpoint}`);
+      const games = (client.games as Query<"games">).select(...((definition.select ?? []) as never[]));
+      return new View(games, definition.with ?? {});
+    },
+    expand,
     [forwardKey]: ((path, body, forwardOptions) =>
       cached(path, body, forwardOptions.cacheTtlMs ?? 0, () =>
         transport.send(path, body, { signal: forwardOptions.signal }),
