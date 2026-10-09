@@ -17,6 +17,8 @@ import {
 import {
   type Executable,
   type ExecuteOptions,
+  MAX_BODY_BYTES,
+  MAX_LIMIT,
   Query,
   type QueryRequest,
   type QueryRunner,
@@ -151,7 +153,12 @@ export const forwardKey: unique symbol = Symbol.for("igdb-kit.forward");
 
 export function createIGDB(options: IGDBClientOptions): IGDBClient {
   const transport = options.proxyUrl === undefined ? directTransport(options) : proxyTransport(options);
-  const batcher = new Batcher((path, body, sendOptions) => transport.send(path, body, sendOptions), options);
+  const batcher = new Batcher((path, body, sendOptions) => transport.send(path, body, sendOptions), {
+    ...options,
+    // igdbProxy refuses bodies above its maxBodyBytes, 16,384 by default.
+    maxBodyBytes: options.maxBodyBytes ?? (options.proxyUrl === undefined ? MAX_BODY_BYTES : 16_384),
+  });
+  const pageBytes = options.maxBatchBytes ?? 4_000_000;
   let cache = options.cache;
   const cached = async (
     path: string,
@@ -176,6 +183,11 @@ export function createIGDB(options: IGDBClientOptions): IGDBClient {
       return cached(sent.path, sent.body, sent.cacheTtlMs ?? options.cacheTtlMs ?? 0, () =>
         batcher.run(sent, runOptions),
       );
+    },
+    pageSize: (endpoint, fields) => {
+      const rowBytes = batcher.sizes.rowBytes(endpoint, fields);
+      const rows = Math.max(1, Math.min(MAX_LIMIT, Math.floor(pageBytes / rowBytes)));
+      return { rows, bytes: rows * rowBytes };
     },
   };
 

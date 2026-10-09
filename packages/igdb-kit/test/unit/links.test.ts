@@ -212,6 +212,30 @@ describe("byGame()", () => {
     expect(mock.calls[0]?.body.split("\n")).toHaveLength(3);
   });
 
+  test("a page IGDB finds too heavy is split by its games, then read in smaller pages", async () => {
+    // 4 games with 120 screenshots each; IGDB refuses pages above 100 rows.
+    const rows = Array.from({ length: 480 }, (_, i) => ({ id: i + 1, game: (i % 4) + 1 }));
+    const fake = fakeIgdb({ screenshots: rows });
+    const mock = mockFetch((call) => {
+      const limit = Number(call.body.match(/limit (\d+);/)?.[1] ?? 10);
+      if (limit > 100) return Response.json([{ title: "Payload Too Large", status: 413 }], { status: 413 });
+      return fake.fetch(call.url, { method: "POST", body: call.body });
+    });
+    const igdb = testClient(mock.fetch);
+    const byGame = await igdb.screenshots.byGame([1, 2, 3, 4]);
+    expect([...byGame.values()].map((group) => group.length)).toEqual([120, 120, 120, 120]);
+    expect(new Set([...byGame.values()].flat().map((r) => r.id)).size).toBe(480);
+    // 4 games, then 2 + 2, then 1 game at a time, with smaller pages until they pass.
+    const games = (body: string) => body.match(/game = \(([\d,]+)\)/)?.[1]?.split(",").length;
+    const pages = mock.calls.map((c) => [games(c.body), Number(c.body.match(/limit (\d+);/)?.[1])]);
+    expect(pages.slice(0, 3)).toEqual([
+      [4, 500],
+      [2, 500],
+      [2, 500],
+    ]);
+    expect(pages.filter(([, limit]) => (limit as number) <= 100).every(([count]) => count === 1)).toBe(true);
+  });
+
   test("rejects what it cannot do", async () => {
     const igdb = testClient(fakeIgdb({}).fetch);
     expect(await igdb.characters.byGame([])).toEqual(new Map());
