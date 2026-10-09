@@ -223,7 +223,9 @@ describe("weightedPopular()", () => {
     const calls = mock.calls.length;
     expect(await igdb.games.limit(0).weightedPopular(weights)).toEqual([]);
     expect(mock.calls).toHaveLength(calls);
-    await expect(igdb.games.sort("name").weightedPopular(weights)).rejects.toThrow(/remove sort\(\)/);
+    await expect(igdb.games.sort("name").weightedPopular(weights).execute()).rejects.toThrow(
+      /remove sort\(\)/,
+    );
   });
 
   test("a where matching nothing stops after the first round", async () => {
@@ -237,14 +239,14 @@ describe("weightedPopular()", () => {
 
   test("validates its input", async () => {
     const igdb = testClient(api(small).fetch);
-    await expect(igdb.games.weightedPopular({ [PopularityType.IGDBPlaying]: -1 })).rejects.toThrow(
+    await expect(igdb.games.weightedPopular({ [PopularityType.IGDBPlaying]: -1 }).execute()).rejects.toThrow(
       /positive weight/,
     );
-    await expect(igdb.games.weightedPopular({ [PopularityType.IGDBPlaying]: Number.NaN })).rejects.toThrow(
-      QueryError,
-    );
-    await expect(igdb.games.weightedPopular({ 3: 1 }, { limit: 501 })).rejects.toThrow(QueryError);
-    await expect(igdb.games.search("zelda").weightedPopular({ 3: 1 })).rejects.toThrow(/search/);
+    await expect(
+      igdb.games.weightedPopular({ [PopularityType.IGDBPlaying]: Number.NaN }).execute(),
+    ).rejects.toThrow(QueryError);
+    await expect(igdb.games.weightedPopular({ 3: 1 }, { limit: 501 }).execute()).rejects.toThrow(QueryError);
+    await expect(igdb.games.search("zelda").weightedPopular({ 3: 1 }).execute()).rejects.toThrow(/search/);
     // @ts-expect-error only on games
     expect(igdb.platforms.weightedPopular).toBeUndefined();
   });

@@ -1,6 +1,6 @@
 import { QueryError } from "../core/errors";
 import type { EndpointName } from "../generated/schema";
-import type { ExecuteOptions, Query } from "./query";
+import type { DeprecatedExecuteOptions, ExecuteOptions, Query } from "./query";
 
 /** IGDB's maximum `limit`: rows are read this many at a time. */
 const PAGE = 500;
@@ -14,7 +14,7 @@ export const FEW_GAMES = 10_000;
 /** Weight of each PopScore type, by id: `{ [PopularityType.IGDBWantToPlay]: 0.6, [PopularityType.IGDBPlaying]: 0.4 }`. */
 export type PopularityWeights = Readonly<Partial<Record<number, number>>>;
 
-export interface WeightedPopularOptions extends ExecuteOptions {
+export interface WeightedPopularOptions extends DeprecatedExecuteOptions {
   /**
    * @deprecated Use the query's `limit()`, with `offset()` for the next pages:
    * `igdb.games.limit(20).weightedPopular(weights)`. Number of games to return, 0 to 500.

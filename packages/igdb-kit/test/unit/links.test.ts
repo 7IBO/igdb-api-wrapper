@@ -250,9 +250,9 @@ describe("findByGames()", () => {
   test("rejects what it cannot do", async () => {
     const igdb = testClient(fakeIgdb({}).fetch);
     expect(await igdb.characters.findByGames([])).toEqual(new Map());
-    await expect(igdb.characters.search("geralt").findByGames([1])).rejects.toThrow(/search/);
-    await expect(igdb.release_dates.offset(5).findByGames([1])).rejects.toThrow(/offset/);
-    await expect(igdb.release_dates.findByGames([-1])).rejects.toThrow(QueryError);
+    await expect(igdb.characters.search("geralt").findByGames([1]).execute()).rejects.toThrow(/search/);
+    await expect(igdb.release_dates.offset(5).findByGames([1]).execute()).rejects.toThrow(/offset/);
+    await expect(igdb.release_dates.findByGames([-1]).execute()).rejects.toThrow(QueryError);
     // @ts-expect-error genres do not point to games
     expect(igdb.genres.findByGames).toBeUndefined();
   });

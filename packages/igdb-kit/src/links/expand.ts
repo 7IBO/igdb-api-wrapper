@@ -113,7 +113,7 @@ async function load<E>(
     cacheTtlMs !== 0 &&
     [search, limit, offset, sort].every((v) => v === undefined);
   if (ids.length === 0) return new Map();
-  if (!whole) return byId(await target.findByIds(ids, options));
+  if (!whole) return byId(await target.findByIds(ids).execute(options));
 
   const table = byId(
     await target
@@ -127,6 +127,6 @@ async function load<E>(
   // An id the cached table lacks is new since it was cached, or points to a deleted row.
   const missing = ids.filter((id) => !table.has(id));
   if (missing.length > 0)
-    for (const [id, e] of byId(await target.findByIds(missing, options))) table.set(id, e);
+    for (const [id, e] of byId(await target.findByIds(missing).execute(options))) table.set(id, e);
   return table;
 }

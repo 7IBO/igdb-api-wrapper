@@ -129,6 +129,20 @@ describe.skipIf(!clientId || !clientSecret)("real IGDB API", () => {
     expect(ps5?.name).toBe("PlayStation 5");
   });
 
+  test("batch() runs tasks with queries, and their first requests share one multiquery", async () => {
+    const counted = countingClient();
+    const { games, dates, ps5 } = await counted.igdb.batch({
+      games: counted.igdb.games.select("name").findByIds([1020, 1942]),
+      dates: counted.igdb.release_dates.select("date", "platform").findByGames([1942]),
+      ps5: counted.igdb.platforms.select("name").findById(167),
+    });
+    expect(games.map((g) => g.id)).toEqual([1020, 1942]);
+    expect(games[1]?.name).toBe("The Witcher 3: Wild Hunt");
+    expect(dates.get(1942)?.length).toBeGreaterThan(3);
+    expect(ps5?.name).toBe("PlayStation 5");
+    expect(counted.requests).toBe(1);
+  });
+
   test("an invalid query in a batch only fails itself", async () => {
     const results = await Promise.allSettled([
       igdb.games.findById(1942).execute(),

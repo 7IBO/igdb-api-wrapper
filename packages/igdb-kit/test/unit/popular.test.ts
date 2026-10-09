@@ -170,12 +170,18 @@ describe("popular()", () => {
 
   test("validates its input", async () => {
     const igdb = testClient(api().fetch);
-    await expect(igdb.games.popular(PopularityType.IGDBVisits, { limit: 501 })).rejects.toThrow(QueryError);
-    await expect(igdb.games.popular(PopularityType.IGDBVisits, { limit: 1.5 })).rejects.toThrow(QueryError);
-    await expect(igdb.games.sort("rating", "desc").popular(PopularityType.IGDBVisits)).rejects.toThrow(
-      /remove sort\(\)/,
+    await expect(igdb.games.popular(PopularityType.IGDBVisits, { limit: 501 }).execute()).rejects.toThrow(
+      QueryError,
     );
-    await expect(igdb.games.search("zelda").popular(PopularityType.IGDBVisits)).rejects.toThrow(/search/);
+    await expect(igdb.games.popular(PopularityType.IGDBVisits, { limit: 1.5 }).execute()).rejects.toThrow(
+      QueryError,
+    );
+    await expect(
+      igdb.games.sort("rating", "desc").popular(PopularityType.IGDBVisits).execute(),
+    ).rejects.toThrow(/remove sort\(\)/);
+    await expect(igdb.games.search("zelda").popular(PopularityType.IGDBVisits).execute()).rejects.toThrow(
+      /search/,
+    );
     // @ts-expect-error only on games
     expect(igdb.platforms.popular).toBeUndefined();
   });

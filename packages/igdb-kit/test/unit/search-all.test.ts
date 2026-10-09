@@ -79,7 +79,7 @@ describe("searchAll", () => {
       order: "igdb",
     });
     expect(calls[3]?.body).toContain("where (game != null & game.game_type = (5));");
-    await expect(igdb.searchAll("witcher", { gameTypes: [] })).rejects.toThrow(QueryError);
+    await expect(igdb.searchAll("witcher", { gameTypes: [] }).execute()).rejects.toThrow(QueryError);
   });
 
   test("ranks by name match, then ratings, then shorter names, and drops rows without an entity", async () => {
@@ -171,15 +171,15 @@ describe("searchAll", () => {
     const { igdb, calls } = searchClient([]);
     expect(await igdb.searchAll("  ")).toEqual([]);
     expect(calls).toHaveLength(0);
-    await expect(igdb.searchAll("x", { limit: 501 })).rejects.toThrow(QueryError);
-    await expect(igdb.searchAll("x", { limit: 0 })).rejects.toThrow(QueryError);
-    await expect(igdb.searchAll("x", { kinds: [] })).rejects.toThrow(/kinds/);
+    await expect(igdb.searchAll("x", { limit: 501 }).execute()).rejects.toThrow(QueryError);
+    await expect(igdb.searchAll("x", { limit: 0 }).execute()).rejects.toThrow(QueryError);
+    await expect(igdb.searchAll("x", { kinds: [] }).execute()).rejects.toThrow(/kinds/);
     // @ts-expect-error companies are not in the search index
-    await expect(igdb.searchAll("x", { kinds: ["company"] })).rejects.toThrow(/kinds/);
-    await expect(igdb.searchAll("x", { gameTypes: [] })).rejects.toThrow(/gameTypes/);
-    await expect(igdb.searchAll("x", { maxRows: 0 })).rejects.toThrow(/maxRows/);
+    await expect(igdb.searchAll("x", { kinds: ["company"] }).execute()).rejects.toThrow(/kinds/);
+    await expect(igdb.searchAll("x", { gameTypes: [] }).execute()).rejects.toThrow(/gameTypes/);
+    await expect(igdb.searchAll("x", { maxRows: 0 }).execute()).rejects.toThrow(/maxRows/);
     // @ts-expect-error unknown field
-    await expect(igdb.searchAll("x", { select: { game: ["nope"] } })).rejects.toThrow(
+    await expect(igdb.searchAll("x", { select: { game: ["nope"] } }).execute()).rejects.toThrow(
       /Game has no field "nope"/,
     );
     expect(calls).toHaveLength(0);
