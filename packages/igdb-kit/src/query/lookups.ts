@@ -54,16 +54,58 @@ export async function resolveLookups(
     for (const name of lookup.names) if (!names.includes(name)) names.push(name);
     namesBy.set(lookup.endpoint, names);
   }
+  const idsOf = await findNames(runner, namesBy, send, request.body);
 
+  let body = request.body;
+  // Longest first: the filter of several names contains the filter of each one.
+  for (const lookup of [...lookups].sort((a, b) => b.text.length - a.text.length)) {
+    const ids = [
+      ...new Set(lookup.names.flatMap((name) => idsOf.get(nameKey(lookup.endpoint, name)) ?? [])),
+    ].sort((a, b) => a - b);
+    body = body.split(lookup.text).join(`${lookup.field} = (${ids.join(",")})`);
+  }
+  const bytes = new TextEncoder().encode(body).length;
+  if (bytes > MAX_BODY_BYTES) {
+    throw new QueryError(
+      `Query body is ${bytes} bytes once names are replaced by ids, above IGDB's limit of ${MAX_BODY_BYTES}`,
+      { endpoint: request.endpoint },
+    );
+  }
+  return { ...request, body, lookups: undefined };
+}
+
+/**
+ * @internal The ids of the rows of `endpoint` with these names ("PS5" is a platform's abbreviation),
+ * matched as a name filter matches them: throws a `NotFoundError` when one matches nothing.
+ */
+export async function idsNamed(
+  runner: QueryRunner,
+  endpoint: EndpointName,
+  names: readonly string[],
+  options: ExecuteOptions = {},
+): Promise<number[]> {
+  const send: ExecuteOptions = { signal: options.signal, priority: options.priority };
+  const idsOf = await findNames(runner, new Map([[endpoint, [...new Set(names)]]]), send);
+  return [...new Set(names.flatMap((name) => idsOf.get(nameKey(endpoint, name)) ?? []))];
+}
+
+const nameKey = (endpoint: EndpointName, name: string) => `${endpoint} ${name}`;
+
+/** The ids of each name, keyed by `nameKey`; throws when a name matches nothing. */
+async function findNames(
+  runner: QueryRunner,
+  namesBy: Map<EndpointName, string[]>,
+  send: ExecuteOptions,
+  query?: string,
+): Promise<Map<string, number[]>> {
   const idsOf = new Map<string, number[]>();
-  const key = (endpoint: EndpointName, name: string) => `${endpoint} ${name}`;
   const missing: { endpoint: EndpointName; names: string[]; suggestions: string[] }[] = [];
   await Promise.all(
     [...namesBy].map(async ([endpoint, names]) => {
       const found = REFERENCE_ENDPOINTS.has(endpoint)
         ? await fromTable(runner, endpoint, names, send)
         : await byName(runner, endpoint, names, send);
-      for (const [name, ids] of found.ids) idsOf.set(key(endpoint, name), ids);
+      for (const [name, ids] of found.ids) idsOf.set(nameKey(endpoint, name), ids);
       if (found.missing.length > 0)
         missing.push({ endpoint, names: found.missing, suggestions: found.suggestions });
     }),
@@ -77,26 +119,10 @@ export async function resolveLookups(
     const suggestions = [...new Set(missing.flatMap((m) => m.suggestions))];
     throw new NotFoundError(
       `${message}${suggestions.length > 0 ? `. Close names: ${list(suggestions)}` : ""}`,
-      { endpoint: missing[0]?.endpoint, query: request.body, suggestions },
+      { endpoint: missing[0]?.endpoint, query, suggestions },
     );
   }
-
-  let body = request.body;
-  // Longest first: the filter of several names contains the filter of each one.
-  for (const lookup of [...lookups].sort((a, b) => b.text.length - a.text.length)) {
-    const ids = [
-      ...new Set(lookup.names.flatMap((name) => idsOf.get(key(lookup.endpoint, name)) ?? [])),
-    ].sort((a, b) => a - b);
-    body = body.split(lookup.text).join(`${lookup.field} = (${ids.join(",")})`);
-  }
-  const bytes = new TextEncoder().encode(body).length;
-  if (bytes > MAX_BODY_BYTES) {
-    throw new QueryError(
-      `Query body is ${bytes} bytes once names are replaced by ids, above IGDB's limit of ${MAX_BODY_BYTES}`,
-      { endpoint: request.endpoint },
-    );
-  }
-  return { ...request, body, lookups: undefined };
+  return idsOf;
 }
 
 interface Found {

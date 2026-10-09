@@ -33,6 +33,7 @@ export { type Expanded, type IdKeys, REFERENCE_ENDPOINTS, REFERENCE_TTL_MS } fro
 export { defineSelection, type ResultOf, type Selection } from "./links/selection";
 export { type NoGameFields, View, type ViewLinks, type ViewRow } from "./links/view";
 export { type DateInput, toDate, toUnix } from "./query/dates";
+export type { GameMatch, MatchInput } from "./query/match";
 export type {
   PopularitySnapshotOptions,
   PopularitySnapshotRow,
